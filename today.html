@@ -97,13 +97,17 @@ let _initStarted = false;
 function startInit() {
   if (_initStarted) return;
   _initStarted = true;
+  // 지도 SDK는 Firebase랑 병렬로 즉시 로드 (이어가기 속도 핵심)
+  loadKakaoMap();
   initFirebaseSync();
   onDataReady(() => {
     renderAssignments();
-    loadKakaoMap();
     updateMeIndicator();
   });
 }
+
+// auth 응답 안 와도 SDK는 미리 받아두기 — 어차피 익명 로그인이라 곧 시작됨
+loadKakaoMap();
 
 // 이어가기 알림은 Firebase 안 기다리고 즉시 (localStorage만 읽음)
 setTimeout(() => {
@@ -683,7 +687,7 @@ function renderAnchorRows() {
 }
 
 function renderMapForSession() {
-  if (!map) { setTimeout(renderMapForSession, 300); return; }
+  if (!map) { setTimeout(renderMapForSession, 50); return; }
   // opPanel이 display:none → block으로 바뀐 직후라 컨테이너 크기가
   // 갓 잡혔을 수 있음. 타일 빈 칸 방지 위해 relayout 강제.
   map.relayout();
