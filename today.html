@@ -283,14 +283,16 @@ function renderAssignments() {
   const vis = data.visibility || {};
   const evVis = vis.events || {};
   const csVis = vis.courses || {};
+  let hiddenCount = 0;
   for (const event of (data.events || [])) {
-    if (evVis[event.id] === false) continue; // 숨김
+    if (evVis[event.id] === false) { hiddenCount += (event.courses || []).length; continue; }
     for (const course of (event.courses || [])) {
-      if (csVis[course.id] === false) continue; // 숨김
+      if (csVis[course.id] === false) { hiddenCount++; continue; }
       const anchorCount = (data.anchors || []).filter(a => a.courseId === course.id).length;
       items.push({ event, course, anchorCount });
     }
   }
+  window.__hiddenCoursesCount = hiddenCount;
 
   if (!items.length) {
     el.innerHTML = '<div class="empty">코스가 없습니다<br><span class="sub">관리자에서 행사·코스를 만드세요</span></div>';
