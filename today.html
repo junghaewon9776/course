@@ -107,6 +107,7 @@ function startInit() {
 }
 
 // auth 응답 안 와도 SDK는 미리 받아두기 — 어차피 익명 로그인이라 곧 시작됨
+window.__kakaoLoadAttempt = 0;
 loadKakaoMap();
 
 // 이어가기 알림은 Firebase 안 기다리고 즉시 (localStorage만 읽음)
@@ -257,21 +258,21 @@ function skipChangePin() {
   location.reload();
 }
 
-let __kakaoLoadAttempt = 0;
 function loadKakaoMap() {
+  if (window.__kakaoLoadAttempt === undefined) window.__kakaoLoadAttempt = 0;
   // 이미 로드 완료됐으면 스킵
   if (window.kakao && window.kakao.maps) return;
   // 로드 진행중인 태그가 있으면 스킵
   if (document.querySelector('script[data-kakao-sdk]')) return;
-  __kakaoLoadAttempt++;
+  window.__kakaoLoadAttempt++;
   const script = document.createElement('script');
   script.dataset.kakaoSdk = '1';
   script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
   script.onload = () => kakao.maps.load(() => { initMap(); });
   script.onerror = () => {
-    console.warn('카카오 SDK 로드 실패. 재시도', __kakaoLoadAttempt);
-    script.remove(); // 다음 호출에서 재시도 가능하도록
-    if (__kakaoLoadAttempt < 5) setTimeout(loadKakaoMap, 1500);
+    console.warn('카카오 SDK 로드 실패. 재시도', window.__kakaoLoadAttempt);
+    script.remove();
+    if (window.__kakaoLoadAttempt < 5) setTimeout(loadKakaoMap, 1500);
     else alert('지도를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침 해주세요.');
   };
   document.head.appendChild(script);

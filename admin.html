@@ -128,12 +128,24 @@ checkAdminAuth().then(ok => {
   if (ok) onDataReady(loadKakaoMap);
 });
 
+let __kakaoLoadAttempt = 0;
 function loadKakaoMap() {
-  if (window.__kakaoLoaded) { refreshAll(); return; }
-  window.__kakaoLoaded = true;
+  if (window.kakao && window.kakao.maps) {
+    if (!map) initMap(); else refreshAll();
+    return;
+  }
+  if (document.querySelector('script[data-kakao-sdk]')) return;
+  __kakaoLoadAttempt++;
   const script = document.createElement('script');
+  script.dataset.kakaoSdk = '1';
   script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`;
   script.onload = () => kakao.maps.load(initMap);
+  script.onerror = () => {
+    console.warn('카카오 SDK 로드 실패. 재시도', __kakaoLoadAttempt);
+    script.remove();
+    if (__kakaoLoadAttempt < 5) setTimeout(loadKakaoMap, 1500);
+    else alert('지도를 불러오지 못했습니다. 새로고침 해주세요.');
+  };
   document.head.appendChild(script);
 }
 
@@ -143,6 +155,7 @@ function initMap() {
     center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
     level: data.mapDefault.level || 5
   });
+  map.relayout();
   kakao.maps.event.addListener(map, 'click', (e) => {
     const lat = e.latLng.getLat();
     const lng = e.latLng.getLng();
