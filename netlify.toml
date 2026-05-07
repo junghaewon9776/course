@@ -34,3 +34,14 @@
   from = "/accounts"
   to = "/accounts.html"
   status = 200
+
+# HTML/JS 캐시 금지 — 코드 수정 즉시 반영되도록
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"

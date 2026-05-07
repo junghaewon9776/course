@@ -1,6 +1,54 @@
 // 공통 데이터 관리 - Firebase Realtime Database 기반
 const KAKAO_KEY = 'f3f8fa6decb5e2185b09d6bf70ef525b';
 
+// ───────── 인앱 브라우저 감지 → Chrome 안내 ─────────
+(function () {
+  const ua = navigator.userAgent || '';
+  const isInApp = /KAKAOTALK|NAVER|FBAN|FBAV|Instagram|Line\//i.test(ua);
+  if (!isInApp) return;
+
+  const isAndroid = /Android/i.test(ua);
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+
+  function show() {
+    if (document.getElementById('inAppWarn')) return;
+    const url = location.href;
+    const intentUrl = isAndroid
+      ? 'intent://' + url.replace(/^https?:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;end'
+      : null;
+
+    const html = `
+      <div id="inAppWarn" style="position:fixed;inset:0;background:rgba(20,30,50,0.96);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px;">
+        <div style="background:#fff;border-radius:12px;padding:24px;max-width:340px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,0.3);">
+          <div style="font-size:42px;margin-bottom:8px;">⚠️</div>
+          <h2 style="color:#2c3e50;margin-bottom:10px;font-size:17px;">크롬으로 열어주세요</h2>
+          <p style="color:#555;font-size:13px;line-height:1.5;margin-bottom:16px;">
+            카카오톡 / 네이버 등 인앱 브라우저에서는<br>
+            <b style="color:#e74c3c;">GPS 추적이 작동하지 않습니다.</b>
+          </p>
+          ${isAndroid ? `
+            <button onclick="location.href='${intentUrl}'" style="background:#27ae60;color:#fff;border:none;padding:12px 18px;border-radius:6px;font-size:14px;font-weight:600;width:100%;margin-bottom:8px;cursor:pointer;">
+              🌐 Chrome으로 바로 열기
+            </button>
+            <p style="color:#888;font-size:11px;margin-top:10px;">
+              버튼이 안 되면 우측 상단 ⋮ 메뉴 →<br>"다른 브라우저로 열기" 선택
+            </p>
+          ` : `
+            <p style="color:#2c3e50;font-size:13px;background:#f0f4f8;padding:10px;border-radius:6px;text-align:left;">
+              우측 상단 <b>···</b> 또는 <b>↗</b> 메뉴를 누르고<br>
+              <b>"Safari로 열기"</b> 또는 <b>"기본 브라우저로 열기"</b>를 선택하세요.
+            </p>
+          `}
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
+
+  if (document.body) show();
+  else document.addEventListener('DOMContentLoaded', show);
+})();
+
 // ───────── 기본 데이터 (최초 1회만 들어감) ─────────
 const defaultData = {
   mapDefault: { lat: 35.3475, lng: 126.4180, level: 5 },
