@@ -558,18 +558,28 @@ function moveRequestCourse(id) {
   saveData(data); refreshAll();
 }
 
-// 지도 표시 토글 상태 (UI 전용, 새로고침하면 모두 켜짐)
-const visibleEvents = {};
-const visibleCourses = {};
-function isEventVisible(id) { return visibleEvents[id] !== false; }
-function isCourseVisible(id) { return visibleCourses[id] !== false; }
+// 지도 표시 토글 (Firebase 저장 → 새로고침해도 유지)
+function isEventVisible(id) {
+  const v = (loadData().visibility || {}).events || {};
+  return v[id] !== false;
+}
+function isCourseVisible(id) {
+  const v = (loadData().visibility || {}).courses || {};
+  return v[id] !== false;
+}
 function toggleEventVisible(id) {
-  visibleEvents[id] = !isEventVisible(id);
-  renderEvents(); renderCourses(); renderMap();
+  const data = loadData();
+  if (!data.visibility) data.visibility = {};
+  if (!data.visibility.events) data.visibility.events = {};
+  data.visibility.events[id] = !isEventVisible(id);
+  saveData(data);
 }
 function toggleCourseVisible(id) {
-  visibleCourses[id] = !isCourseVisible(id);
-  renderCourses(); renderMap();
+  const data = loadData();
+  if (!data.visibility) data.visibility = {};
+  if (!data.visibility.courses) data.visibility.courses = {};
+  data.visibility.courses[id] = !isCourseVisible(id);
+  saveData(data);
 }
 
 function renderEvents() {
@@ -636,6 +646,10 @@ function renderCourses() {
   const el = document.getElementById('courseList');
   const courses = event ? (event.courses || []) : [];
   if (!courses.length) { el.innerHTML = '<div class="empty">코스가 없습니다</div>'; return; }
+  if (event && !isEventVisible(event.id)) {
+    el.innerHTML = '<div class="empty">행사가 숨겨져 있습니다 (👁 클릭해 표시)</div>';
+    return;
+  }
   el.innerHTML = courses.map(c => {
     const vis = isCourseVisible(c.id);
     return `
@@ -891,10 +905,17 @@ function renderMap() {
       });
       kakao.maps.event.addListener(marker, 'dragend', () => {
         const p = marker.getPosition();
+        if (!confirm(`"${a.name}" 위치를 이동할까요?`)) {
+          // 취소 → 원위치 복귀
+          marker.setPosition(new kakao.maps.LatLng(a.lat, a.lng));
+          return;
+        }
         const d = loadData();
-        const target = d.anchors.find(x => x.id === a.id);
-        target.lat = p.getLat(); target.lng = p.getLng();
-        saveData(d);
+        const target = (d.anchors || []).find(x => x.id === a.id);
+        if (target) {
+          target.lat = p.getLat(); target.lng = p.getLng();
+          saveData(d);
+        }
         renderMap();
       });
       const iw = new kakao.maps.InfoWindow({
