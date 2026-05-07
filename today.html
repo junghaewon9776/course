@@ -94,9 +94,28 @@ function startInit() {
     renderAssignments();
     loadKakaoMap();
     updateMeIndicator();
-    setTimeout(checkResumableSession, 500);
   });
 }
+
+// 이어가기 알림은 Firebase 안 기다리고 즉시 (localStorage만 읽음)
+setTimeout(() => {
+  const raw = localStorage.getItem('lastActiveSession');
+  if (!raw) return;
+  let s;
+  try { s = JSON.parse(raw); } catch { return; }
+  if (s.finishedAt) { clearLastActiveSession(); return; }
+  if (Date.now() - (s.startedAt || 0) > 12 * 60 * 60 * 1000) { clearLastActiveSession(); return; }
+  // Firebase 데이터 안 와도 일단 물어봄
+  const elapsed = Math.floor((Date.now() - s.startedAt) / 60000);
+  const completed = (s.completions || []).length;
+  const driver = s.crew?.driver || '';
+  if (confirm(`이전 운영 이어가기?\n\n${driver ? '운전: ' + driver + '\n' : ''}진행: ${completed}개 거점 완료\n시작: ${elapsed}분 전\n\n[확인] = 이어가기  /  [취소] = 새로 시작`)) {
+    // Firebase 데이터 도착할 때까지 기다린 후 resume
+    onDataReady(() => resumeSession(s));
+  } else {
+    clearLastActiveSession();
+  }
+}, 100);
 
 // auth 상태 확인 - 있으면 그대로, 없으면 익명 로그인
 fbAuth.onAuthStateChanged(user => {
