@@ -257,12 +257,23 @@ function skipChangePin() {
   location.reload();
 }
 
+let __kakaoLoadAttempt = 0;
 function loadKakaoMap() {
-  if (window.__kakaoLoaded) return;
-  window.__kakaoLoaded = true;
+  // 이미 로드 완료됐으면 스킵
+  if (window.kakao && window.kakao.maps) return;
+  // 로드 진행중인 태그가 있으면 스킵
+  if (document.querySelector('script[data-kakao-sdk]')) return;
+  __kakaoLoadAttempt++;
   const script = document.createElement('script');
+  script.dataset.kakaoSdk = '1';
   script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
   script.onload = () => kakao.maps.load(() => { initMap(); });
+  script.onerror = () => {
+    console.warn('카카오 SDK 로드 실패. 재시도', __kakaoLoadAttempt);
+    script.remove(); // 다음 호출에서 재시도 가능하도록
+    if (__kakaoLoadAttempt < 5) setTimeout(loadKakaoMap, 1500);
+    else alert('지도를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침 해주세요.');
+  };
   document.head.appendChild(script);
 }
 
@@ -686,8 +697,20 @@ function renderAnchorRows() {
   }).join('');
 }
 
+let __renderMapRetry = 0;
 function renderMapForSession() {
-  if (!map) { setTimeout(renderMapForSession, 50); return; }
+  if (!map) {
+    __renderMapRetry++;
+    // 60번(=3초) 넘게 기다렸는데 map 없으면 SDK 다시 로드 시도
+    if (__renderMapRetry === 60) loadKakaoMap();
+    if (__renderMapRetry > 200) {
+      console.warn('지도 SDK 응답 없음. 포기.');
+      return;
+    }
+    setTimeout(renderMapForSession, 50);
+    return;
+  }
+  __renderMapRetry = 0;
   // opPanel이 display:none → block으로 바뀐 직후라 컨테이너 크기가
   // 갓 잡혔을 수 있음. 타일 빈 칸 방지 위해 relayout 강제.
   map.relayout();
