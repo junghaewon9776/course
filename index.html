@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>법성포청년회 - 코스 관리 시스템</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>📍 코스 관리 시스템</h1>
+  <span id="syncStatus" style="font-size:11px;opacity:0.7;">Firebase 연결 중...</span>
+</header>
+
+<div class="container">
+  <div class="menu-grid">
+    <a href="today.html" class="menu-card" style="grid-column:span 2;background:#27ae60;color:#fff;">
+      <div class="icon">🚐</div>
+      <div class="title">오늘의 운영</div>
+      <div class="desc" style="color:#e8f5e9;">방역하기 (현장 기사용 + GPS)</div>
+    </a>
+    <a href="admin.html" class="menu-card">
+      <div class="icon">⚙️</div>
+      <div class="title">관리자</div>
+      <div class="desc">행사·코스·거점·요청 관리</div>
+    </a>
+    <a href="members.html" class="menu-card">
+      <div class="icon">👥</div>
+      <div class="title">인원관리</div>
+      <div class="desc">회원·조 편성·팀짜기</div>
+    </a>
+    <a href="monitor.html" class="menu-card">
+      <div class="icon">📊</div>
+      <div class="title">본부 모니터링</div>
+      <div class="desc">진행상황·운행기록</div>
+    </a>
+    <a href="stats.html" class="menu-card">
+      <div class="icon">📈</div>
+      <div class="title">통계</div>
+      <div class="desc">회원별 방역 횟수·차트</div>
+    </a>
+    <a href="accounts.html" class="menu-card">
+      <div class="icon">🔐</div>
+      <div class="title">계정관리</div>
+      <div class="desc">관리자 계정 추가·권한</div>
+    </a>
+  </div>
+
+  <div class="card" style="max-width:600px;margin:0 auto;">
+    <h2>🔥 Firebase 연동됨</h2>
+    <p style="font-size:13px;line-height:1.6;">
+      이제 모든 기기에서 <b>실시간 동기화</b>됩니다.<br>
+      JSON 복사·붙여넣기 필요 없음. PC에서 추가하면 폰에 즉시 반영.
+    </p>
+    <p class="muted" style="margin-top:8px;">
+      관리자/모니터링/인원관리/통계 = 로그인 필요<br>
+      오늘의 운영 = 누구나 접근 가능
+    </p>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="common.js"></script>
+<script>
+  ensureAnonAuth().then(() => {
+    initFirebaseSync();
+    onDataReady(() => {
+      document.getElementById('syncStatus').textContent = '✅ 연결됨';
+    });
+  });
+</script>
+</body>
+</html>

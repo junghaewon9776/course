@@ -1,0 +1,744 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>인원관리</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>👥 인원관리</h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="admin.html">관리</a>
+    <a href="members.html" class="active">인원</a>
+    <a href="today.html">오늘운영</a>
+    <a href="monitor.html">모니터링</a>
+    <a href="stats.html">통계</a>
+    <a href="accounts.html">계정</a>
+    <a href="#" onclick="adminLogout();return false;">로그아웃</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="row">
+    <!-- 회원 목록 -->
+    <div class="col" style="flex:1;min-width:320px;">
+      <div class="card">
+        <div class="flex-between"><h2>회원 목록 <span id="memberCount" class="muted"></span></h2>
+          <div>
+            <button class="small" onclick="addMember()">+ 추가</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+          <button class="small gray" onclick="downloadMemberTemplate()">📄 양식</button>
+          <button class="small gray" onclick="exportMembersCSV()">⬇️ 다운로드</button>
+          <button class="small gray" onclick="document.getElementById('memUpload').click()">📤 엑셀 업로드</button>
+          <button class="small gray" onclick="bulkImportMembers()">📋 붙여넣기</button>
+          <button class="small success" onclick="makeAllMemberAccounts()">🔑 계정 일괄생성</button>
+          <button class="small danger" onclick="deleteAllMembers()">🗑 전체 삭제</button>
+        </div>
+        <input type="file" id="memUpload" accept=".csv,.xlsx,.xls" style="display:none">
+        <div style="display:flex;gap:4px;margin-bottom:8px;">
+          <input id="memSearch" type="text" placeholder="이름 검색..." oninput="renderMembers()" style="flex:1;">
+          <select id="posFilter" onchange="renderMembers()" style="width:auto;">
+            <option value="">모든 직책</option>
+          </select>
+        </div>
+        <div id="memberList" style="max-height:600px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <!-- 조 편성 -->
+    <div class="col" style="flex:2;min-width:400px;">
+      <div class="card">
+        <div class="flex-between">
+          <h2>방역조 편성</h2>
+          <div>
+            <button onclick="randomAssign()" class="success">🎲 팀짜기</button>
+            <button onclick="saveTeamSnapshot()">💾 현재 팀 저장</button>
+            <button onclick="resetTeams()" class="gray small">조원 리셋</button>
+          </div>
+        </div>
+        <p class="muted" style="font-size:12px;">조장·부조장 고정 / 📌 = 고정 조원 / 팀짜기 = 나머지 랜덤 분배</p>
+        <div id="teamPanels" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>저장된 팀 구성 <span id="savedCount" class="muted"></span></h2>
+        <p class="muted" style="font-size:12px;">팀 구성을 저장해두고 나중에 불러올 수 있습니다 (이전 구성 비교/복원용)</p>
+        <div id="savedTeamsList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="common.js"></script>
+<script>
+window.onAuthSuccess = () => onDataReady(refreshAll);
+window.onDataChanged = () => refreshAll();
+checkAdminAuth().then(ok => { if (ok) onDataReady(refreshAll); });
+
+function refreshAll() {
+  renderMembers();
+  renderTeams();
+  renderSavedTeams();
+}
+
+// ────── 회원 ──────
+// 직책 정렬 순서
+const POSITION_ORDER = ['회장','부회장','감사','사무국장','사무차장','재무국장','홍보국장','기획국장','일반회원',''];
+function positionRank(p) {
+  const i = POSITION_ORDER.indexOf(p || '');
+  return i === -1 ? POSITION_ORDER.length : i;
+}
+
+function renderMembers() {
+  const data = loadData();
+  const q = (document.getElementById('memSearch')?.value || '').toLowerCase();
+  const posFilter = document.getElementById('posFilter')?.value || '';
+  const allMembers = data.members || [];
+
+  // 직책 드롭다운 채우기
+  const positions = [...new Set(allMembers.map(m => m.position || '').filter(Boolean))]
+    .sort((a, b) => positionRank(a) - positionRank(b));
+  const posSel = document.getElementById('posFilter');
+  if (posSel) {
+    const cur = posSel.value;
+    posSel.innerHTML = '<option value="">모든 직책</option>' +
+      positions.map(p => `<option value="${p}">${p}</option>`).join('');
+    if (cur) posSel.value = cur;
+  }
+
+  const members = allMembers
+    .filter(m => !q || (m.name||'').toLowerCase().includes(q))
+    .filter(m => !posFilter || (m.position||'') === posFilter)
+    .sort((a, b) => positionRank(a.position) - positionRank(b.position) || (a.name||'').localeCompare(b.name||''));
+
+  document.getElementById('memberCount').textContent = `(${allMembers.length}명)`;
+
+  if (!members.length) {
+    document.getElementById('memberList').innerHTML = '<div class="empty">회원이 없습니다</div>';
+    return;
+  }
+
+  // 어느 조에 속해있는지 매핑
+  const assignedTo = {};
+  for (const t of (data.teams || [])) {
+    if (t.leaderId) assignedTo[t.leaderId] = `${t.name} 조장`;
+    if (t.viceLeaderId) assignedTo[t.viceLeaderId] = `${t.name} 부조장`;
+    for (const id of (t.memberIds || [])) assignedTo[id] = `${t.name} 조원`;
+  }
+
+  // memberId ↔ uid 매핑 (계정 있는지 확인용)
+  const memberAuth = data.memberAuth || {};
+  const memberUidByMemberId = {};
+  for (const [uid, mid] of Object.entries(memberAuth)) memberUidByMemberId[mid] = uid;
+
+  // 직책별 그룹화
+  let html = '';
+  let currentGroup = null;
+  for (const m of members) {
+    const pos = m.position || '일반회원';
+    if (pos !== currentGroup) {
+      if (currentGroup !== null) html += '</div>';
+      currentGroup = pos;
+      const groupCount = members.filter(x => (x.position || '일반회원') === pos).length;
+      html += `<h3 style="margin:12px 0 6px;color:#34495e;border-bottom:2px solid #34495e;padding-bottom:4px;">${pos} <span class="muted" style="font-size:11px;">(${groupCount}명)</span></h3><div>`;
+    }
+    const hasAccount = !!memberUidByMemberId[m.id];
+    html += `
+      <div class="list-item">
+        <div class="info">
+          <div class="name">${m.name} <span class="sub">${m.phone || ''}</span> ${hasAccount ? '<span class="tag" style="background:#27ae60">🔑</span>' : ''}</div>
+          <div class="sub">${assignedTo[m.id] || '<span style="color:#aaa;">조 미배정</span>'}${m.birthday ? ' · 🎂 ' + m.birthday : ''}${m.address ? ' · 📍 ' + m.address : ''}${m.note ? ' · ' + m.note : ''}</div>
+        </div>
+        ${hasAccount
+          ? `<button class="small gray" onclick="resetMemberPin('${m.id}')">PIN</button>`
+          : `<button class="small success" onclick="makeMemberAccount('${m.id}')">계정</button>`}
+        <button class="small" onclick="editMember('${m.id}')">수정</button>
+        <button class="small danger" onclick="deleteMember('${m.id}')">삭제</button>
+      </div>
+    `;
+  }
+  if (currentGroup !== null) html += '</div>';
+  if (!html) html = '<div class="empty">회원이 없습니다</div>';
+  document.getElementById('memberList').innerHTML = html;
+}
+
+async function makeMemberAccount(memberId) {
+  const data = loadData();
+  const m = getMember(data, memberId);
+  if (!m) return;
+  if (!m.phone) { alert('전화번호가 필요합니다. 회원 수정에서 추가해주세요.'); return; }
+
+  const pin = m.pin || DEFAULT_PIN;
+  if (!confirm(`${m.name}님 계정 생성?\n\n로그인 ID: ${m.phone}\nPIN: ${pin}\n\n(첫 로그인 후 변경 안내됨)`)) return;
+
+  try {
+    await createMemberAccount(memberId, m.phone, pin);
+    alert(`✅ 계정 생성 완료\n\n${m.name}님께 안내:\n• 로그인: ${m.phone}\n• PIN: ${pin}`);
+  } catch (e) {
+    alert('생성 실패: ' + e.message);
+  }
+}
+
+async function makeAllMemberAccounts() {
+  const data = loadData();
+  const members = data.members || [];
+  const memberAuth = data.memberAuth || {};
+  const existingMemberIds = new Set(Object.values(memberAuth));
+  const target = members.filter(m => m.phone && !existingMemberIds.has(m.id));
+  if (!target.length) { alert('새로 만들 계정이 없습니다.\n(전화번호가 있고 아직 계정 없는 회원이 없음)'); return; }
+  if (!confirm(`${target.length}명의 계정을 일괄 생성합니다.\n각자 PIN: 1234 (기본)\n\n계속할까요?`)) return;
+
+  let ok = 0, fail = 0;
+  const errors = [];
+  for (const m of target) {
+    try {
+      const pin = m.pin || DEFAULT_PIN;
+      await createMemberAccount(m.id, m.phone, pin);
+      ok++;
+    } catch (e) {
+      fail++;
+      errors.push(`${m.name}(${m.phone}): ${e.message}`);
+    }
+  }
+  alert(`✅ ${ok}명 생성\n❌ ${fail}명 실패\n\n${errors.slice(0,5).join('\n')}${errors.length>5?'\n...':''}`);
+}
+
+async function resetMemberPin(memberId) {
+  const data = loadData();
+  const m = getMember(data, memberId);
+  if (!m) return;
+  alert('PIN 재설정은 아직 지원되지 않아요.\nFirebase 콘솔 → Authentication → Users 에서 비밀번호 재설정 가능합니다.\n또는 계정 삭제 후 새로 생성하세요.');
+}
+
+// ────── 양식 / 엑셀 다운로드/업로드 ──────
+function downloadMemberTemplate() {
+  const csv = '﻿이름,연락처,메모\n홍길동,010-1234-5678,조장 후보\n김철수,010-2222-3333,\n';
+  downloadCSVFile(csv, '회원등록양식.csv');
+  setTimeout(() => alert('양식 다운로드 완료\n\n컬럼: 이름, 연락처, 메모\n• 이름은 필수, 나머지는 선택\n• 엑셀에서 편집 후 업로드'), 200);
+}
+
+function exportMembersCSV() {
+  const data = loadData();
+  const members = data.members || [];
+  if (!members.length) { alert('회원이 없습니다'); return; }
+  const lines = ['﻿이름,연락처,메모'];
+  for (const m of members) {
+    lines.push([csvEscape(m.name), csvEscape(m.phone), csvEscape(m.note)].join(','));
+  }
+  downloadCSVFile(lines.join('\n'), `회원목록-${todayStr()}.csv`);
+  setTimeout(() => alert(`다운로드 완료 (${members.length}명)`), 200);
+}
+
+function csvEscape(s) {
+  s = String(s || '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function downloadCSVFile(content, filename) {
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+document.getElementById('memUpload').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  let rows;
+  try {
+    if (file.name.match(/\.(xlsx|xls)$/i)) {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    } else {
+      const text = await file.text();
+      rows = parseCSVMembers(text);
+    }
+  } catch (err) {
+    alert('파일 읽기 실패: ' + err.message); return;
+  }
+
+  if (!rows.length) { alert('데이터 없음'); return; }
+
+  const data = loadData();
+  if (!data.members) data.members = [];
+  const existing = new Set(data.members.map(m => m.name + '|' + (m.phone || '')));
+  let added = 0, skipped = 0;
+  for (const row of rows) {
+    const name = String(row['이름'] || row['name'] || '').trim();
+    const phone = String(row['연락처'] || row['phone'] || row['전화'] || '').trim();
+    const note = String(row['메모'] || row['note'] || '').trim();
+    if (!name) { skipped++; continue; }
+    const key = name + '|' + phone;
+    if (existing.has(key)) { skipped++; continue; }
+    data.members.push({ id: uid(), name, phone, note });
+    existing.add(key);
+    added++;
+  }
+  saveData(data);
+  alert(`✅ ${added}명 추가\n⏭ ${skipped}명 건너뜀 (이름 없음 또는 중복)`);
+});
+
+function parseCSVMembers(text) {
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(s => s.trim());
+  return lines.slice(1).map(line => {
+    const cells = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+    const row = {};
+    headers.forEach((h, i) => { row[h] = cells[i] || ''; });
+    return row;
+  });
+}
+
+function deleteAllMembers() {
+  if (!confirm('모든 회원을 삭제할까요? (조 편성도 초기화됨)')) return;
+  if (!confirm('정말요? 되돌릴 수 없어요.')) return;
+  const data = loadData();
+  data.members = [];
+  for (const t of (data.teams || [])) {
+    t.leaderId = ''; t.viceLeaderId = ''; t.memberIds = [];
+  }
+  saveData(data);
+}
+
+function bulkImportMembers() {
+  const text = prompt(
+    '회원 데이터 붙여넣기\n\n' +
+    '형식: 한 줄에 한 명, 탭(Tab) 또는 쉼표로 구분\n' +
+    '   이름   연락처   메모\n\n' +
+    '예시:\n' +
+    '홍길동\\t010-1234-5678\\t조장\n' +
+    '김철수\\t010-2222-3333\\t\n\n' +
+    '구글 시트나 엑셀에서 복사한 내용 그대로 붙여넣으면 됩니다.'
+  );
+  if (!text) return;
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (!lines.length) { alert('데이터가 없습니다'); return; }
+
+  const data = loadData();
+  if (!data.members) data.members = [];
+  const existing = new Set(data.members.map(m => m.name + '|' + (m.phone || '')));
+
+  let added = 0, skipped = 0;
+  for (const line of lines) {
+    // 탭 우선, 그 다음 쉼표
+    const cells = line.includes('\t') ? line.split('\t') : line.split(',');
+    const name = (cells[0] || '').trim();
+    const phone = (cells[1] || '').trim();
+    const note = (cells[2] || '').trim();
+    if (!name) { skipped++; continue; }
+    const key = name + '|' + phone;
+    if (existing.has(key)) { skipped++; continue; }
+    data.members.push({ id: uid(), name, phone, note });
+    existing.add(key);
+    added++;
+  }
+  saveData(data);
+  alert(`✅ ${added}명 추가\n⏭ ${skipped}명 건너뜀 (이름 없음 또는 중복)`);
+}
+
+function addMember() {
+  openMemberForm(null);
+}
+function editMember(id) {
+  openMemberForm(id);
+}
+
+function openMemberForm(id) {
+  const data = loadData();
+  const m = id ? data.members.find(x => x.id === id) : { name:'', phone:'', position:'일반회원', birthday:'', address:'', note:'' };
+  if (id && !m) return;
+
+  const html = `
+    <div id="memberFormGate" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;">
+      <div style="background:#fff;padding:20px;border-radius:8px;width:380px;max-width:92vw;max-height:90vh;overflow-y:auto;">
+        <h2 style="margin-bottom:10px;">${id ? '회원 수정' : '회원 추가'}</h2>
+        <label>이름 *</label>
+        <input id="mfName" type="text" value="${m.name||''}">
+        <label>직책</label>
+        <select id="mfPosition">
+          ${POSITION_ORDER.filter(p => p).map(p => `<option value="${p}" ${m.position===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+        <label>연락처</label>
+        <input id="mfPhone" type="tel" value="${m.phone||''}" placeholder="010-0000-0000">
+        <label>생년월일</label>
+        <input id="mfBirthday" type="text" value="${m.birthday||''}" placeholder="840606 또는 1984-06-06">
+        <label>주소</label>
+        <input id="mfAddress" type="text" value="${m.address||''}">
+        <label>PIN (4자리, 기본 1234)</label>
+        <input id="mfPin" type="text" inputmode="numeric" maxlength="4" value="${m.pin||'1234'}" placeholder="1234">
+        <label>메모</label>
+        <input id="mfNote" type="text" value="${m.note||''}">
+        <div style="display:flex;gap:6px;margin-top:12px;">
+          <button class="success" style="flex:1;" onclick="saveMemberForm('${id||''}')">저장</button>
+          <button class="gray" onclick="document.getElementById('memberFormGate').remove()">취소</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(() => document.getElementById('mfName').focus(), 50);
+}
+
+function saveMemberForm(id) {
+  const get = (k) => document.getElementById(k).value.trim();
+  const name = get('mfName');
+  if (!name) { alert('이름은 필수'); return; }
+  const obj = {
+    name,
+    position: get('mfPosition'),
+    phone: get('mfPhone'),
+    birthday: get('mfBirthday'),
+    address: get('mfAddress'),
+    pin: get('mfPin') || DEFAULT_PIN,
+    note: get('mfNote')
+  };
+  const data = loadData();
+  if (!data.members) data.members = [];
+  if (id) {
+    const m = data.members.find(x => x.id === id);
+    if (m) Object.assign(m, obj);
+  } else {
+    data.members.push({ id: uid(), ...obj });
+  }
+  saveData(data);
+  document.getElementById('memberFormGate').remove();
+}
+
+function deleteMember(id) {
+  if (!confirm('이 회원을 삭제할까요? (조 편성에서도 제외됨)')) return;
+  const data = loadData();
+  data.members = data.members.filter(m => m.id !== id);
+  // 조에서도 제거
+  for (const t of (data.teams || [])) {
+    if (t.leaderId === id) t.leaderId = '';
+    if (t.viceLeaderId === id) t.viceLeaderId = '';
+    t.memberIds = (t.memberIds || []).filter(mid => mid !== id);
+  }
+  saveData(data);
+}
+
+// ────── 조 ──────
+function renderTeams() {
+  const data = loadData();
+  const teams = data.teams || [];
+  const memberOpts = (data.members || []).map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+  const teamCards = teams.map(t => {
+    const fixed = new Set(t.fixedMemberIds || []);
+    const leader = getMember(data, t.leaderId);
+    const vice = getMember(data, t.viceLeaderId);
+    const total = (t.leaderId?1:0) + (t.viceLeaderId?1:0) + (t.memberIds || []).length;
+
+    const memberRows = (t.memberIds || []).map((id, idx) => {
+      const m = getMember(data, id);
+      if (!m) return '';
+      const isFixed = fixed.has(id);
+      return `
+        <tr style="${isFixed ? 'background:#fff8e1;' : ''}">
+          <td style="color:#888;font-size:11px;width:50px;padding:6px 4px;">회원${idx+1}</td>
+          <td style="padding:6px 4px;"><b>${m.name}</b></td>
+          <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${m.phone || ''}</td>
+          <td style="width:50px;text-align:right;padding:6px 4px;">
+            <span onclick="togglePinMember('${t.id}','${id}')" style="cursor:pointer;font-size:14px;" title="고정/해제">${isFixed ? '📌' : '📍'}</span>
+            <span onclick="removeFromTeam('${t.id}','${id}')" style="cursor:pointer;color:#e74c3c;margin-left:2px;">✕</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div style="border:1px solid #ddd;border-radius:8px;background:#fff;overflow:hidden;">
+        <div style="background:#34495e;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <span style="font-size:16px;font-weight:700;">${t.name}</span>
+            <span style="font-size:11px;opacity:0.8;margin-left:6px;">${total}명</span>
+          </div>
+          <button class="small gray" onclick="editTeamInfo('${t.id}')">⚙</button>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <tr style="background:#fef3c7;border-bottom:1px solid #eee;">
+            <td style="color:#92400e;font-size:11px;width:50px;padding:6px 4px;font-weight:700;">조장</td>
+            <td style="padding:6px 4px;"><b>${leader?.name || '<span style="color:#aaa;font-weight:400;">(미지정)</span>'}</b></td>
+            <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${leader?.phone || ''}</td>
+            <td style="padding:4px;width:80px;text-align:right;">
+              <select onchange="setLeader('${t.id}', this.value)" style="font-size:11px;padding:2px;width:100%;">
+                <option value="">선택</option>
+                ${memberOpts.replace(`value="${t.leaderId}"`, `value="${t.leaderId}" selected`)}
+              </select>
+            </td>
+          </tr>
+          <tr style="background:#dbeafe;border-bottom:1px solid #eee;">
+            <td style="color:#1e40af;font-size:11px;padding:6px 4px;font-weight:700;">부조장</td>
+            <td style="padding:6px 4px;"><b>${vice?.name || '<span style="color:#aaa;font-weight:400;">(미지정)</span>'}</b></td>
+            <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${vice?.phone || ''}</td>
+            <td style="padding:4px;text-align:right;">
+              <select onchange="setViceLeader('${t.id}', this.value)" style="font-size:11px;padding:2px;width:100%;">
+                <option value="">선택</option>
+                ${memberOpts.replace(`value="${t.viceLeaderId}"`, `value="${t.viceLeaderId}" selected`)}
+              </select>
+            </td>
+          </tr>
+          ${memberRows || '<tr><td colspan="4" style="padding:14px;text-align:center;color:#aaa;font-size:12px;">조원 없음<br>(팀짜기 또는 직접 추가)</td></tr>'}
+        </table>
+        <div style="padding:6px;background:#f8f9fa;display:flex;gap:4px;border-top:1px solid #eee;">
+          <select id="addToTeam_${t.id}" style="flex:1;font-size:12px;padding:3px;">
+            <option value="">조원 추가...</option>
+            ${memberOpts}
+          </select>
+          <button class="small" onclick="addToTeam('${t.id}')">+</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('teamPanels').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;">
+      ${teamCards}
+    </div>
+  `;
+}
+
+function setLeader(teamId, memberId) {
+  const data = loadData();
+  const team = getTeam(data, teamId);
+  if (!team) return;
+  // 다른 조 조장/부조장이면 거기서 제거
+  removeFromAllTeams(data, memberId);
+  team.leaderId = memberId;
+  saveData(data);
+}
+
+function setViceLeader(teamId, memberId) {
+  const data = loadData();
+  const team = getTeam(data, teamId);
+  if (!team) return;
+  removeFromAllTeams(data, memberId);
+  team.viceLeaderId = memberId;
+  saveData(data);
+}
+
+function removeFromAllTeams(data, memberId) {
+  if (!memberId) return;
+  for (const t of (data.teams || [])) {
+    if (t.leaderId === memberId) t.leaderId = '';
+    if (t.viceLeaderId === memberId) t.viceLeaderId = '';
+    t.memberIds = (t.memberIds || []).filter(id => id !== memberId);
+  }
+}
+
+function addToTeam(teamId) {
+  const sel = document.getElementById('addToTeam_' + teamId);
+  const memberId = sel.value;
+  if (!memberId) return;
+  const data = loadData();
+  const team = getTeam(data, teamId);
+  if (!team) return;
+  removeFromAllTeams(data, memberId);
+  if (!team.memberIds) team.memberIds = [];
+  team.memberIds.push(memberId);
+  saveData(data);
+}
+
+function removeFromTeam(teamId, memberId) {
+  const data = loadData();
+  const team = getTeam(data, teamId);
+  if (!team) return;
+  team.memberIds = (team.memberIds || []).filter(id => id !== memberId);
+  team.fixedMemberIds = (team.fixedMemberIds || []).filter(id => id !== memberId);
+  saveData(data);
+}
+
+function togglePinMember(teamId, memberId) {
+  const data = loadData();
+  const team = getTeam(data, teamId);
+  if (!team) return;
+  if (!team.fixedMemberIds) team.fixedMemberIds = [];
+  const idx = team.fixedMemberIds.indexOf(memberId);
+  if (idx >= 0) team.fixedMemberIds.splice(idx, 1);
+  else team.fixedMemberIds.push(memberId);
+  saveData(data);
+}
+
+function editTeamInfo(teamId) {
+  const data = loadData();
+  const team = getTeam(data, teamId);
+  if (!team) return;
+  const name = prompt('조 이름', team.name); if (name === null) return;
+  team.name = name.trim();
+  saveData(data);
+}
+
+function randomAssign() {
+  const data = loadData();
+  const teams = data.teams || [];
+  if (teams.length === 0) { alert('조가 없습니다'); return; }
+
+  // 이미 고정된 회원 ID (조장/부조장/고정조원)
+  const fixedIds = new Set();
+  for (const t of teams) {
+    if (t.leaderId) fixedIds.add(t.leaderId);
+    if (t.viceLeaderId) fixedIds.add(t.viceLeaderId);
+    for (const id of (t.fixedMemberIds || [])) fixedIds.add(id);
+  }
+
+  // 일반 조원 후보 = 전체 - 고정된 회원
+  const candidates = (data.members || [])
+    .filter(m => !fixedIds.has(m.id))
+    .map(m => m.id);
+
+  if (candidates.length === 0) { alert('랜덤 배정할 회원이 없습니다 (전부 고정됨)'); return; }
+
+  // 셔플
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
+  // 각 조의 memberIds = 고정 + 분배받은 랜덤
+  for (const t of teams) {
+    t.memberIds = [...(t.fixedMemberIds || [])];
+  }
+  candidates.forEach((id, idx) => {
+    teams[idx % teams.length].memberIds.push(id);
+  });
+
+  saveData(data);
+  const fixedCount = fixedIds.size - teams.reduce((s, t) => s + (t.leaderId?1:0) + (t.viceLeaderId?1:0), 0);
+  alert(`✅ 팀짜기 완료!\n랜덤 분배: ${candidates.length}명\n고정 조원: ${fixedCount}명`);
+}
+
+// ────── 저장된 팀 구성 ──────
+function saveTeamSnapshot() {
+  const data = loadData();
+  const teams = data.teams || [];
+  if (!teams.length) { alert('저장할 조가 없습니다'); return; }
+
+  const defaultName = new Date().toISOString().slice(0, 10) + ' 구성';
+  const name = prompt('이 팀 구성의 이름을 입력하세요\n(예: "5월 1주차", "방역행사용")', defaultName);
+  if (!name) return;
+
+  if (!data.savedTeams) data.savedTeams = [];
+  data.savedTeams.push({
+    id: uid(),
+    name: name.trim(),
+    savedAt: Date.now(),
+    teams: JSON.parse(JSON.stringify(teams)) // 깊은 복사
+  });
+  saveData(data);
+  alert(`✅ "${name}" 저장 완료`);
+}
+
+function renderSavedTeams() {
+  const data = loadData();
+  const saved = (data.savedTeams || []).slice().sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  document.getElementById('savedCount').textContent = `(${saved.length}개)`;
+  const el = document.getElementById('savedTeamsList');
+  if (!saved.length) {
+    el.innerHTML = '<div class="empty">저장된 팀 구성 없음<br><span class="sub">"💾 현재 팀 저장" 버튼으로 백업 가능</span></div>';
+    return;
+  }
+
+  el.innerHTML = saved.map(s => {
+    const when = new Date(s.savedAt).toLocaleString('ko-KR');
+    const summary = (s.teams || []).map(t => {
+      const total = (t.leaderId?1:0) + (t.viceLeaderId?1:0) + (t.memberIds||[]).length;
+      return `${t.name}(${total}명)`;
+    }).join(' · ');
+    return `
+      <div class="list-item" style="flex-direction:column;align-items:stretch;">
+        <div class="flex-between">
+          <div>
+            <b>${s.name}</b>
+            <div class="sub">${when} · ${summary}</div>
+          </div>
+          <div>
+            <button class="small" onclick="previewSavedTeam('${s.id}')">미리보기</button>
+            <button class="small success" onclick="loadSavedTeam('${s.id}')">불러오기</button>
+            <button class="small gray" onclick="renameSavedTeam('${s.id}')">이름</button>
+            <button class="small danger" onclick="deleteSavedTeam('${s.id}')">삭제</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function previewSavedTeam(id) {
+  const data = loadData();
+  const s = (data.savedTeams || []).find(x => x.id === id);
+  if (!s) return;
+  let msg = `📋 ${s.name}\n${new Date(s.savedAt).toLocaleString('ko-KR')}\n\n`;
+  for (const t of (s.teams || [])) {
+    const leader = getMember(data, t.leaderId);
+    const vice = getMember(data, t.viceLeaderId);
+    const members = (t.memberIds || []).map(mid => {
+      const m = getMember(data, mid);
+      return m ? m.name : '(삭제됨)';
+    });
+    msg += `[${t.name}] (${t.vehicle || '차량없음'})\n`;
+    msg += `  조장: ${leader?.name || '-'}\n`;
+    msg += `  부조장: ${vice?.name || '-'}\n`;
+    msg += `  조원(${members.length}): ${members.join(', ')}\n\n`;
+  }
+  alert(msg);
+}
+
+function loadSavedTeam(id) {
+  const data = loadData();
+  const s = (data.savedTeams || []).find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`"${s.name}" 구성을 현재 팀에 적용할까요?\n현재 팀 구성은 덮어씌워집니다.`)) return;
+  data.teams = JSON.parse(JSON.stringify(s.teams));
+  saveData(data);
+  alert('✅ 불러오기 완료');
+}
+
+function renameSavedTeam(id) {
+  const data = loadData();
+  const s = (data.savedTeams || []).find(x => x.id === id);
+  if (!s) return;
+  const name = prompt('이름 변경', s.name);
+  if (!name) return;
+  s.name = name.trim();
+  saveData(data);
+}
+
+function deleteSavedTeam(id) {
+  if (!confirm('이 저장된 팀 구성을 삭제할까요?')) return;
+  const data = loadData();
+  data.savedTeams = (data.savedTeams || []).filter(x => x.id !== id);
+  saveData(data);
+}
+
+function resetTeams() {
+  const choice = confirm('조원을 모두 미배정으로 되돌릴까요?\n[확인] = 랜덤 조원만 초기화 (고정·조장·부조장 유지)\n[취소] = 그대로 두기');
+  if (!choice) return;
+  const data = loadData();
+  for (const t of (data.teams || [])) {
+    t.memberIds = [...(t.fixedMemberIds || [])];
+  }
+  saveData(data);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>통계 - 방역 횟수</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    table { width:100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; border: 1px solid #ddd; text-align: center; }
+    th { background: #34495e; color: #fff; position: sticky; top: 0; }
+    td:first-child { text-align: left; font-weight: 600; background: #f8f9fa; }
+    tr:hover td { background: #fffde7; }
+    .num-zero { color: #ccc; }
+    .num-high { background: #c8e6c9; font-weight: 700; }
+    .scroll-x { overflow-x: auto; max-height: 600px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>📈 통계 - 방역 횟수</h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="admin.html">관리</a>
+    <a href="members.html">인원</a>
+    <a href="today.html">오늘운영</a>
+    <a href="monitor.html">모니터링</a>
+    <a href="stats.html" class="active">통계</a>
+    <a href="accounts.html">계정</a>
+    <a href="#" onclick="adminLogout();return false;">로그아웃</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="card">
+    <div class="flex-between">
+      <h2>기간</h2>
+      <div>
+        <select id="period" onchange="render()" style="width:auto;display:inline-block;">
+          <option value="all">전체</option>
+          <option value="month">최근 30일</option>
+          <option value="week">최근 7일</option>
+          <option value="today">오늘</option>
+        </select>
+        <button class="small" onclick="exportStatsCSV()">⬇️ 엑셀</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col" style="flex:1;min-width:320px;">
+      <div class="card">
+        <h2>회원별 방역 총 횟수</h2>
+        <canvas id="memberChart" style="max-height:400px;"></canvas>
+      </div>
+    </div>
+    <div class="col" style="flex:1;min-width:320px;">
+      <div class="card">
+        <h2>코스별 방역 총 횟수</h2>
+        <canvas id="courseChart" style="max-height:400px;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>회원 × 코스 표</h2>
+    <p class="muted" style="font-size:12px;">행: 회원, 열: 코스, 칸: 방역 참여 횟수</p>
+    <div class="scroll-x">
+      <table id="statsTable"></table>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="common.js"></script>
+<script>
+let memberChart, courseChart;
+
+window.onAuthSuccess = () => onDataReady(render);
+window.onDataChanged = () => render();
+checkAdminAuth().then(ok => { if (ok) onDataReady(render); });
+
+function getFilteredLogs() {
+  const data = loadData();
+  const period = document.getElementById('period').value;
+  const now = Date.now();
+  let cutoff = 0;
+  if (period === 'today') {
+    const d = new Date(); d.setHours(0,0,0,0);
+    cutoff = d.getTime();
+  } else if (period === 'week') cutoff = now - 7*24*60*60*1000;
+  else if (period === 'month') cutoff = now - 30*24*60*60*1000;
+  return (data.logs || []).filter(l => (l.startedAt || 0) >= cutoff && l.finishedAt);
+}
+
+// 한 로그에 참여한 멤버 이름 모음
+function logParticipants(log) {
+  const names = [];
+  if (log.crew?.driver) names.push(log.crew.driver.trim());
+  if (log.crew?.assist) {
+    log.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.push(n));
+  }
+  return names;
+}
+
+function render() {
+  const data = loadData();
+  const logs = getFilteredLogs();
+  const members = data.members || [];
+
+  // 모든 코스 (event.name + course.name)
+  const courses = [];
+  for (const e of data.events) {
+    for (const c of e.courses) courses.push({ id: c.id, label: `${e.name}-${c.name}`, color: c.color });
+  }
+
+  // matrix[memberName][courseId] = count
+  const matrix = {};
+  const memberTotals = {};
+  const courseTotals = {};
+  // 멤버 등록되어있지 않은 사람도 카운트 (로그에는 있지만 회원이 아닌 경우)
+  const allNames = new Set(members.map(m => m.name));
+
+  for (const log of logs) {
+    const courseId = log.courseId;
+    const names = logParticipants(log);
+    for (const name of names) {
+      if (!matrix[name]) matrix[name] = {};
+      matrix[name][courseId] = (matrix[name][courseId] || 0) + 1;
+      memberTotals[name] = (memberTotals[name] || 0) + 1;
+      allNames.add(name);
+    }
+    courseTotals[courseId] = (courseTotals[courseId] || 0) + 1;
+  }
+
+  // 표 그리기
+  const memberList = [...allNames].sort();
+  let thead = '<tr><th>회원</th><th>총합</th>' + courses.map(c => `<th>${c.label}</th>`).join('') + '</tr>';
+  let tbody = '';
+  for (const name of memberList) {
+    const total = memberTotals[name] || 0;
+    if (total === 0) continue;
+    let row = `<tr><td>${name}${allNames.has(name) && !members.find(m=>m.name===name) ? ' <span class="sub">(미등록)</span>' : ''}</td>`;
+    row += `<td><b>${total}</b></td>`;
+    for (const c of courses) {
+      const v = matrix[name]?.[c.id] || 0;
+      row += `<td class="${v===0?'num-zero':v>=3?'num-high':''}">${v||''}</td>`;
+    }
+    row += '</tr>';
+    tbody += row;
+  }
+  document.getElementById('statsTable').innerHTML = thead + tbody;
+
+  // 차트 데이터
+  const sortedMembers = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]).slice(0, 20);
+  drawChart('memberChart', memberChart && (memberChart.destroy(), null), {
+    labels: sortedMembers.map(x => x[0]),
+    datasets: [{ label: '방역 횟수', data: sortedMembers.map(x => x[1]), backgroundColor: '#3498db' }]
+  }, (c => memberChart = c));
+
+  drawChart('courseChart', courseChart && (courseChart.destroy(), null), {
+    labels: courses.map(c => c.label),
+    datasets: [{ label: '방역 횟수', data: courses.map(c => courseTotals[c.id] || 0), backgroundColor: courses.map(c => c.color) }]
+  }, (c => courseChart = c));
+}
+
+function drawChart(canvasId, _, data, setRef) {
+  const ctx = document.getElementById(canvasId);
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data,
+    options: {
+      indexAxis: canvasId === 'memberChart' ? 'y' : 'x',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+  });
+  setRef(chart);
+}
+
+function exportStatsCSV() {
+  const table = document.getElementById('statsTable');
+  let csv = '﻿';
+  for (const row of table.rows) {
+    csv += [...row.cells].map(c => `"${c.textContent.replace(/"/g, '""')}"`).join(',') + '\n';
+  }
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `방역통계-${todayStr()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>오늘의 운영</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>🚐 오늘의 운영</h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="admin.html">관리</a>
+    <a href="members.html">인원</a>
+    <a href="today.html" class="active">오늘운영</a>
+    <a href="monitor.html">모니터링</a>
+    <a href="stats.html">통계</a>
+    <span id="meIndicator" style="font-size:12px;opacity:0.8;margin-left:8px;"></span>
+    <a href="#" id="loginLink" onclick="openMemberLogin();return false;">로그인</a>
+  </nav>
+</header>
+
+<div class="container">
+  <!-- 배정 선택 -->
+  <div class="card" id="assignmentCard">
+    <h2 id="dateLabel">2026-05-08</h2>
+    <div id="assignmentList"></div>
+  </div>
+
+  <!-- 시작 폼 (방역하기 누르면 표시) -->
+  <div id="startFormCard" style="display:none;"></div>
+
+  <!-- 선택된 코스 운영 -->
+  <div id="opPanel" style="display:none;">
+    <div class="card">
+      <div class="flex-between">
+        <div>
+          <div id="opTitle" style="font-weight:600;font-size:15px;"></div>
+          <div class="sub" id="opSubtitle"></div>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button class="small" id="gpsToggle" onclick="toggleGPS()">📍 GPS 시작</button>
+          <button class="small gray" id="followToggle" onclick="toggleFollow()">🎯 따라가기</button>
+          <button class="small gray" id="naviToggle" onclick="toggleNavi()">🧭 내비모드</button>
+          <button class="small gray" onclick="fitToCourse()">🗺 전체</button>
+          <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
+        </div>
+      </div>
+      <div id="gpsStatus" class="muted" style="margin-top:6px;">GPS 대기중</div>
+    </div>
+
+    <div class="card">
+      <div id="map" class="map"></div>
+      <div id="nextInfo" style="margin-top:8px;font-size:13px;"></div>
+    </div>
+
+    <div class="card">
+      <h2>거점 진행</h2>
+      <div id="anchorRows"></div>
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스 완료 보고</button>
+        <button onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
+        <button class="gray" onclick="resetCourse()">진행 초기화</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="common.js"></script>
+<script>
+let currentSession = null;
+let watchId = null;
+let map, anchorMarkers = [], myMarker, trackLine, courseLine;
+let currentPos = null;
+let followMode = true;
+
+const dateLabel = document.getElementById('dateLabel');
+dateLabel.textContent = todayStr() + ' (' + ['일','월','화','수','목','금','토'][new Date().getDay()] + ')';
+
+// Firebase 동기화 (auth 안 거치고 바로 시작 - 규칙 공개)
+window.onDataChanged = () => { if (!currentSession) renderAssignments(); updateMeIndicator(); };
+initFirebaseSync();
+onDataReady(() => {
+  renderAssignments();
+  loadKakaoMap();
+  updateMeIndicator();
+  // 미완료 운영 있으면 이어가기 제안
+  setTimeout(checkResumableSession, 500);
+});
+fbAuth.onAuthStateChanged(() => updateMeIndicator());
+
+function updateMeIndicator() {
+  const u = fbAuth.currentUser;
+  const indicator = document.getElementById('meIndicator');
+  const loginLink = document.getElementById('loginLink');
+  if (!u) { indicator.textContent = ''; loginLink.textContent = '로그인'; return; }
+  if (u.isAnonymous) {
+    indicator.textContent = '(게스트)';
+    loginLink.textContent = '회원로그인';
+    loginLink.onclick = (e) => { e.preventDefault(); openMemberLogin(); };
+  } else {
+    const m = getCurrentMember();
+    indicator.textContent = m ? `👤 ${m.name}님` : `(${u.email})`;
+    loginLink.textContent = '로그아웃';
+    loginLink.onclick = async (e) => {
+      e.preventDefault();
+      await fbAuth.signOut();
+      location.reload();
+    };
+  }
+}
+
+function openMemberLogin() {
+  const savedPhone = localStorage.getItem('lastMemberPhone') || '';
+  const html = `
+    <div id="memberLoginGate" style="position:fixed;inset:0;background:rgba(44,62,80,0.95);z-index:99999;display:flex;align-items:center;justify-content:center;">
+      <div style="background:#fff;padding:24px;border-radius:10px;width:300px;max-width:90vw;">
+        <h2 style="margin-bottom:14px;color:#2c3e50;">👤 회원 로그인</h2>
+        <label>전화번호 (- 없이)</label>
+        <input id="memLoginPhone" type="tel" inputmode="numeric" placeholder="01012345678" value="${savedPhone}">
+        <label>PIN</label>
+        <input id="memLoginPin" type="password" inputmode="numeric" onkeydown="if(event.key==='Enter')doMemberLogin()">
+        <div id="memLoginErr" style="color:#e74c3c;font-size:12px;margin-top:6px;min-height:14px;"></div>
+        <div style="display:flex;gap:6px;margin-top:10px;">
+          <button class="success" style="flex:1;" onclick="doMemberLogin()">로그인</button>
+          <button class="gray" onclick="document.getElementById('memberLoginGate').remove()">취소</button>
+        </div>
+        ${savedPhone ? `<p style="margin-top:8px;font-size:11px;color:#888;text-align:center;">저장된 번호. <a href="#" onclick="document.getElementById('memLoginPhone').value='';localStorage.removeItem('lastMemberPhone');return false;">변경</a></p>` : '<p style="margin-top:8px;font-size:11px;color:#888;text-align:center;">관리자에게 PIN 발급 요청</p>'}
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+  // 전화번호 저장돼있으면 PIN으로 바로 포커스
+  setTimeout(() => {
+    const target = savedPhone ? 'memLoginPin' : 'memLoginPhone';
+    document.getElementById(target).focus();
+  }, 100);
+}
+
+async function doMemberLogin() {
+  const phone = document.getElementById('memLoginPhone').value.trim();
+  const pin = document.getElementById('memLoginPin').value;
+  const err = document.getElementById('memLoginErr');
+  err.textContent = '로그인 중...';
+  try {
+    await memberLogin(phone, pin);
+    // 전화번호 저장 (다음에 자동 채움)
+    localStorage.setItem('lastMemberPhone', phone);
+    document.getElementById('memberLoginGate').remove();
+    // 기본 PIN이면 변경 유도
+    setTimeout(() => {
+      if (isUsingDefaultPin()) promptChangePin(pin);
+      else location.reload();
+    }, 500);
+  } catch (e) {
+    err.textContent = '로그인 실패: 전화번호/PIN 확인';
+  }
+}
+
+function promptChangePin(currentPin) {
+  const html = `
+    <div id="pinChangeGate" style="position:fixed;inset:0;background:rgba(44,62,80,0.95);z-index:99999;display:flex;align-items:center;justify-content:center;">
+      <div style="background:#fff;padding:24px;border-radius:10px;width:320px;max-width:90vw;">
+        <h2 style="margin-bottom:8px;">🔐 비밀번호 변경</h2>
+        <p style="font-size:13px;color:#666;margin-bottom:14px;">기본 PIN(1234)을 사용 중입니다. 본인만의 PIN으로 변경하세요.</p>
+        <label>새 PIN (4자리 숫자)</label>
+        <input id="newPin1" type="password" inputmode="numeric" maxlength="4" placeholder="새 PIN">
+        <label>새 PIN 확인</label>
+        <input id="newPin2" type="password" inputmode="numeric" maxlength="4" placeholder="다시 입력" onkeydown="if(event.key==='Enter')doChangePin('${currentPin}')">
+        <div id="pinChangeErr" style="color:#e74c3c;font-size:12px;margin-top:6px;min-height:14px;"></div>
+        <div style="display:flex;gap:6px;margin-top:10px;">
+          <button class="success" style="flex:1;" onclick="doChangePin('${currentPin}')">변경</button>
+          <button class="gray" onclick="skipChangePin()">나중에</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+  setTimeout(() => document.getElementById('newPin1').focus(), 100);
+}
+
+async function doChangePin(currentPin) {
+  const p1 = document.getElementById('newPin1').value;
+  const p2 = document.getElementById('newPin2').value;
+  const err = document.getElementById('pinChangeErr');
+  if (!/^\d{4}$/.test(p1)) { err.textContent = '4자리 숫자만 가능'; return; }
+  if (p1 !== p2) { err.textContent = 'PIN이 일치하지 않습니다'; return; }
+  if (p1 === '1234') { err.textContent = '기본 PIN과 다른 값으로'; return; }
+  try {
+    await changeMemberPin(currentPin, p1);
+    alert('비밀번호 변경 완료');
+    document.getElementById('pinChangeGate').remove();
+    location.reload();
+  } catch (e) {
+    err.textContent = '실패: ' + e.message;
+  }
+}
+
+function skipChangePin() {
+  document.getElementById('pinChangeGate').remove();
+  location.reload();
+}
+
+function loadKakaoMap() {
+  if (window.__kakaoLoaded) return;
+  window.__kakaoLoaded = true;
+  const script = document.createElement('script');
+  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
+  script.onload = () => kakao.maps.load(() => { initMap(); });
+  document.head.appendChild(script);
+}
+
+function initMap() {
+  const data = loadData();
+  map = new kakao.maps.Map(document.getElementById('map'), {
+    center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
+    level: data.mapDefault.level || 4
+  });
+  // 사용자가 지도 만지면 → 마지막 만진 시점에서 5초 후 따라가기 재개
+  kakao.maps.event.addListener(map, 'dragstart', () => { isUserInteracting = true; });
+  kakao.maps.event.addListener(map, 'zoom_start', () => { isUserInteracting = true; });
+  kakao.maps.event.addListener(map, 'idle', () => {
+    if (isUserInteracting && followMode) {
+      followPauseUntil = Date.now() + 5000;
+      updateFollowBtn();
+    }
+    isUserInteracting = false;
+  });
+}
+
+let followPauseUntil = 0;
+let isUserInteracting = false;
+
+function renderAssignments() {
+  const data = loadData();
+  const el = document.getElementById('assignmentList');
+  const items = [];
+
+  for (const event of (data.events || [])) {
+    for (const course of (event.courses || [])) {
+      const anchorCount = (data.anchors || []).filter(a => a.courseId === course.id).length;
+      items.push({ event, course, anchorCount });
+    }
+  }
+
+  if (!items.length) {
+    el.innerHTML = '<div class="empty">코스가 없습니다<br><span class="sub">관리자에서 행사·코스를 만드세요</span></div>';
+    return;
+  }
+
+  el.innerHTML = `
+    <h3 style="margin:0 0 8px;color:#555;">코스를 선택하세요</h3>
+  ` + items.map(({event, course, anchorCount}) => `
+      <div class="anchor-row">
+        <div class="num" style="background:${course.color}">${course.name[0]}</div>
+        <div style="flex:1;">
+          <div><b>${event.name}</b> · <span style="color:${course.color}">${course.name}</span></div>
+          <div class="sub">거점 ${anchorCount}개</div>
+        </div>
+        <button class="success" onclick="openStartForm('${event.id}','${course.id}')">방역하기</button>
+      </div>
+    `).join('');
+}
+
+let assistList = [];
+
+function openStartForm(eventId, courseId) {
+  const data = loadData();
+  const event = getEvent(data, eventId);
+  const course = getCourse(data, courseId);
+  const members = data.members || [];
+  const teams = data.teams || [];
+  assistList = [];
+
+  const teamOpts = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+
+  document.getElementById('startFormCard').style.display = 'block';
+  document.getElementById('startFormCard').innerHTML = `
+    <div class="card">
+      <h2>${event.name} · ${course.name}</h2>
+
+      <label>조 (선택 시 자동 채움 - 안 골라도 됨)</label>
+      <select id="fTeam" onchange="autoFillFromTeam()">
+        <option value="">조 선택 안 함</option>
+        ${teamOpts}
+      </select>
+
+      <label>운전자 *</label>
+      <div style="position:relative;">
+        <input id="fDriver" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
+               oninput="showSuggestions('fDriver','fDriverSuggest')"
+               onfocus="showSuggestions('fDriver','fDriverSuggest')"
+               onblur="setTimeout(()=>document.getElementById('fDriverSuggest').style.display='none',200)">
+        <div id="fDriverSuggest" class="suggestList"></div>
+      </div>
+
+      <label>보조자 (여러 명 가능)</label>
+      <div style="position:relative;">
+        <div style="display:flex;gap:4px;">
+          <input id="fAssistInput" type="text" placeholder="이름 검색..." style="flex:1;" autocomplete="off"
+                 oninput="showSuggestions('fAssistInput','fAssistSuggest')"
+                 onfocus="showSuggestions('fAssistInput','fAssistSuggest')"
+                 onblur="setTimeout(()=>document.getElementById('fAssistSuggest').style.display='none',200)"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();addAssistChip();}">
+          <button class="small" onclick="addAssistChip()">+ 추가</button>
+        </div>
+        <div id="fAssistSuggest" class="suggestList"></div>
+      </div>
+      <div id="fAssistChips" style="margin-top:6px;min-height:34px;padding:6px;border:1px solid #ddd;border-radius:4px;background:#fafafa;"></div>
+
+      <div style="display:flex;gap:6px;margin-top:14px;">
+        <button class="success" style="flex:1;" onclick="confirmStartForm('${eventId}','${courseId}')">▶ 시작</button>
+        <button class="gray" onclick="closeStartForm()">취소</button>
+      </div>
+    </div>
+  `;
+  renderAssistChips();
+}
+
+function showSuggestions(inputId, listId) {
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+  const q = input.value.trim().toLowerCase();
+  const data = loadData();
+  const members = (data.members || []);
+
+  let matches = members;
+  if (q) matches = members.filter(m => (m.name||'').toLowerCase().includes(q) || (m.phone||'').includes(q));
+  matches = matches.slice(0, 8);
+
+  if (!matches.length) { list.style.display = 'none'; return; }
+
+  list.innerHTML = matches.map(m => `
+    <div class="suggestItem" onclick="pickSuggestion('${inputId}','${listId}','${m.name.replace(/'/g, "\\'")}')">
+      <b>${m.name}</b> <span style="color:#888;font-size:11px;">${m.phone || ''}</span>
+    </div>
+  `).join('');
+  list.style.display = 'block';
+}
+
+function pickSuggestion(inputId, listId, name) {
+  document.getElementById(inputId).value = name;
+  document.getElementById(listId).style.display = 'none';
+  // 보조자 입력은 자동으로 칩 추가
+  if (inputId === 'fAssistInput') {
+    addAssistChip();
+  }
+}
+
+function autoFillFromTeam() {
+  const teamId = document.getElementById('fTeam').value;
+  if (!teamId) return;
+  const data = loadData();
+  const team = getTeam(data, teamId);
+  if (!team) return;
+  const leader = getMember(data, team.leaderId);
+  const vice = getMember(data, team.viceLeaderId);
+  const members = (team.memberIds || []).map(id => getMember(data, id)).filter(Boolean);
+
+  document.getElementById('fDriver').value = leader?.name || '';
+  assistList = [vice?.name, ...members.map(m => m.name)].filter(Boolean);
+  renderAssistChips();
+}
+
+function addAssistChip() {
+  const inp = document.getElementById('fAssistInput');
+  const name = inp.value.trim();
+  if (!name) return;
+  if (!assistList.includes(name)) assistList.push(name);
+  inp.value = '';
+  inp.focus();
+  renderAssistChips();
+}
+
+function removeAssistChip(name) {
+  assistList = assistList.filter(n => n !== name);
+  renderAssistChips();
+}
+
+function renderAssistChips() {
+  const el = document.getElementById('fAssistChips');
+  if (!el) return;
+  if (!assistList.length) {
+    el.innerHTML = '<span style="color:#aaa;font-size:12px;">보조자 없음 - 위에서 추가</span>';
+    return;
+  }
+  el.innerHTML = assistList.map(name => `
+    <span style="display:inline-block;background:#3498db;color:#fff;padding:3px 8px;border-radius:4px;margin:2px;font-size:12px;">
+      ${name}
+      <span onclick="removeAssistChip('${name.replace(/'/g, "\\'")}')" style="cursor:pointer;margin-left:4px;">✕</span>
+    </span>
+  `).join('');
+}
+
+function confirmStartForm(eventId, courseId) {
+  const teamId = document.getElementById('fTeam').value;
+  const driver = document.getElementById('fDriver').value.trim();
+  if (!driver) { alert('운전자 이름을 입력하세요'); return; }
+  const assist = assistList.join(', ');
+  closeStartForm();
+  startSession(eventId, courseId, teamId, { driver, assist });
+}
+
+function quickStart(eventId, courseId, teamId) {
+  const data = loadData();
+  const team = getTeam(data, teamId);
+  if (!team) { alert('조 정보 없음'); return; }
+  const leader = getMember(data, team.leaderId);
+  const vice = getMember(data, team.viceLeaderId);
+  const members = (team.memberIds || []).map(id => getMember(data, id)).filter(Boolean);
+
+  const driver = leader?.name || '';
+  const assistList = [vice?.name, ...members.map(m => m.name)].filter(Boolean);
+  const assist = assistList.join(', ');
+
+  closeStartForm();
+  startSession(eventId, courseId, teamId, { driver, assist });
+}
+
+function manualStart(eventId, courseId) {
+  const data = loadData();
+  const event = getEvent(data, eventId);
+  const course = getCourse(data, courseId);
+  document.getElementById('startFormCard').innerHTML = `
+    <div class="card">
+      <h2>${event.name} · ${course.name}</h2>
+      <label>운전자</label>
+      <input id="fDriver" type="text" placeholder="홍길동">
+      <label>보조자 (여러 명이면 쉼표로)</label>
+      <input id="fAssist" type="text" placeholder="김철수, 이영희">
+      <div style="display:flex;gap:6px;margin-top:10px;">
+        <button class="success" style="flex:1;" onclick="confirmStart('${eventId}','${courseId}')">▶ 시작</button>
+        <button class="gray" onclick="openStartForm('${eventId}','${courseId}')">← 뒤로</button>
+      </div>
+    </div>
+  `;
+}
+
+function closeStartForm() {
+  document.getElementById('startFormCard').style.display = 'none';
+}
+
+function confirmStart(eventId, courseId) {
+  const driver = document.getElementById('fDriver').value.trim();
+  const assist = document.getElementById('fAssist').value.trim();
+  if (!driver) { alert('운전자 이름을 입력하세요'); return; }
+  closeStartForm();
+  startSession(eventId, courseId, '', { driver, assist });
+}
+
+function startSession(eventId, courseId, teamId, crew) {
+  const data = loadData();
+  const date = todayStr();
+  const key = `session_${date}_${eventId}_${courseId}_${teamId}_${Date.now()}`;
+  currentSession = {
+    date, eventId, courseId, teamId,
+    crew: crew || {}, // {driver, assist, vehicle}
+    completions: [], track: [], startedAt: Date.now(), finishedAt: null,
+    key
+  };
+
+  document.getElementById('assignmentCard').style.display = 'none';
+  document.getElementById('opPanel').style.display = 'block';
+
+  const event = getEvent(data, eventId);
+  const course = getCourse(data, courseId);
+  const team = getTeam(data, teamId);
+  document.getElementById('opTitle').textContent = `${event.name} - ${course.name}`;
+  const subtitleParts = [];
+  if (team) subtitleParts.push(team.name);
+  if (crew?.driver) subtitleParts.push(`운전 ${crew.driver}`);
+  if (crew?.assist) subtitleParts.push(`보조 ${crew.assist}`);
+  document.getElementById('opSubtitle').textContent = subtitleParts.join(' · ');
+
+  renderAnchorRows();
+  renderMapForSession();
+
+  // 시작하면 GPS 자동 ON
+  if (watchId === null) {
+    setTimeout(() => toggleGPS(), 500);
+  }
+}
+
+function saveSession() {
+  if (!currentSession) return;
+  localStorage.setItem(currentSession.key, JSON.stringify(currentSession));
+  localStorage.setItem('lastActiveSession', JSON.stringify(currentSession));
+}
+
+function clearLastActiveSession() {
+  localStorage.removeItem('lastActiveSession');
+}
+
+function checkResumableSession() {
+  const raw = localStorage.getItem('lastActiveSession');
+  if (!raw) return;
+  let s;
+  try { s = JSON.parse(raw); } catch { return; }
+  if (s.finishedAt) { clearLastActiveSession(); return; }
+  // 12시간 이내만 복구 제안
+  if (Date.now() - (s.startedAt || 0) > 12 * 60 * 60 * 1000) { clearLastActiveSession(); return; }
+
+  const data = loadData();
+  const event = getEvent(data, s.eventId);
+  const course = getCourse(data, s.courseId);
+  if (!event || !course) { clearLastActiveSession(); return; }
+
+  const elapsed = Math.floor((Date.now() - s.startedAt) / 60000);
+  const completed = (s.completions || []).length;
+  const total = getCourseAnchors(data, s.courseId).length;
+  const driver = s.crew?.driver || '';
+
+  if (confirm(`이전 운영 이어가기?\n\n${event.name} · ${course.name}\n${driver ? '운전: ' + driver + '\n' : ''}진행: ${completed}/${total} 거점\n시작: ${elapsed}분 전\n\n[확인] = 이어가기  /  [취소] = 새로 시작`)) {
+    resumeSession(s);
+  } else {
+    clearLastActiveSession();
+  }
+}
+
+function resumeSession(s) {
+  currentSession = s;
+  document.getElementById('assignmentCard').style.display = 'none';
+  document.getElementById('opPanel').style.display = 'block';
+  const data = loadData();
+  const event = getEvent(data, s.eventId);
+  const course = getCourse(data, s.courseId);
+  document.getElementById('opTitle').textContent = `${event.name} - ${course.name} (이어서)`;
+  const subtitleParts = [];
+  if (s.crew?.driver) subtitleParts.push(`운전 ${s.crew.driver}`);
+  if (s.crew?.assist) subtitleParts.push(`보조 ${s.crew.assist}`);
+  document.getElementById('opSubtitle').textContent = subtitleParts.join(' · ');
+  renderAnchorRows();
+  renderMapForSession();
+  // GPS 자동 ON
+  if (watchId === null) setTimeout(() => toggleGPS(), 500);
+}
+
+function renderAnchorRows() {
+  const data = loadData();
+  const anchors = getCourseAnchors(data, currentSession.courseId);
+  const done = new Set(currentSession.completions);
+  document.getElementById('anchorRows').innerHTML = anchors.map((a, i) => {
+    const isDone = done.has(a.id);
+    return `
+      <div class="anchor-row ${isDone ? 'done' : ''}">
+        <div class="num">${i+1}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="name">${a.name}</div>
+          ${a.memo ? `<div class="sub">${a.memo}</div>` : ''}
+        </div>
+        <button class="small" onclick="navTo('${a.id}')">🧭</button>
+        <button class="small ${isDone ? 'gray' : 'success'}" onclick="toggleDone('${a.id}')">
+          ${isDone ? '↺' : '✓'}
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderMapForSession() {
+  if (!map) { setTimeout(renderMapForSession, 300); return; }
+  anchorMarkers.forEach(m => m.setMap(null)); anchorMarkers = [];
+  if (courseLine) courseLine.setMap(null);
+  if (trackLine) trackLine.setMap(null);
+
+  const data = loadData();
+  const course = getCourse(data, currentSession.courseId);
+  const anchors = getCourseAnchors(data, currentSession.courseId);
+  const done = new Set(currentSession.completions);
+  const path = [];
+  let bounds = new kakao.maps.LatLngBounds();
+
+  anchors.forEach((a, i) => {
+    const pos = new kakao.maps.LatLng(a.lat, a.lng);
+    bounds.extend(pos); path.push(pos);
+    const isDone = done.has(a.id);
+    const marker = new kakao.maps.Marker({
+      position: pos, map,
+      title: `${i+1}. ${a.name}`,
+      image: numberedMarkerImage(i+1, course.color, isDone),
+      zIndex: 10
+    });
+    kakao.maps.event.addListener(marker, 'click', () => {
+      if (confirm(`${a.name}\n${a.memo || ''}\n\n카카오내비로 안내?`)) navTo(a.id);
+    });
+    anchorMarkers.push(marker);
+  });
+  if (path.length >= 2) {
+    courseLine = new kakao.maps.Polyline({
+      path, strokeWeight: 4, strokeColor: course.color,
+      strokeOpacity: 0.6, map
+    });
+    for (let i = 0; i < path.length - 1; i++) {
+      anchorMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
+    }
+  }
+  if (anchors.length) map.setBounds(bounds);
+
+  // 요청 마커 (주황 별)
+  const reqs = (data.requests || []).filter(r => r.courseId === currentSession.courseId && r.status === 'pending');
+  reqs.forEach(r => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
+      <path d="M11 1 L13.5 8 L21 8 L15 13 L17 21 L11 16 L5 21 L7 13 L1 8 L8.5 8 Z" fill="#e67e22" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>`;
+    const m = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(r.lat, r.lng), map,
+      image: new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(22, 22),
+        { offset: new kakao.maps.Point(11, 11) }
+      ),
+      title: `[요청] ${r.name}`,
+      zIndex: 5
+    });
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:4px 8px;font-size:12px;"><b>[요청] ${r.name}</b><br>${r.memo || ''}</div>`
+    });
+    kakao.maps.event.addListener(m, 'click', () => iw.open(map, m));
+    anchorMarkers.push(m);
+  });
+
+  // 다닌 길 폴리라인
+  if (currentSession.track.length >= 2) {
+    const trackPath = currentSession.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
+    trackLine = new kakao.maps.Polyline({
+      path: trackPath, strokeWeight: 3, strokeColor: '#666',
+      strokeOpacity: 0.8, strokeStyle: 'shortdash', map
+    });
+  }
+}
+
+function navTo(anchorId) {
+  const data = loadData();
+  const a = data.anchors.find(x => x.id === anchorId);
+  if (a) openKakaoNavi(a.name, a.lat, a.lng);
+}
+function toggleDone(anchorId) {
+  if (!currentSession) return;
+  const set = new Set(currentSession.completions);
+  if (set.has(anchorId)) set.delete(anchorId);
+  else set.add(anchorId);
+  currentSession.completions = [...set];
+  saveSession();
+  renderAnchorRows();
+  renderMapForSession();
+  updateNextInfo();
+}
+
+// ────── GPS ──────
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      console.log('Wake Lock 활성화 - 화면 안 꺼짐');
+    }
+  } catch (e) { console.warn('Wake Lock 실패:', e); }
+}
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && watchId && !wakeLock) requestWakeLock();
+});
+
+function toggleGPS() {
+  const btn = document.getElementById('gpsToggle');
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    releaseWakeLock();
+    btn.textContent = '📍 GPS 시작';
+    document.getElementById('gpsStatus').textContent = 'GPS 중지됨';
+    return;
+  }
+  if (!navigator.geolocation) { alert('GPS 미지원 브라우저'); return; }
+  followMode = true;
+  updateFollowBtn();
+  watchId = navigator.geolocation.watchPosition(onGpsUpdate, onGpsError,
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
+  requestWakeLock();
+  btn.textContent = '⏸ GPS 중지';
+  document.getElementById('gpsStatus').textContent = 'GPS 추적 중...';
+}
+
+function toggleFollow() {
+  followMode = !followMode;
+  updateFollowBtn();
+  if (followMode && currentPos && map) {
+    map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+    map.setLevel(3);
+  }
+}
+function updateFollowBtn() {
+  const btn = document.getElementById('followToggle');
+  if (!btn) return;
+  const remain = followPauseUntil - Date.now();
+  if (followMode && remain > 0) {
+    btn.textContent = `🎯 일시정지 ${Math.ceil(remain/1000)}s`;
+    btn.classList.add('gray');
+  } else if (followMode) {
+    btn.textContent = '🎯 따라가기 ON';
+    btn.classList.remove('gray');
+  } else {
+    btn.textContent = '🎯 따라가기';
+    btn.classList.add('gray');
+  }
+}
+
+// 일시정지 카운트다운 표시 (1초마다)
+setInterval(() => {
+  if (followPauseUntil > Date.now()) updateFollowBtn();
+}, 1000);
+
+function fitToCourse() {
+  if (!currentSession || !map) return;
+  const data = loadData();
+  const anchors = getCourseAnchors(data, currentSession.courseId);
+  if (!anchors.length) return;
+  const bounds = new kakao.maps.LatLngBounds();
+  anchors.forEach(a => bounds.extend(new kakao.maps.LatLng(a.lat, a.lng)));
+  if (currentPos) bounds.extend(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+  map.setBounds(bounds);
+  followMode = false;
+  naviMode = false;
+  applyNaviRotation(0);
+  updateFollowBtn();
+  updateNaviBtn();
+}
+
+let naviMode = false;
+function toggleNavi() {
+  naviMode = !naviMode;
+  updateNaviBtn();
+  if (naviMode) {
+    followMode = true;
+    updateFollowBtn();
+    if (currentPos) {
+      const heading = currentPos.heading || 0;
+      applyNaviRotation(heading);
+      map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+    }
+  } else {
+    applyNaviRotation(0);
+  }
+}
+function updateNaviBtn() {
+  const btn = document.getElementById('naviToggle');
+  if (!btn) return;
+  if (naviMode) {
+    btn.textContent = '🧭 내비모드 ON';
+    btn.classList.remove('gray');
+  } else {
+    btn.textContent = '🧭 내비모드';
+    btn.classList.add('gray');
+  }
+}
+function applyNaviRotation(heading) {
+  const el = document.getElementById('map');
+  if (!el) return;
+  if (naviMode) {
+    el.style.transition = 'transform 0.5s';
+    el.style.transform = `rotate(${-heading}deg)`;
+    el.style.transformOrigin = 'center center';
+  } else {
+    el.style.transform = '';
+  }
+}
+
+function onGpsUpdate(pos) {
+  const lat = pos.coords.latitude, lng = pos.coords.longitude;
+  const heading = pos.coords.heading; // 0~360 또는 null
+  currentPos = { lat, lng, heading };
+  document.getElementById('gpsStatus').textContent =
+    `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} (정확도 ${Math.round(pos.coords.accuracy)}m)`;
+
+  // 내 위치 마커 (방향 화살표 포함)
+  if (map) {
+    const p = new kakao.maps.LatLng(lat, lng);
+    const h = (heading !== null && !isNaN(heading)) ? heading : 0;
+    const arrowSvg = (heading !== null && !isNaN(heading))
+      ? `<g transform="rotate(${h} 20 20)"><path d="M20 4 L30 26 L20 22 L10 26 Z" fill="#3498db" stroke="white" stroke-width="2" stroke-linejoin="round"/></g>`
+      : `<circle cx="20" cy="20" r="9" fill="#3498db" stroke="white" stroke-width="3"/>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="14" fill="rgba(52,152,219,0.15)"/>${arrowSvg}
+    </svg>`;
+    const img = new kakao.maps.MarkerImage(
+      'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+      new kakao.maps.Size(40, 40),
+      { offset: new kakao.maps.Point(20, 20) }
+    );
+    if (!myMarker) {
+      myMarker = new kakao.maps.Marker({ position: p, map, image: img, zIndex: 100 });
+    } else {
+      myMarker.setPosition(p);
+      myMarker.setImage(img);
+    }
+    // 따라가기 모드 + 일시정지 아니면 지도 중심 이동
+    if (followMode && Date.now() >= followPauseUntil) {
+      map.setCenter(p);
+    } else if (followMode) {
+      // 일시정지 끝났는지 주기적으로 버튼 갱신
+      updateFollowBtn();
+    }
+    // 내비모드면 진행방향 위로
+    if (naviMode && heading !== null && !isNaN(heading)) {
+      applyNaviRotation(heading);
+    }
+  }
+
+  // 궤적 기록 (5m 이상 이동 시)
+  if (currentSession) {
+    const last = currentSession.track[currentSession.track.length - 1];
+    if (!last || distance(last[0], last[1], lat, lng) > 5) {
+      currentSession.track.push([lat, lng, Date.now()]);
+      saveSession();
+      renderMapForSession();
+    }
+  }
+
+  // 거점 30초 머물면 자동 체크
+  if (currentSession) {
+    const data = loadData();
+    const anchors = getCourseAnchors(data, currentSession.courseId);
+    const done = new Set(currentSession.completions);
+    if (!currentSession.nearTimers) currentSession.nearTimers = {};
+    const now = Date.now();
+    for (const a of anchors) {
+      if (done.has(a.id)) { delete currentSession.nearTimers[a.id]; continue; }
+      const isNear = distance(lat, lng, a.lat, a.lng) < 50;
+      if (isNear) {
+        if (!currentSession.nearTimers[a.id]) {
+          currentSession.nearTimers[a.id] = now;
+        } else if (now - currentSession.nearTimers[a.id] >= 10000) {
+          // 10초 머묾 → 자동 체크
+          toggleDone(a.id);
+          delete currentSession.nearTimers[a.id];
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        }
+      } else {
+        // 멀어지면 타이머 리셋
+        delete currentSession.nearTimers[a.id];
+      }
+    }
+  }
+
+  updateNextInfo();
+}
+function onGpsError(err) {
+  document.getElementById('gpsStatus').textContent = 'GPS 오류: ' + err.message;
+}
+
+function updateNextInfo() {
+  if (!currentSession || !currentPos) return;
+  const data = loadData();
+  const anchors = getCourseAnchors(data, currentSession.courseId);
+  const done = new Set(currentSession.completions);
+  const next = anchors.find(a => !done.has(a.id));
+  const el = document.getElementById('nextInfo');
+  if (!next) {
+    el.innerHTML = '🎉 모든 거점 완료!';
+    return;
+  }
+  const dist = distance(currentPos.lat, currentPos.lng, next.lat, next.lng);
+  el.innerHTML = `다음: <b>${next.name}</b> (${formatDist(dist)})`;
+}
+function formatDist(m) {
+  return m < 1000 ? `${Math.round(m)}m` : `${(m/1000).toFixed(2)}km`;
+}
+
+function finishCourse() {
+  if (!currentSession) return;
+  const data = loadData();
+  const anchors = getCourseAnchors(data, currentSession.courseId);
+  const done = new Set(currentSession.completions);
+  const unchecked = anchors.filter(a => !done.has(a.id));
+
+  if (unchecked.length) {
+    const list = unchecked.map((a, i) => `${i+1}. ${a.name}`).join('\n');
+    const choice = confirm(`체크 안 된 거점 ${unchecked.length}개:\n\n${list}\n\n[확인] = 모두 체크 완료 처리\n[취소] = 미완료 상태로 보고`);
+    if (choice) {
+      unchecked.forEach(a => done.add(a.id));
+      currentSession.completions = [...done];
+    }
+  } else {
+    if (!confirm('코스를 완료 보고할까요?')) return;
+  }
+
+  currentSession.finishedAt = Date.now();
+  saveSession();
+
+  // 로그에 누적
+  const fresh = loadData();
+  if (!fresh.logs) fresh.logs = [];
+  fresh.logs.push({ ...currentSession });
+  saveData(fresh);
+
+  alert('✅ 코스 완료 보고됨');
+  if (watchId !== null) toggleGPS();
+  releaseWakeLock();
+  clearLastActiveSession();
+  currentSession = null;
+  document.getElementById('opPanel').style.display = 'none';
+  document.getElementById('assignmentCard').style.display = 'block';
+  renderAssignments();
+}
+
+function requestNewAnchor() {
+  if (!currentSession) { alert('먼저 코스를 시작하세요'); return; }
+  if (!currentPos) { alert('GPS 위치가 잡히지 않았습니다.\nGPS를 켜고 위치 잡힌 후 다시 시도하세요'); return; }
+
+  const name = prompt('추가 요청할 거점 이름\n(예: 새로운 어린이집, 골목 입구)');
+  if (!name) return;
+  const memo = prompt('메모 / 사유 (선택)\n(예: 다음 방역에 추가 필요)', '') || '';
+
+  const data = loadData();
+  const req = {
+    id: uid(),
+    lat: currentPos.lat, lng: currentPos.lng,
+    name, memo,
+    eventId: currentSession.eventId,
+    courseId: currentSession.courseId,
+    requestedBy: currentSession.crew?.driver || '',
+    requestedAt: Date.now(),
+    status: 'pending'
+  };
+  data.requests.push(req);
+  saveData(data);
+  renderMapForSession();
+  alert('관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
+}
+
+function resetCourse() {
+  if (!confirm('이 코스의 진행 상태를 초기화할까요? (체크/궤적 삭제)')) return;
+  if (!currentSession) return;
+  currentSession.completions = [];
+  currentSession.track = [];
+  currentSession.startedAt = Date.now();
+  saveSession();
+  renderAnchorRows();
+  renderMapForSession();
+}
+</script>
+</body>
+</html>

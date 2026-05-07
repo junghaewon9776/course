@@ -1,0 +1,923 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>관리자 - 코스 관리</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>⚙️ 관리자</h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="admin.html" class="active">관리</a>
+    <a href="members.html">인원</a>
+    <a href="today.html">오늘운영</a>
+    <a href="monitor.html">모니터링</a>
+    <a href="stats.html">통계</a>
+    <a href="accounts.html">계정</a>
+    <a href="#" onclick="adminLogout();return false;">로그아웃</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="row">
+    <!-- 왼쪽: 지도 + 거점 등록 -->
+    <div class="col" style="flex:2;min-width:400px;">
+      <div class="card">
+        <div class="flex-between" style="margin-bottom:8px;">
+          <h2>거점 지도</h2>
+          <div>
+            <button class="small gray" onclick="setMapDefault()" title="현재 화면 위치를 기본으로 저장">📌 현재위치 기본설정</button>
+            <label style="display:inline;font-size:12px;">표시:</label>
+            <select id="viewSelect" style="width:auto;display:inline-block;" onchange="renderMap()">
+              <option value="all">전체 행사</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+          <input id="searchInput" type="text" placeholder="주소 또는 장소 검색 (예: 영광읍사무소, 영광로 123)" onkeydown="if(event.key==='Enter')searchPlace()">
+          <button onclick="searchPlace()" style="white-space:nowrap;">🔍 검색</button>
+        </div>
+        <div id="searchResults" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #ddd;border-radius:5px;margin-bottom:8px;background:#fff;"></div>
+        <div id="map" class="map"></div>
+        <p class="muted" style="margin-top:6px;">💡 검색 → 결과 클릭 / 지도 클릭 → 새 거점 추가 / 핀 드래그 → 위치 수정</p>
+      </div>
+    </div>
+
+    <!-- 오른쪽: 관리 패널 -->
+    <div class="col" style="flex:1;min-width:320px;">
+      <!-- 요청 (승인 대기) -->
+      <div class="card" id="requestCard" style="display:none;border:2px solid #e67e22;">
+        <h2>📌 거점 추가 요청 <span id="requestCount" style="background:#e67e22;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">0</span></h2>
+        <div id="requestList"></div>
+      </div>
+
+      <!-- 행사 -->
+      <div class="card">
+        <div class="flex-between"><h2>행사</h2>
+          <button class="small" onclick="addEvent()">+ 행사 추가</button>
+        </div>
+        <div id="eventList"></div>
+      </div>
+
+      <!-- 코스 (행사 선택 후) -->
+      <div class="card">
+        <div class="flex-between"><h2>코스</h2>
+          <button class="small" onclick="addCourse()">+ 코스 추가</button>
+        </div>
+        <label>대상 행사</label>
+        <select id="courseEventSel" onchange="renderCourses()"></select>
+        <div id="courseList" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- 거점 목록 (코스 선택 후) -->
+      <div class="card">
+        <div class="flex-between"><h2>거점</h2>
+          <div>
+            <button class="small gray" onclick="downloadCSVTemplate()">📄 양식</button>
+            <button class="small gray" onclick="exportAnchorsCSV()">⬇️ 다운로드</button>
+            <button class="small" onclick="document.getElementById('csvUpload').click()">📤 업로드</button>
+          </div>
+        </div>
+        <input type="file" id="csvUpload" accept=".csv,.xlsx,.xls" style="display:none">
+        <label>대상 코스</label>
+        <select id="anchorCourseSel" onchange="renderAnchors()"></select>
+        <div style="margin-top:6px;">
+          <button class="small danger" onclick="deleteCourseAnchors()">🗑 이 코스 거점 모두 삭제</button>
+        </div>
+        <div id="anchorList" style="margin-top:8px;"></div>
+        <p class="muted" style="margin-top:6px;font-size:11px;">💡 업로드는 추가 모드 (기존 거점은 유지). 갈아끼우려면 "모두 삭제" 후 업로드</p>
+      </div>
+
+      <!-- 조 -->
+      <div class="card">
+        <div class="flex-between"><h2>조 (인원)</h2>
+          <button class="small" onclick="addTeam()">+ 조 추가</button>
+        </div>
+        <div id="teamList"></div>
+      </div>
+
+      <!-- 스케줄 -->
+      <div class="card">
+        <div class="flex-between"><h2>운영 스케줄</h2>
+          <button class="small" onclick="addSchedule()">+ 스케줄 추가</button>
+        </div>
+        <div id="scheduleList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="common.js"></script>
+<script>
+let map, kakaoMarkers = [], kakaoLines = [];
+let pendingClick = null;
+
+// 인증 → 데이터 동기화 → 카카오 지도 초기화
+window.onAuthSuccess = () => onDataReady(loadKakaoMap);
+window.onDataChanged = () => { if (map) refreshAll(); };
+
+checkAdminAuth().then(ok => {
+  if (ok) onDataReady(loadKakaoMap);
+});
+
+function loadKakaoMap() {
+  if (window.__kakaoLoaded) { refreshAll(); return; }
+  window.__kakaoLoaded = true;
+  const script = document.createElement('script');
+  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`;
+  script.onload = () => kakao.maps.load(initMap);
+  document.head.appendChild(script);
+}
+
+function initMap() {
+  const data = loadData();
+  map = new kakao.maps.Map(document.getElementById('map'), {
+    center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
+    level: data.mapDefault.level || 5
+  });
+  kakao.maps.event.addListener(map, 'click', (e) => {
+    const lat = e.latLng.getLat();
+    const lng = e.latLng.getLng();
+    handleMapClick(lat, lng);
+  });
+  refreshAll();
+}
+
+function handleMapClick(lat, lng) {
+  const data = loadData();
+  const courseId = document.getElementById('anchorCourseSel').value;
+  if (!courseId) {
+    alert('먼저 "거점" 패널에서 대상 코스를 선택하세요');
+    return;
+  }
+  const name = prompt('거점 이름 (예: 행복어린이집 정문)');
+  if (!name) return;
+  const memo = prompt('메모 (정차 위치, 골목 안내 등) - 선택', '') || '';
+  if (!data.anchors) data.anchors = [];
+  const order = data.anchors.filter(a => a.courseId === courseId).length + 1;
+  const eventId = getCourseEventId(data, courseId);
+  data.anchors.push({ id: uid(), name, lat, lng, memo, eventId, courseId, order });
+  saveData(data);
+  refreshAll();
+}
+
+// ────── 주소/장소 검색 ──────
+function searchPlace() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('searchResults');
+  resultsEl.style.display = 'block';
+  resultsEl.innerHTML = '<div style="padding:8px;color:#888;font-size:12px;">검색 중...</div>';
+
+  const places = new kakao.maps.services.Places();
+  places.keywordSearch(q, (data, status) => {
+    if (status === kakao.maps.services.Status.OK && data.length) {
+      showSearchResults(data.map(d => ({
+        name: d.place_name,
+        address: d.road_address_name || d.address_name,
+        lat: parseFloat(d.y),
+        lng: parseFloat(d.x)
+      })));
+      return;
+    }
+    // 장소 없으면 주소 검색
+    const geocoder = new kakao.maps.services.Geocoder();
+    geocoder.addressSearch(q, (gdata, gstatus) => {
+      if (gstatus === kakao.maps.services.Status.OK && gdata.length) {
+        showSearchResults(gdata.map(d => ({
+          name: d.address_name,
+          address: d.road_address?.address_name || d.address_name,
+          lat: parseFloat(d.y),
+          lng: parseFloat(d.x)
+        })));
+      } else {
+        resultsEl.innerHTML = '<div style="padding:8px;color:#e74c3c;font-size:12px;">검색 결과 없음</div>';
+      }
+    });
+  });
+}
+
+function showSearchResults(results) {
+  const resultsEl = document.getElementById('searchResults');
+  resultsEl.innerHTML = results.slice(0, 10).map((r, i) => `
+    <div style="padding:8px 10px;border-bottom:1px solid #eee;cursor:pointer;font-size:13px;"
+         onmouseover="this.style.background='#f0f0f0'"
+         onmouseout="this.style.background='#fff'"
+         onclick='pickSearchResult(${JSON.stringify(r).replace(/'/g, "&apos;")})'>
+      <div style="font-weight:600;">${r.name}</div>
+      <div style="color:#888;font-size:11px;">${r.address || ''}</div>
+    </div>
+  `).join('') + `
+    <div style="padding:6px 10px;text-align:right;">
+      <button class="small gray" onclick="closeSearchResults()">닫기</button>
+    </div>
+  `;
+}
+
+function closeSearchResults() {
+  document.getElementById('searchResults').style.display = 'none';
+}
+
+function setMapDefault() {
+  if (!map) return;
+  const c = map.getCenter();
+  const level = map.getLevel();
+  if (!confirm(`현재 화면 위치를 기본 위치로 저장할까요?\n위도 ${c.getLat().toFixed(4)}, 경도 ${c.getLng().toFixed(4)} (줌 ${level})`)) return;
+  const data = loadData();
+  data.mapDefault = { lat: c.getLat(), lng: c.getLng(), level };
+  saveData(data);
+  alert('저장됨. 다음에 사이트 켤 때 이 위치로 시작됩니다.');
+}
+
+function resetToDefaults() {
+  if (!confirm('모든 데이터를 기본 예시 데이터로 초기화합니다. (행사·코스·거점·조·로그 다 삭제됨)\n계속할까요?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+}
+
+// ────── 거점 CSV 다운로드 ──────
+function exportAnchorsCSV() {
+  const data = loadData();
+  if (!data.anchors.length) { alert('거점이 없습니다'); return; }
+
+  const lines = ['﻿행사,코스,거점명,주소,위도,경도,메모,순서'];
+  for (const event of (data.events || [])) {
+    for (const course of (event.courses || [])) {
+      const anchors = getCourseAnchors(data, course.id);
+      for (const a of anchors) {
+        const row = [
+          csvEscape(event.name),
+          csvEscape(course.name),
+          csvEscape(a.name),
+          '', // 주소 비워둠 (좌표 우선)
+          a.lat,
+          a.lng,
+          csvEscape(a.memo || ''),
+          a.order
+        ].join(',');
+        lines.push(row);
+      }
+    }
+  }
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `거점목록-${todayStr()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => alert(`다운로드 완료 (${data.anchors.length}개 거점)`), 200);
+}
+
+function csvEscape(s) {
+  s = String(s || '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
+function deleteCourseAnchors() {
+  const courseId = document.getElementById('anchorCourseSel').value;
+  if (!courseId) { alert('먼저 대상 코스를 선택하세요'); return; }
+  const data = loadData();
+  const targets = data.anchors.filter(a => a.courseId === courseId);
+  if (!targets.length) { alert('이 코스에 거점이 없습니다'); return; }
+  const course = getCourse(data, courseId);
+  if (!confirm(`"${course?.name}"의 거점 ${targets.length}개를 모두 삭제할까요?`)) return;
+  data.anchors = data.anchors.filter(a => a.courseId !== courseId);
+  saveData(data);
+  refreshAll();
+}
+
+// ────── 엑셀/CSV 일괄 업로드 ──────
+function downloadCSVTemplate() {
+  const csv = '﻿행사,코스,거점명,주소,위도,경도,메모\n' +
+              '방역행사,1코스,영광읍사무소,영광읍 중앙로 100,,,주차 후문\n' +
+              '방역행사,1코스,행복어린이집,,35.2772,126.5121,정문 옆\n' +
+              '효도위안잔치,1코스,법성면사무소,법성면 진내리,,,\n';
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '거점등록양식.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => alert('양식 다운로드 완료\n\n컬럼: 행사, 코스, 거점명, 주소, 위도, 경도, 메모\n• 주소 또는 (위도+경도) 둘 중 하나 입력\n• 행사·코스는 미리 만들어둔 이름과 정확히 일치'), 200);
+}
+
+document.getElementById('csvUpload').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = ''; // 다음에 같은 파일 다시 올릴 수 있게
+
+  let rows;
+  try {
+    if (file.name.match(/\.(xlsx|xls)$/i)) {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    } else {
+      const text = await file.text();
+      rows = parseCSV(text);
+    }
+  } catch (err) {
+    alert('파일 읽기 실패: ' + err.message); return;
+  }
+
+  if (!rows || !rows.length) { alert('데이터가 없습니다'); return; }
+  await processBulkAnchors(rows);
+});
+
+function parseCSV(text) {
+  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(s => s.trim());
+  return lines.slice(1).map(line => {
+    const cells = line.split(',').map(s => s.trim());
+    const row = {};
+    headers.forEach((h, i) => { row[h] = cells[i] || ''; });
+    return row;
+  });
+}
+
+async function processBulkAnchors(rows) {
+  const data = loadData();
+  const geocoder = new kakao.maps.services.Geocoder();
+  const places = new kakao.maps.services.Places();
+
+  let added = 0, skipped = 0;
+  const log = [];
+
+  // 진행상황 표시용
+  const progressDiv = document.createElement('div');
+  progressDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;padding:20px;border-radius:8px;box-shadow:0 0 20px rgba(0,0,0,0.3);z-index:9999;min-width:300px;';
+  progressDiv.innerHTML = '<div>처리 중...</div>';
+  document.body.appendChild(progressDiv);
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    progressDiv.innerHTML = `<div>처리 중... (${i+1}/${rows.length})</div><div style="font-size:12px;color:#888;">${row['거점명'] || ''}</div>`;
+
+    const eventName = (row['행사'] || '').trim();
+    const courseName = (row['코스'] || '').trim();
+    const anchorName = (row['거점명'] || '').trim();
+    const address = (row['주소'] || '').trim();
+    const lat = parseFloat(row['위도']);
+    const lng = parseFloat(row['경도']);
+    const memo = (row['메모'] || '').trim();
+
+    if (!anchorName) { skipped++; log.push(`행 ${i+2}: 거점명 없음`); continue; }
+
+    // 행사 찾기 (없으면 생성)
+    let event = data.events.find(e => e.name === eventName);
+    if (!event && eventName) {
+      event = { id: uid(), name: eventName, courses: [] };
+      data.events.push(event);
+    }
+    if (!event) event = data.events[0]; // fallback
+    if (!event) { skipped++; log.push(`행 ${i+2}: 행사 없음`); continue; }
+
+    // 코스 찾기 (없으면 생성)
+    let course = event.courses.find(c => c.name === courseName);
+    if (!course && courseName) {
+      const colors = ['#FF6B6B','#4ECDC4','#95E1D3','#FFA45B','#A66CFF','#3498db'];
+      course = { id: uid(), name: courseName, color: colors[event.courses.length % colors.length] };
+      event.courses.push(course);
+    }
+    if (!course) course = event.courses[0];
+    if (!course) { skipped++; log.push(`행 ${i+2}: 코스 없음`); continue; }
+
+    // 좌표 결정
+    let finalLat = lat, finalLng = lng;
+    if (isNaN(finalLat) || isNaN(finalLng)) {
+      // 주소로 검색
+      if (!address) { skipped++; log.push(`행 ${i+2}: ${anchorName} - 주소/좌표 없음`); continue; }
+      const result = await geocodeOne(geocoder, places, address);
+      if (!result) { skipped++; log.push(`행 ${i+2}: ${anchorName} - "${address}" 검색 실패`); continue; }
+      finalLat = result.lat; finalLng = result.lng;
+    }
+
+    if (!data.anchors) data.anchors = [];
+    const order = data.anchors.filter(a => a.courseId === course.id).length + 1;
+    data.anchors.push({
+      id: uid(), name: anchorName, lat: finalLat, lng: finalLng, memo,
+      eventId: event.id, courseId: course.id, order
+    });
+    added++;
+  }
+
+  saveData(data);
+  document.body.removeChild(progressDiv);
+  refreshAll();
+
+  let msg = `✅ ${added}개 추가, ⏭ ${skipped}개 건너뜀`;
+  if (log.length) msg += '\n\n' + log.slice(0, 10).join('\n') + (log.length > 10 ? `\n...외 ${log.length-10}건` : '');
+  alert(msg);
+}
+
+function geocodeOne(geocoder, places, query) {
+  return new Promise(resolve => {
+    geocoder.addressSearch(query, (data, status) => {
+      if (status === kakao.maps.services.Status.OK && data.length) {
+        resolve({ lat: parseFloat(data[0].y), lng: parseFloat(data[0].x) });
+        return;
+      }
+      // 주소 실패 → 키워드 검색
+      places.keywordSearch(query, (pdata, pstatus) => {
+        if (pstatus === kakao.maps.services.Status.OK && pdata.length) {
+          resolve({ lat: parseFloat(pdata[0].y), lng: parseFloat(pdata[0].x) });
+        } else {
+          resolve(null);
+        }
+      });
+    });
+  });
+}
+
+function pickSearchResult(r) {
+  // 지도 이동
+  const pos = new kakao.maps.LatLng(r.lat, r.lng);
+  map.setCenter(pos);
+  map.setLevel(3);
+
+  const courseId = document.getElementById('anchorCourseSel').value;
+  if (!courseId) {
+    alert('먼저 "거점" 패널에서 대상 코스를 선택하세요\n위치만 보여드릴게요.');
+    closeSearchResults();
+    return;
+  }
+  if (!confirm(`"${r.name}"\n${r.address || ''}\n\n이 위치를 거점으로 추가할까요?`)) {
+    closeSearchResults();
+    return;
+  }
+  const name = prompt('거점 이름', r.name);
+  if (!name) { closeSearchResults(); return; }
+  const memo = prompt('메모 (선택)', r.address || '') || '';
+
+  const data = loadData();
+  if (!data.anchors) data.anchors = [];
+  const order = data.anchors.filter(a => a.courseId === courseId).length + 1;
+  const eventId = getCourseEventId(data, courseId);
+  data.anchors.push({ id: uid(), name, lat: r.lat, lng: r.lng, memo, eventId, courseId, order });
+  saveData(data);
+  closeSearchResults();
+  document.getElementById('searchInput').value = '';
+  refreshAll();
+}
+
+function refreshAll() {
+  renderRequests();
+  renderEvents();
+  renderEventSelect('viewSelect', true);
+  renderEventSelect('courseEventSel');
+  renderCourses();
+  renderAnchorCourseSelect();
+  renderAnchors();
+  renderTeams();
+  renderSchedules();
+  renderMap();
+}
+
+// ────── 행사 ──────
+function renderRequests() {
+  const data = loadData();
+  const reqs = (data.requests || []).filter(r => r.status === 'pending');
+  const card = document.getElementById('requestCard');
+  if (!reqs.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('requestCount').textContent = reqs.length;
+
+  document.getElementById('requestList').innerHTML = reqs.map(r => {
+    const event = getEvent(data, r.eventId);
+    const course = getCourse(data, r.courseId);
+    const when = new Date(r.requestedAt).toLocaleString('ko-KR');
+    return `
+      <div class="list-item" style="flex-direction:column;align-items:stretch;border-left:3px solid #e67e22;">
+        <div><b>${r.name}</b> <span class="sub">- ${event?.name || '?'} ${course?.name || '?'}</span></div>
+        <div class="sub" style="margin:4px 0;">
+          📍 ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}<br>
+          ${r.memo ? '📝 ' + r.memo + '<br>' : ''}
+          요청자: ${r.requestedBy || '-'} · ${when}
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="small success" onclick="approveRequest('${r.id}')" style="flex:1;">✅ 승인 (거점 추가)</button>
+          <button class="small gray" onclick="moveRequestCourse('${r.id}')">코스 변경</button>
+          <button class="small danger" onclick="rejectRequest('${r.id}')">❌ 거절</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function approveRequest(id) {
+  const data = loadData();
+  const r = (data.requests || []).find(x => x.id === id);
+  if (!r) return;
+  const course = getCourse(data, r.courseId);
+  if (!course) { alert('코스가 삭제되었습니다. "코스 변경" 후 승인하세요'); return; }
+  if (!confirm(`"${r.name}"을(를) ${course.name}의 정식 거점으로 추가할까요?`)) return;
+  if (!data.anchors) data.anchors = [];
+  const order = data.anchors.filter(a => a.courseId === r.courseId).length + 1;
+  data.anchors.push({
+    id: uid(), name: r.name, lat: r.lat, lng: r.lng, memo: r.memo || '',
+    eventId: r.eventId, courseId: r.courseId, order
+  });
+  r.status = 'approved';
+  data.requests = (data.requests || []).filter(x => x.id !== id);
+  saveData(data); refreshAll();
+}
+
+function rejectRequest(id) {
+  if (!confirm('이 요청을 거절(삭제)할까요?')) return;
+  const data = loadData();
+  data.requests = data.requests.filter(x => x.id !== id);
+  saveData(data); refreshAll();
+}
+
+function moveRequestCourse(id) {
+  const data = loadData();
+  const r = data.requests.find(x => x.id === id);
+  if (!r) return;
+  const all = [];
+  for (const e of data.events) for (const c of e.courses) all.push({eventName: e.name, courseId: c.id, courseName: c.name});
+  const list = all.map((x, i) => `${i+1}. ${x.eventName} - ${x.courseName}`).join('\n');
+  const idx = parseInt(prompt(`이동할 코스 번호:\n${list}`, '1'), 10);
+  if (isNaN(idx) || !all[idx-1]) return;
+  r.eventId = data.events.find(e => e.courses.some(c => c.id === all[idx-1].courseId)).id;
+  r.courseId = all[idx-1].courseId;
+  saveData(data); refreshAll();
+}
+
+// 지도 표시 토글 상태 (UI 전용, 새로고침하면 모두 켜짐)
+const visibleEvents = {};
+const visibleCourses = {};
+function isEventVisible(id) { return visibleEvents[id] !== false; }
+function isCourseVisible(id) { return visibleCourses[id] !== false; }
+function toggleEventVisible(id) {
+  visibleEvents[id] = !isEventVisible(id);
+  renderEvents(); renderCourses(); renderMap();
+}
+function toggleCourseVisible(id) {
+  visibleCourses[id] = !isCourseVisible(id);
+  renderCourses(); renderMap();
+}
+
+function renderEvents() {
+  const data = loadData();
+  const el = document.getElementById('eventList');
+  const events = data.events || [];
+  if (!events.length) { el.innerHTML = '<div class="empty">행사가 없습니다</div>'; return; }
+  el.innerHTML = events.map(e => {
+    const vis = isEventVisible(e.id);
+    const courseCount = (e.courses || []).length;
+    return `
+    <div class="list-item">
+      <button class="small ${vis ? '' : 'gray'}" onclick="toggleEventVisible('${e.id}')" title="지도 표시 켜기/끄기">${vis ? '👁' : '🚫'}</button>
+      <div class="info">
+        <div class="name">${e.name}</div>
+        <div class="sub">코스 ${courseCount}개</div>
+      </div>
+      <button class="small" onclick="renameEvent('${e.id}')">수정</button>
+      <button class="small danger" onclick="deleteEvent('${e.id}')">삭제</button>
+    </div>
+  `;}).join('');
+}
+function addEvent() {
+  const name = prompt('행사 이름 (예: 방역행사, 효도위안잔치)');
+  if (!name) return;
+  const data = loadData();
+  if (!data.events) data.events = [];
+  data.events.push({ id: uid(), name, courses: [] });
+  saveData(data);
+  refreshAll();
+}
+function renameEvent(id) {
+  const data = loadData();
+  const e = (data.events || []).find(x => x.id === id);
+  if (!e) return;
+  const name = prompt('행사 이름', e.name);
+  if (name) { e.name = name; saveData(data); refreshAll(); }
+}
+function deleteEvent(id) {
+  if (!confirm('행사 + 소속 코스/거점이 모두 삭제됩니다')) return;
+  const data = loadData();
+  const event = (data.events || []).find(e => e.id === id);
+  const courseIds = ((event?.courses) || []).map(c => c.id);
+  data.events = (data.events || []).filter(e => e.id !== id);
+  data.anchors = (data.anchors || []).filter(a => !courseIds.includes(a.courseId));
+  data.schedules = (data.schedules || []).filter(s => s.eventId !== id);
+  saveData(data); refreshAll();
+}
+
+function renderEventSelect(id, includeAll) {
+  const data = loadData();
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = (includeAll ? '<option value="all">전체</option>' : '') +
+    (data.events || []).map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  if (cur) sel.value = cur;
+}
+
+// ────── 코스 ──────
+function renderCourses() {
+  const data = loadData();
+  const eventId = document.getElementById('courseEventSel').value;
+  const event = getEvent(data, eventId);
+  const el = document.getElementById('courseList');
+  const courses = event ? (event.courses || []) : [];
+  if (!courses.length) { el.innerHTML = '<div class="empty">코스가 없습니다</div>'; return; }
+  el.innerHTML = courses.map(c => {
+    const vis = isCourseVisible(c.id);
+    return `
+    <div class="list-item">
+      <button class="small ${vis ? '' : 'gray'}" onclick="toggleCourseVisible('${c.id}')" title="지도 표시">${vis ? '👁' : '🚫'}</button>
+      <div class="info">
+        <span class="tag" style="background:${c.color}">${c.name}</span>
+        <span class="sub">${(data.anchors || []).filter(a => a.courseId === c.id).length}개 거점</span>
+      </div>
+      <input type="color" value="${c.color}" style="width:32px;padding:0;border:none;" onchange="setCourseColor('${c.id}', this.value)">
+      <button class="small" onclick="renameCourse('${c.id}')">수정</button>
+      <button class="small danger" onclick="deleteCourse('${c.id}')">삭제</button>
+    </div>
+  `;}).join('');
+}
+function addCourse() {
+  const data = loadData();
+  const eventId = document.getElementById('courseEventSel').value;
+  const event = getEvent(data, eventId);
+  if (!event) { alert('먼저 행사를 선택/추가하세요'); return; }
+  const name = prompt('코스 이름 (예: 1코스)');
+  if (!name) return;
+  if (!event.courses) event.courses = [];
+  const colors = ['#FF6B6B','#4ECDC4','#95E1D3','#FFA45B','#A66CFF','#3498db','#e67e22'];
+  event.courses.push({ id: uid(), name, color: colors[event.courses.length % colors.length] });
+  saveData(data);
+  refreshAll();
+}
+function renameCourse(id) {
+  const data = loadData();
+  const c = getCourse(data, id);
+  const name = prompt('코스 이름', c.name);
+  if (name) { c.name = name; saveData(data); refreshAll(); }
+}
+function setCourseColor(id, color) {
+  const data = loadData();
+  const c = getCourse(data, id);
+  c.color = color; saveData(data); refreshAll();
+}
+function deleteCourse(id) {
+  if (!confirm('코스 + 소속 거점이 모두 삭제됩니다')) return;
+  const data = loadData();
+  for (const e of (data.events || [])) e.courses = (e.courses || []).filter(c => c.id !== id);
+  data.anchors = (data.anchors || []).filter(a => a.courseId !== id);
+  saveData(data); refreshAll();
+}
+
+// ────── 거점 ──────
+function renderAnchorCourseSelect() {
+  const data = loadData();
+  const sel = document.getElementById('anchorCourseSel');
+  const cur = sel.value;
+  let html = '<option value="">코스 선택...</option>';
+  for (const e of (data.events || [])) {
+    html += `<optgroup label="${e.name}">`;
+    for (const c of (e.courses || [])) html += `<option value="${c.id}">${c.name}</option>`;
+    html += '</optgroup>';
+  }
+  sel.innerHTML = html;
+  if (cur) sel.value = cur;
+}
+function renderAnchors() {
+  const data = loadData();
+  const courseId = document.getElementById('anchorCourseSel').value;
+  const el = document.getElementById('anchorList');
+  if (!courseId) { el.innerHTML = '<div class="empty">코스를 선택하세요</div>'; return; }
+  const anchors = getCourseAnchors(data, courseId);
+  if (!anchors.length) { el.innerHTML = '<div class="empty">지도 클릭으로 거점 추가</div>'; return; }
+  el.innerHTML = anchors.map((a, i) => `
+    <div class="list-item">
+      <div class="info">
+        <div class="name">${i+1}. ${a.name}</div>
+        <div class="sub">${a.memo || '메모 없음'}</div>
+      </div>
+      <button class="small gray" onclick="moveAnchor('${a.id}', -1)">↑</button>
+      <button class="small gray" onclick="moveAnchor('${a.id}', 1)">↓</button>
+      <button class="small" onclick="editAnchor('${a.id}')">수정</button>
+      <button class="small danger" onclick="deleteAnchor('${a.id}')">삭제</button>
+    </div>
+  `).join('');
+}
+function moveAnchor(id, dir) {
+  const data = loadData();
+  const anchor = data.anchors.find(a => a.id === id);
+  const list = getCourseAnchors(data, anchor.courseId);
+  const idx = list.indexOf(anchor);
+  const target = list[idx + dir];
+  if (!target) return;
+  [anchor.order, target.order] = [target.order, anchor.order];
+  saveData(data); refreshAll();
+}
+function editAnchor(id) {
+  const data = loadData();
+  const a = data.anchors.find(x => x.id === id);
+  const name = prompt('거점 이름', a.name);
+  if (name === null) return;
+  const memo = prompt('메모', a.memo || '');
+  if (memo === null) return;
+  a.name = name; a.memo = memo;
+  saveData(data); refreshAll();
+}
+function deleteAnchor(id) {
+  if (!confirm('이 거점을 삭제할까요?')) return;
+  const data = loadData();
+  data.anchors = data.anchors.filter(a => a.id !== id);
+  saveData(data); refreshAll();
+}
+
+// ────── 조 ──────
+function renderTeams() {
+  const data = loadData();
+  const el = document.getElementById('teamList');
+  el.innerHTML = data.teams.map(t => `
+    <div class="list-item" style="flex-direction:column;align-items:stretch;">
+      <div class="flex-between">
+        <div><b>${t.name}</b> <span class="sub">(${t.vehicle || '차량 미지정'})</span></div>
+        <div>
+          <button class="small" onclick="editTeam('${t.id}')">수정</button>
+          <button class="small danger" onclick="deleteTeam('${t.id}')">삭제</button>
+        </div>
+      </div>
+      <div class="sub" style="margin-top:4px;">
+        조장: ${t.leader || '-'} / 조원: ${(t.members||[]).join(', ') || '-'}
+      </div>
+    </div>
+  `).join('');
+}
+function addTeam() {
+  const name = prompt('조 이름 (예: 1조)');
+  if (!name) return;
+  const data = loadData();
+  data.teams.push({ id: uid(), name, vehicle: '', leader: '', members: [] });
+  saveData(data); refreshAll();
+}
+function editTeam(id) {
+  const data = loadData();
+  const t = data.teams.find(x => x.id === id);
+  const name = prompt('조 이름', t.name); if (name === null) return;
+  const vehicle = prompt('차량 (예: 라보, 트럭)', t.vehicle); if (vehicle === null) return;
+  const leader = prompt('조장', t.leader); if (leader === null) return;
+  const members = prompt('조원 (쉼표로 구분)', (t.members||[]).join(', '));
+  if (members === null) return;
+  t.name = name; t.vehicle = vehicle; t.leader = leader;
+  t.members = members.split(',').map(s => s.trim()).filter(Boolean);
+  saveData(data); refreshAll();
+}
+function deleteTeam(id) {
+  if (!confirm('이 조를 삭제할까요?')) return;
+  const data = loadData();
+  data.teams = data.teams.filter(t => t.id !== id);
+  data.schedules.forEach(s => { s.rotation = s.rotation.filter(r => r !== id); });
+  saveData(data); refreshAll();
+}
+
+// ────── 스케줄 ──────
+function renderSchedules() {
+  const data = loadData();
+  const el = document.getElementById('scheduleList');
+  const schedules = data.schedules || [];
+  if (!schedules.length) { el.innerHTML = '<div class="empty">스케줄이 없습니다</div>'; return; }
+  const dayNames = ['일','월','화','수','목','금','토'];
+  el.innerHTML = schedules.map((s, i) => {
+    const event = getEvent(data, s.eventId);
+    const teams = s.rotation.map(id => getTeam(data, id)?.name || '?').join('→');
+    const days = s.weekdays.map(d => dayNames[d]).join(',');
+    return `
+      <div class="list-item" style="flex-direction:column;align-items:stretch;">
+        <div class="flex-between">
+          <div><b>${event?.name || '?'}</b> · ${days}요일</div>
+          <div>
+            <button class="small" onclick="editSchedule(${i})">수정</button>
+            <button class="small danger" onclick="deleteSchedule(${i})">삭제</button>
+          </div>
+        </div>
+        <div class="sub" style="margin-top:4px;">
+          시작 ${s.startDate} · 로테이션 ${teams}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+function addSchedule() { editSchedule(-1); }
+function editSchedule(idx) {
+  const data = loadData();
+  const s = idx >= 0 ? data.schedules[idx] : { eventId: data.events[0]?.id, startDate: todayStr(), weekdays: [1,3,5], rotation: data.teams.map(t=>t.id) };
+  if (!s.eventId) { alert('먼저 행사를 추가하세요'); return; }
+
+  const eventId = prompt(
+    '행사 ID 선택:\n' + data.events.map(e => `${e.id} = ${e.name}`).join('\n'),
+    s.eventId
+  );
+  if (!eventId) return;
+  const startDate = prompt('시작일 (YYYY-MM-DD, 첫 운영일)', s.startDate);
+  if (!startDate) return;
+  const days = prompt('운영 요일 (0=일,1=월,...,6=토. 쉼표 구분)', s.weekdays.join(','));
+  if (!days) return;
+  const rotation = prompt(
+    '로테이션 조 ID 순서 (쉼표 구분):\n' + data.teams.map(t => `${t.id} = ${t.name}`).join('\n'),
+    s.rotation.join(',')
+  );
+  if (!rotation) return;
+
+  const newSched = {
+    eventId,
+    startDate,
+    weekdays: days.split(',').map(Number),
+    rotation: rotation.split(',').map(s => s.trim())
+  };
+  if (idx >= 0) data.schedules[idx] = newSched;
+  else data.schedules.push(newSched);
+  saveData(data); refreshAll();
+}
+function deleteSchedule(idx) {
+  if (!confirm('이 스케줄을 삭제할까요?')) return;
+  const data = loadData();
+  data.schedules.splice(idx, 1);
+  saveData(data); refreshAll();
+}
+
+// ────── 지도 렌더링 ──────
+function renderMap() {
+  if (!map) return;
+  kakaoMarkers.forEach(m => m.setMap(null));
+  kakaoLines.forEach(l => l.setMap(null));
+  kakaoMarkers = []; kakaoLines = [];
+
+  const data = loadData();
+  const view = document.getElementById('viewSelect').value;
+  const courses = [];
+  for (const e of data.events) {
+    if (view !== 'all' && view !== e.id) continue;
+    if (!isEventVisible(e.id)) continue;
+    for (const c of e.courses) {
+      if (!isCourseVisible(c.id)) continue;
+      courses.push({ event: e, course: c });
+    }
+  }
+
+  let bounds = new kakao.maps.LatLngBounds();
+  let hasPoints = false;
+
+  for (const { course } of courses) {
+    const anchors = getCourseAnchors(data, course.id);
+    const path = [];
+    anchors.forEach((a, i) => {
+      const pos = new kakao.maps.LatLng(a.lat, a.lng);
+      bounds.extend(pos); hasPoints = true;
+      const marker = new kakao.maps.Marker({
+        position: pos, map, draggable: true,
+        title: `${course.name} ${i+1}. ${a.name}`,
+        image: numberedMarkerImage(i+1, course.color),
+        zIndex: 10
+      });
+      kakao.maps.event.addListener(marker, 'dragend', () => {
+        const p = marker.getPosition();
+        const d = loadData();
+        const target = d.anchors.find(x => x.id === a.id);
+        target.lat = p.getLat(); target.lng = p.getLng();
+        saveData(d);
+        renderMap();
+      });
+      const iw = new kakao.maps.InfoWindow({
+        content: `<div style="padding:4px 8px;font-size:12px;"><b>${course.name} ${i+1}</b><br>${a.name}</div>`
+      });
+      kakao.maps.event.addListener(marker, 'click', () => iw.open(map, marker));
+      kakaoMarkers.push(marker);
+      path.push(pos);
+    });
+    if (path.length >= 2) {
+      const line = new kakao.maps.Polyline({
+        path, strokeWeight: 4, strokeColor: course.color,
+        strokeOpacity: 0.7, strokeStyle: 'solid', map
+      });
+      kakaoLines.push(line);
+      // 화살표 (각 구간 중간)
+      for (let i = 0; i < path.length - 1; i++) {
+        kakaoMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
+      }
+    }
+  }
+  if (hasPoints) map.setBounds(bounds);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>계정관리</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>🔐 계정관리</h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="admin.html">관리</a>
+    <a href="members.html">인원</a>
+    <a href="today.html">오늘운영</a>
+    <a href="monitor.html">모니터링</a>
+    <a href="stats.html">통계</a>
+    <a href="accounts.html" class="active">계정</a>
+    <a href="#" onclick="adminLogout();return false;">로그아웃</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="card">
+    <h2>현재 로그인</h2>
+    <div id="meBox" class="muted">불러오는 중...</div>
+  </div>
+
+  <div class="card">
+    <div class="flex-between"><h2>관리자 계정 <span id="acctCount" class="muted"></span></h2>
+      <button onclick="openAddAccount()">+ 계정 추가</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin-bottom:8px;">
+      관리자/인원/모니터링/통계 페이지에 접근 가능. 각자 본인 이메일·비번으로 로그인합니다.
+    </p>
+    <div id="acctList"></div>
+  </div>
+
+  <!-- 추가 폼 -->
+  <div id="addCard" class="card" style="display:none;border:2px solid #3498db;">
+    <h2>+ 새 계정 추가</h2>
+    <label>이메일</label>
+    <input id="newEmail" type="email" placeholder="manager@bsp.com">
+    <label>비밀번호 (6자 이상)</label>
+    <input id="newPw" type="text" placeholder="bsp1234">
+    <label>이름 (표시용)</label>
+    <input id="newName" type="text" placeholder="홍길동">
+    <label>권한</label>
+    <select id="newRole">
+      <option value="admin">admin (일반 관리자)</option>
+      <option value="super">super (모든 권한 + 계정관리)</option>
+    </select>
+    <div style="display:flex;gap:6px;margin-top:10px;">
+      <button class="success" style="flex:1;" onclick="createAccount()">생성</button>
+      <button class="gray" onclick="closeAddAccount()">취소</button>
+    </div>
+    <p class="muted" style="font-size:11px;margin-top:6px;">
+      ⚠️ 생성하면 그 사람이 이 이메일/비번으로 로그인 가능. 비번을 본인에게 안전하게 전달하세요.
+    </p>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="common.js"></script>
+<script>
+// 계정 생성용 보조 Firebase 앱 (현재 로그인 유지하기 위함)
+let secondaryApp = null;
+function getSecondaryAuth() {
+  if (!secondaryApp) {
+    secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary');
+  }
+  return secondaryApp.auth();
+}
+
+window.onAuthSuccess = () => onDataReady(refreshAll);
+window.onDataChanged = () => refreshAll();
+checkAdminAuth().then(ok => { if (ok) onDataReady(refreshAll); });
+
+function refreshAll() {
+  renderMe();
+  renderAccounts();
+}
+
+function renderMe() {
+  const u = fbAuth.currentUser;
+  const data = loadData();
+  const meBox = document.getElementById('meBox');
+  if (!u) { meBox.textContent = '로그인 안됨'; return; }
+  const userInfo = (data.users || {})[u.uid] || {};
+  meBox.innerHTML = `
+    <b>${userInfo.name || '(이름 없음)'}</b>
+    <span class="sub">${u.email}</span> ·
+    권한: <b>${userInfo.role || 'admin'}</b>
+  `;
+}
+
+function renderAccounts() {
+  const data = loadData();
+  const users = data.users || {};
+  const entries = Object.entries(users);
+  document.getElementById('acctCount').textContent = `(${entries.length}명)`;
+
+  if (!entries.length) {
+    document.getElementById('acctList').innerHTML = `
+      <div class="empty">
+        등록된 계정 정보가 없습니다.<br>
+        <span class="sub">현재 로그인한 본인 정보를 super로 등록하려면 아래 클릭</span><br>
+        <button onclick="registerSelfAsSuper()" class="success" style="margin-top:8px;">현재 계정을 super로 등록</button>
+      </div>
+    `;
+    return;
+  }
+
+  const me = fbAuth.currentUser;
+  const myRole = users[me?.uid]?.role || 'admin';
+  document.getElementById('acctList').innerHTML = entries.map(([uid, u]) => {
+    const isMe = uid === me?.uid;
+    return `
+      <div class="list-item">
+        <div class="info">
+          <div class="name">${u.name || '(이름 없음)'} ${isMe ? '<span class="tag" style="background:#27ae60">나</span>' : ''}</div>
+          <div class="sub">${u.email || ''} · ${u.role || 'admin'} ${u.disabled ? '· 🚫 비활성' : ''}</div>
+        </div>
+        ${myRole === 'super' && !isMe ? `
+          <button class="small" onclick="changeRole('${uid}', '${u.role||'admin'}')">권한</button>
+          <button class="small ${u.disabled?'success':'danger'}" onclick="toggleDisabled('${uid}')">${u.disabled?'활성화':'비활성'}</button>
+          <button class="small danger" onclick="removeAccount('${uid}')">제거</button>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function registerSelfAsSuper() {
+  const u = fbAuth.currentUser;
+  if (!u) return;
+  const name = prompt('본인 이름 입력', u.email.split('@')[0]);
+  if (!name) return;
+  const data = loadData();
+  if (!data.users) data.users = {};
+  data.users[u.uid] = {
+    email: u.email, name, role: 'super',
+    createdAt: Date.now(), createdBy: 'self'
+  };
+  saveData(data);
+}
+
+function openAddAccount() {
+  const me = fbAuth.currentUser;
+  const myRole = (loadData().users || {})[me?.uid]?.role;
+  if (myRole !== 'super') {
+    alert('계정 추가는 super 권한만 가능합니다.\n계정 목록 위 "현재 계정을 super로 등록" 버튼으로 본인을 super로 만들 수 있어요.');
+  }
+  document.getElementById('addCard').style.display = 'block';
+  document.getElementById('addCard').scrollIntoView({behavior:'smooth'});
+}
+
+function closeAddAccount() {
+  document.getElementById('addCard').style.display = 'none';
+  document.getElementById('newEmail').value = '';
+  document.getElementById('newPw').value = '';
+  document.getElementById('newName').value = '';
+}
+
+async function createAccount() {
+  const email = document.getElementById('newEmail').value.trim();
+  const pw = document.getElementById('newPw').value;
+  const name = document.getElementById('newName').value.trim();
+  const role = document.getElementById('newRole').value;
+  if (!email || !pw || !name) { alert('모두 입력하세요'); return; }
+  if (pw.length < 6) { alert('비밀번호는 6자 이상'); return; }
+
+  try {
+    // 보조 앱으로 가입 (현재 로그인 유지)
+    const secAuth = getSecondaryAuth();
+    const cred = await secAuth.createUserWithEmailAndPassword(email, pw);
+    const newUid = cred.user.uid;
+    await secAuth.signOut(); // 보조 앱 로그아웃
+
+    const data = loadData();
+    if (!data.users) data.users = {};
+    data.users[newUid] = {
+      email, name, role,
+      createdAt: Date.now(),
+      createdBy: fbAuth.currentUser?.email
+    };
+    saveData(data);
+    closeAddAccount();
+    alert(`✅ 계정 생성 완료\n\n${name}님께 이메일/비번 전달하세요.`);
+  } catch (e) {
+    alert('생성 실패: ' + e.message);
+  }
+}
+
+function changeRole(uid, currentRole) {
+  const newRole = prompt(`권한 변경 (현재: ${currentRole})\n\nadmin 또는 super 입력`, currentRole);
+  if (!newRole || !['admin','super'].includes(newRole)) return;
+  const data = loadData();
+  if (data.users[uid]) {
+    data.users[uid].role = newRole;
+    saveData(data);
+  }
+}
+
+function toggleDisabled(uid) {
+  const data = loadData();
+  if (!data.users[uid]) return;
+  const willDisable = !data.users[uid].disabled;
+  if (willDisable && !confirm('이 계정을 비활성화하시겠습니까?\n(로그인 가능하지만 데이터 접근 차단)')) return;
+  data.users[uid].disabled = willDisable;
+  saveData(data);
+}
+
+function removeAccount(uid) {
+  if (!confirm('계정 정보를 제거할까요?\n\n⚠️ Firebase Auth의 사용자 자체는 콘솔에서 직접 삭제해야 합니다.\n여기서는 시스템 권한 정보만 제거됩니다.')) return;
+  const data = loadData();
+  if (data.users[uid]) {
+    delete data.users[uid];
+    saveData(data);
+  }
+}
+</script>
+</body>
+</html>

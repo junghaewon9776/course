@@ -1,0 +1,36 @@
+[build]
+  publish = "."
+
+# 자산 최적화 비활성화 (post-processing 단축)
+[build.processing]
+  skip_processing = true
+
+[[redirects]]
+  from = "/admin"
+  to = "/admin.html"
+  status = 200
+
+[[redirects]]
+  from = "/today"
+  to = "/today.html"
+  status = 200
+
+[[redirects]]
+  from = "/monitor"
+  to = "/monitor.html"
+  status = 200
+
+[[redirects]]
+  from = "/members"
+  to = "/members.html"
+  status = 200
+
+[[redirects]]
+  from = "/stats"
+  to = "/stats.html"
+  status = 200
+
+[[redirects]]
+  from = "/accounts"
+  to = "/accounts.html"
+  status = 200

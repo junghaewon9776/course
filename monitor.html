@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>본부 모니터링</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>📊 본부 모니터링</h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="admin.html">관리</a>
+    <a href="members.html">인원</a>
+    <a href="today.html">오늘운영</a>
+    <a href="monitor.html" class="active">모니터링</a>
+    <a href="stats.html">통계</a>
+    <a href="accounts.html">계정</a>
+    <a href="#" onclick="adminLogout();return false;">로그아웃</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="card">
+    <div class="flex-between">
+      <h2>운행 기록</h2>
+      <div>
+        <label style="display:inline;font-size:12px;">기간:</label>
+        <select id="periodSel" style="width:auto;display:inline-block;" onchange="render()">
+          <option value="today">오늘</option>
+          <option value="week">최근 7일</option>
+          <option value="month" selected>최근 30일</option>
+          <option value="all">전체</option>
+        </select>
+        <button class="small danger" onclick="clearLogs()">로그 삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col" style="flex:2;min-width:400px;">
+      <div class="card">
+        <h2>지도 (선택한 운행 궤적)</h2>
+        <div id="map" class="map"></div>
+        <div id="logInfo" class="muted" style="margin-top:8px;"></div>
+      </div>
+    </div>
+    <div class="col" style="flex:1;min-width:300px;">
+      <div class="card">
+        <h2>요약</h2>
+        <div id="summary"></div>
+      </div>
+      <div class="card">
+        <h2>운행 목록</h2>
+        <div id="logList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="common.js"></script>
+<script>
+let map, logMarkers = [], logTrack, selectedLogIdx = null;
+
+window.onAuthSuccess = () => onDataReady(loadKakaoMap);
+window.onDataChanged = () => { if (map) render(); };
+checkAdminAuth().then(ok => { if (ok) onDataReady(loadKakaoMap); });
+
+function loadKakaoMap() {
+  if (window.__kakaoLoaded) { render(); return; }
+  window.__kakaoLoaded = true;
+  const script = document.createElement('script');
+  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
+  script.onload = () => kakao.maps.load(() => {
+    const data = loadData();
+    map = new kakao.maps.Map(document.getElementById('map'), {
+      center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
+      level: data.mapDefault.level || 5
+    });
+    render();
+  });
+  document.head.appendChild(script);
+}
+
+function getFilteredLogs() {
+  const data = loadData();
+  const period = document.getElementById('periodSel').value;
+  const now = new Date();
+  let cutoff = 0;
+  if (period === 'today') {
+    const d = new Date(); d.setHours(0,0,0,0);
+    cutoff = d.getTime();
+  } else if (period === 'week') cutoff = now.getTime() - 7*24*60*60*1000;
+  else if (period === 'month') cutoff = now.getTime() - 30*24*60*60*1000;
+
+  return data.logs
+    .filter(l => (l.startedAt || 0) >= cutoff)
+    .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+}
+
+function render() {
+  const data = loadData();
+  const logs = getFilteredLogs();
+
+  // 요약
+  const totalCourses = logs.length;
+  const totalAnchors = logs.reduce((s, l) => s + (l.completions?.length || 0), 0);
+  const totalDist = logs.reduce((s, l) => s + trackDistance(l.track || []), 0);
+  const totalTime = logs.reduce((s, l) => {
+    if (l.startedAt && l.finishedAt) return s + (l.finishedAt - l.startedAt);
+    return s;
+  }, 0);
+  document.getElementById('summary').innerHTML = `
+    <div class="list-item"><b>총 운행</b><span>${totalCourses}회</span></div>
+    <div class="list-item"><b>방역 거점</b><span>${totalAnchors}개</span></div>
+    <div class="list-item"><b>총 거리</b><span>${(totalDist/1000).toFixed(1)} km</span></div>
+    <div class="list-item"><b>총 시간</b><span>${formatDuration(totalTime)}</span></div>
+  `;
+
+  // 목록
+  const el = document.getElementById('logList');
+  if (!logs.length) {
+    el.innerHTML = '<div class="empty">운행 기록 없음</div>';
+    return;
+  }
+  el.innerHTML = logs.map((l, i) => {
+    const event = getEvent(data, l.eventId);
+    const course = getCourse(data, l.courseId);
+    const team = getTeam(data, l.teamId);
+    const totalA = data.anchors.filter(a => a.courseId === l.courseId).length;
+    const dur = l.finishedAt ? formatDuration(l.finishedAt - l.startedAt) : '진행중';
+    const dist = (trackDistance(l.track || []) / 1000).toFixed(1);
+    return `
+      <div class="anchor-row" style="cursor:pointer;${selectedLogIdx===i?'background:#fff9e6;':''}" onclick="selectLog(${i})">
+        <div class="num" style="background:${course?.color || '#999'}">${team?.name?.[0] || '?'}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="name">${event?.name || '?'} · ${course?.name || '?'}</div>
+          <div class="sub">${l.date} · ${team?.name || '?'} · ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if (selectedLogIdx !== null && logs[selectedLogIdx]) drawLog(logs[selectedLogIdx]);
+}
+
+function selectLog(idx) {
+  selectedLogIdx = idx;
+  render();
+  const log = getFilteredLogs()[idx];
+  if (log) drawLog(log);
+}
+
+function drawLog(log) {
+  if (!map) return;
+  logMarkers.forEach(m => m.setMap(null)); logMarkers = [];
+  if (logTrack) logTrack.setMap(null);
+
+  const data = loadData();
+  const anchors = getCourseAnchors(data, log.courseId);
+  const done = new Set(log.completions || []);
+  const bounds = new kakao.maps.LatLngBounds();
+
+  anchors.forEach((a, i) => {
+    const pos = new kakao.maps.LatLng(a.lat, a.lng);
+    bounds.extend(pos);
+    const marker = new kakao.maps.Marker({
+      position: pos, map, title: `${i+1}. ${a.name}`
+    });
+    if (!done.has(a.id)) marker.setOpacity(0.4);
+    logMarkers.push(marker);
+  });
+
+  if (log.track && log.track.length >= 2) {
+    const path = log.track.map(t => {
+      const p = new kakao.maps.LatLng(t[0], t[1]);
+      bounds.extend(p);
+      return p;
+    });
+    logTrack = new kakao.maps.Polyline({
+      path, strokeWeight: 3, strokeColor: '#3498db',
+      strokeOpacity: 0.8, map
+    });
+  }
+  if (anchors.length || (log.track || []).length) map.setBounds(bounds);
+
+  const event = getEvent(data, log.eventId);
+  const course = getCourse(data, log.courseId);
+  const team = getTeam(data, log.teamId);
+  document.getElementById('logInfo').innerHTML = `
+    <b>${event?.name} · ${course?.name}</b> · ${team?.name} (${team?.vehicle || ''})<br>
+    조원: ${(team?.members||[]).join(', ') || '-'} ·
+    완료 ${(log.completions||[]).length}/${anchors.length} ·
+    이동 ${(trackDistance(log.track || []) / 1000).toFixed(2)}km ·
+    소요 ${log.finishedAt ? formatDuration(log.finishedAt - log.startedAt) : '진행중'}
+  `;
+}
+
+function trackDistance(track) {
+  let d = 0;
+  for (let i = 1; i < track.length; i++) {
+    d += distance(track[i-1][0], track[i-1][1], track[i][0], track[i][1]);
+  }
+  return d;
+}
+function formatDuration(ms) {
+  if (!ms) return '-';
+  const m = Math.floor(ms / 60000);
+  const h = Math.floor(m / 60);
+  return h ? `${h}시간 ${m%60}분` : `${m}분`;
+}
+function clearLogs() {
+  if (!confirm('모든 운행 기록을 삭제할까요?')) return;
+  const data = loadData();
+  data.logs = [];
+  saveData(data);
+  selectedLogIdx = null;
+  render();
+}
+</script>
+</body>
+</html>
