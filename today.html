@@ -261,18 +261,30 @@ function renderAssignments() {
   el.innerHTML = `
     <h3 style="margin:0 0 8px;color:#555;">코스를 선택하세요</h3>
   ` + items.map(({event, course, anchorCount}) => `
-      <div class="anchor-row">
+      <div class="anchor-row" onclick="startCourse('${event.id}','${course.id}')" style="cursor:pointer;">
         <div class="num" style="background:${course.color}">${course.name[0]}</div>
         <div style="flex:1;">
-          <div><b>${event.name}</b> · <span style="color:${course.color}">${course.name}</span></div>
+          <div><b>${event.name}</b> · <span style="color:${course.color}">${course.name}</span> ${event.requireAttendance ? '<span class="tag" style="background:#e74c3c;font-size:10px;">출석필요</span>' : ''}</div>
           <div class="sub">거점 ${anchorCount}개</div>
         </div>
-        <button class="success" onclick="openStartForm('${event.id}','${course.id}')">코스보기</button>
+        <button class="success">코스보기 ▶</button>
       </div>
     `).join('');
 }
 
 let assistList = [];
+
+function startCourse(eventId, courseId) {
+  const data = loadData();
+  const event = getEvent(data, eventId);
+  if (event?.requireAttendance) {
+    // 출석 필요한 행사 → 폼 띄움
+    openStartForm(eventId, courseId);
+  } else {
+    // 출석 불필요 → 바로 코스 보기
+    startSession(eventId, courseId, '', { driver: '', assist: '' });
+  }
+}
 
 function openStartForm(eventId, courseId) {
   const data = loadData();
@@ -284,10 +296,12 @@ function openStartForm(eventId, courseId) {
 
   const teamOpts = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
 
-  document.getElementById('startFormCard').style.display = 'block';
-  document.getElementById('startFormCard').innerHTML = `
-    <div class="card">
-      <h2>${event.name} · ${course.name}</h2>
+  const card = document.getElementById('startFormCard');
+  card.style.display = 'block';
+  card.innerHTML = `
+    <div class="card" style="border:2px solid #3498db;">
+      <h2>📝 ${event.name} · ${course.name}</h2>
+      <p class="muted" style="margin-bottom:8px;">아래에서 조와 출석 인원 선택</p>
 
       <label>조 (선택 시 자동 채움 - 안 골라도 됨)</label>
       <select id="fTeam" onchange="autoFillFromTeam()">
@@ -325,6 +339,8 @@ function openStartForm(eventId, courseId) {
     </div>
   `;
   renderAssistChips();
+  // 폼 영역으로 자동 스크롤
+  setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 }
 
 function showSuggestions(inputId, listId) {
@@ -363,12 +379,60 @@ function autoFillFromTeam() {
   const data = loadData();
   const team = getTeam(data, teamId);
   if (!team) return;
+
+  // 조 멤버 체크리스트 표시
+  showTeamCheckList(team);
+
   const leader = getMember(data, team.leaderId);
+  document.getElementById('fDriver').value = leader?.name || '';
+  // 보조자 칩 자동 채움 (체크리스트로 나중에 변경됨)
   const vice = getMember(data, team.viceLeaderId);
   const members = (team.memberIds || []).map(id => getMember(data, id)).filter(Boolean);
-
-  document.getElementById('fDriver').value = leader?.name || '';
   assistList = [vice?.name, ...members.map(m => m.name)].filter(Boolean);
+  renderAssistChips();
+}
+
+function showTeamCheckList(team) {
+  const data = loadData();
+  const allTeamMembers = [];
+  if (team.leaderId) allTeamMembers.push({ ...getMember(data, team.leaderId), role: '조장' });
+  if (team.viceLeaderId) allTeamMembers.push({ ...getMember(data, team.viceLeaderId), role: '부조장' });
+  for (const id of (team.memberIds || [])) {
+    const m = getMember(data, id);
+    if (m) allTeamMembers.push({ ...m, role: '조원' });
+  }
+
+  const html = `
+    <div style="margin-top:10px;padding:8px;background:#f8f9fa;border:1px solid #ddd;border-radius:5px;">
+      <label style="margin:0 0 6px;display:block;font-weight:600;">출석 체크 (체크 해제 = 결석)</label>
+      <div style="max-height:200px;overflow-y:auto;">
+        ${allTeamMembers.filter(m => m.id).map(m => `
+          <label style="display:flex;align-items:center;padding:4px;cursor:pointer;border-bottom:1px solid #eee;">
+            <input type="checkbox" class="attCheck" data-name="${m.name}" checked
+                   onchange="updateAttendance()" style="width:18px;height:18px;margin-right:8px;">
+            <span style="flex:1;">${m.name} <span class="sub" style="color:#888;font-size:11px;">${m.role} · ${m.phone || ''}</span></span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  // fTeam select 다음에 삽입
+  let cont = document.getElementById('teamCheckListContainer');
+  if (!cont) {
+    cont = document.createElement('div');
+    cont.id = 'teamCheckListContainer';
+    document.getElementById('fTeam').parentNode.insertBefore(cont, document.getElementById('fTeam').nextSibling);
+  }
+  cont.innerHTML = html;
+}
+
+function updateAttendance() {
+  // 체크된 멤버 → 운전자(첫번째)/보조자(나머지) 자동 갱신
+  const checks = document.querySelectorAll('.attCheck:checked');
+  const names = [...checks].map(c => c.dataset.name);
+  if (names.length === 0) return;
+  document.getElementById('fDriver').value = names[0];
+  assistList = names.slice(1);
   renderAssistChips();
 }
 

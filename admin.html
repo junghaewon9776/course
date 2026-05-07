@@ -590,17 +590,28 @@ function renderEvents() {
   el.innerHTML = events.map(e => {
     const vis = isEventVisible(e.id);
     const courseCount = (e.courses || []).length;
+    const reqAtt = !!e.requireAttendance;
     return `
     <div class="list-item">
       <button class="small ${vis ? '' : 'gray'}" onclick="toggleEventVisible('${e.id}')" title="지도 표시 켜기/끄기">${vis ? '👁' : '🚫'}</button>
       <div class="info">
-        <div class="name">${e.name}</div>
+        <div class="name">${e.name} ${reqAtt ? '<span class="tag" style="background:#e74c3c;font-size:10px;">출석필요</span>' : ''}</div>
         <div class="sub">코스 ${courseCount}개</div>
       </div>
+      <button class="small ${reqAtt ? 'success' : 'gray'}" onclick="toggleRequireAttendance('${e.id}')" title="출석체크 필요 여부">👥</button>
       <button class="small" onclick="renameEvent('${e.id}')">수정</button>
       <button class="small danger" onclick="deleteEvent('${e.id}')">삭제</button>
     </div>
   `;}).join('');
+}
+
+function toggleRequireAttendance(id) {
+  const data = loadData();
+  const e = (data.events || []).find(x => x.id === id);
+  if (!e) return;
+  e.requireAttendance = !e.requireAttendance;
+  saveData(data);
+  refreshAll();
 }
 function addEvent() {
   const name = prompt('행사 이름 (예: 방역행사, 효도위안잔치)');
