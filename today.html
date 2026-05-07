@@ -258,7 +258,9 @@ function initMap() {
   const data = loadData();
   map = new kakao.maps.Map(document.getElementById('map'), {
     center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
-    level: data.mapDefault.level || 4
+    level: data.mapDefault.level || 4,
+    minLevel: 3, // 너무 가까이 못 가게
+    maxLevel: 9
   });
   // 사용자가 지도 만지면 → 마지막 만진 시점에서 5초 후 따라가기 재개
   kakao.maps.event.addListener(map, 'dragstart', () => { isUserInteracting = true; });
@@ -709,7 +711,13 @@ function renderMapForSession() {
       anchorMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
     }
   }
-  if (anchors.length) map.setBounds(bounds);
+  // 내 위치가 있으면 거기 중심, 없으면 거점 bounds에 맞춤
+  if (currentPos) {
+    map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+    map.setLevel(4);
+  } else if (anchors.length) {
+    map.setBounds(bounds);
+  }
 
   // 요청 마커 (주황 별)
   const reqs = (data.requests || []).filter(r => r.courseId === currentSession.courseId && r.status === 'pending');
@@ -1015,6 +1023,13 @@ function finishCourse() {
   releaseWakeLock();
   clearLastActiveSession();
   currentSession = null;
+  // 마커/라인 정리 (메모리 누수 방지)
+  anchorMarkers.forEach(m => m.setMap(null));
+  anchorMarkers = [];
+  if (courseLine) { courseLine.setMap(null); courseLine = null; }
+  if (trackLine) { trackLine.setMap(null); trackLine = null; }
+  if (myMarker) { myMarker.setMap(null); myMarker = null; }
+  assistList = [];
   document.getElementById('opPanel').style.display = 'none';
   document.getElementById('assignmentCard').style.display = 'block';
   renderAssignments();
