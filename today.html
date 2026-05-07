@@ -82,17 +82,37 @@ let followMode = true;
 const dateLabel = document.getElementById('dateLabel');
 dateLabel.textContent = todayStr() + ' (' + ['일','월','화','수','목','금','토'][new Date().getDay()] + ')';
 
-// Firebase 동기화 (auth 안 거치고 바로 시작 - 규칙 공개)
+// Firebase 동기화
 window.onDataChanged = () => { if (!currentSession) renderAssignments(); updateMeIndicator(); };
-initFirebaseSync();
-onDataReady(() => {
-  renderAssignments();
-  loadKakaoMap();
+
+let _initStarted = false;
+function startInit() {
+  if (_initStarted) return;
+  _initStarted = true;
+  initFirebaseSync();
+  onDataReady(() => {
+    renderAssignments();
+    loadKakaoMap();
+    updateMeIndicator();
+    setTimeout(checkResumableSession, 500);
+  });
+}
+
+// auth 상태 확인 - 있으면 그대로, 없으면 익명 로그인
+fbAuth.onAuthStateChanged(user => {
   updateMeIndicator();
-  // 미완료 운영 있으면 이어가기 제안
-  setTimeout(checkResumableSession, 500);
+  if (user) {
+    startInit();
+  } else {
+    // 게스트는 익명 로그인 (Firebase 읽기를 위해)
+    fbAuth.signInAnonymously()
+      .then(() => startInit())
+      .catch(e => {
+        console.warn('익명 로그인 실패, 그냥 진행:', e);
+        startInit(); // 그래도 시도
+      });
+  }
 });
-fbAuth.onAuthStateChanged(() => updateMeIndicator());
 
 function updateMeIndicator() {
   const u = fbAuth.currentUser;
