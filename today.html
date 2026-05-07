@@ -59,7 +59,7 @@
       <h2>거점 진행</h2>
       <div id="anchorRows"></div>
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스 완료 보고</button>
+        <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스완료</button>
         <button onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
         <button class="gray" onclick="resetCourse()">진행 초기화</button>
       </div>
@@ -241,8 +241,13 @@ function renderAssignments() {
   const el = document.getElementById('assignmentList');
   const items = [];
 
+  const vis = data.visibility || {};
+  const evVis = vis.events || {};
+  const csVis = vis.courses || {};
   for (const event of (data.events || [])) {
+    if (evVis[event.id] === false) continue; // 숨김
     for (const course of (event.courses || [])) {
+      if (csVis[course.id] === false) continue; // 숨김
       const anchorCount = (data.anchors || []).filter(a => a.courseId === course.id).length;
       items.push({ event, course, anchorCount });
     }
@@ -262,7 +267,7 @@ function renderAssignments() {
           <div><b>${event.name}</b> · <span style="color:${course.color}">${course.name}</span></div>
           <div class="sub">거점 ${anchorCount}개</div>
         </div>
-        <button class="success" onclick="openStartForm('${event.id}','${course.id}')">방역하기</button>
+        <button class="success" onclick="openStartForm('${event.id}','${course.id}')">코스보기</button>
       </div>
     `).join('');
 }
