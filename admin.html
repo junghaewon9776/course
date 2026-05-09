@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510f">
+  <link rel="stylesheet" href="style.css?v=20260510h">
 </head>
 <body>
 <header>
@@ -226,8 +226,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510f"></script>
-<script src="common.js?v=20260510f"></script>
+<script src="firebase-config.js?v=20260510h"></script>
+<script src="common.js?v=20260510h"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -353,6 +353,12 @@ function deleteNoSprayZone(id) {
 }
 
 function handleMapClick(lat, lng) {
+  // 열린 InfoWindow가 있으면 닫기만 하고 끝 (지도 클릭 = 거점 추가로 안 가게)
+  if (window.__openIw && window.__openIw.getMap && window.__openIw.getMap()) {
+    window.__openIw.close();
+    window.__openIw = null;
+    return;
+  }
   if (pendingClickMode === 'complaint') {
     addComplaintAt(lat, lng);
     setMode('anchor');
@@ -1544,14 +1550,18 @@ function renderMap() {
         renderMap();
       });
       const iw = new kakao.maps.InfoWindow({
-        content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
-          <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${course.name} ${i+1}번</div>
-          <div style="margin-bottom:6px;">${(a.name||'').replace(/</g,'&lt;')}</div>
-          ${a.memo ? `<div class="sub" style="margin-bottom:6px;">${a.memo.replace(/</g,'&lt;')}</div>` : ''}
-          <div style="display:flex;gap:4px;">
-            <a href="#" onclick="editAnchor('${a.id}');return false;" style="flex:1;background:#3498db;color:#fff;padding:6px 8px;border-radius:4px;text-align:center;font-size:11px;text-decoration:none;font-weight:600;">✎ 수정</a>
-            <a href="#" onclick="moveAnchorTo('${a.id}', ${(getCourseAnchors(loadData(), course.id)).length});return false;" style="flex:1;background:#9b59b6;color:#fff;padding:6px 8px;border-radius:4px;text-align:center;font-size:11px;text-decoration:none;font-weight:600;">№ 순번</a>
-            <a href="#" onclick="if(confirm('이 거점 삭제?'))deleteAnchor('${a.id}');return false;" style="background:#e74c3c;color:#fff;padding:6px 8px;border-radius:4px;text-align:center;font-size:11px;text-decoration:none;font-weight:600;">🗑</a>
+        zIndex: 999,
+        removable: true,
+        content: `<div style="padding:12px 14px;font-size:13px;min-width:220px;max-width:260px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #eee;">
+            <span style="background:${course.color};color:#fff;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;">${course.name} ${i+1}</span>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:4px;">${(a.name||'').replace(/</g,'&lt;')}</div>
+          ${a.memo ? `<div style="color:#7f8c8d;font-size:12px;margin-bottom:10px;line-height:1.4;">${a.memo.replace(/</g,'&lt;')}</div>` : '<div style="margin-bottom:10px;"></div>'}
+          <div style="display:flex;gap:6px;">
+            <button onclick="editAnchor('${a.id}')" style="flex:1;background:#3498db;color:#fff;padding:9px 6px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✎ 수정</button>
+            <button onclick="moveAnchorTo('${a.id}', ${(getCourseAnchors(loadData(), course.id)).length})" style="flex:1;background:#9b59b6;color:#fff;padding:9px 6px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">№ 순번</button>
+            <button onclick="if(confirm('이 거점 삭제?'))deleteAnchor('${a.id}')" style="background:#e74c3c;color:#fff;padding:9px 11px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">🗑</button>
           </div>
         </div>`
       });
