@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510k">
+  <link rel="stylesheet" href="style.css?v=20260510m">
 </head>
 <body>
 <header>
@@ -226,8 +226,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510k"></script>
-<script src="common.js?v=20260510k"></script>
+<script src="firebase-config.js?v=20260510m"></script>
+<script src="common.js?v=20260510m"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -1625,7 +1625,7 @@ function renderMap() {
     </svg>`;
     bounds.extend(pos); hasPoints = true;
     const m = new kakao.maps.Marker({
-      position: pos, map,
+      position: pos, map, draggable: true,
       image: new kakao.maps.MarkerImage(
         'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
         new kakao.maps.Size(28, 28),
@@ -1633,6 +1633,25 @@ function renderMap() {
       ),
       title: '[방역불가] ' + (z.name || ''),
       zIndex: 7
+    });
+    // 드래그 중 반경 원이 마커 따라가게
+    kakao.maps.event.addListener(m, 'drag', () => {
+      circle.setPosition(m.getPosition());
+    });
+    kakao.maps.event.addListener(m, 'dragend', () => {
+      const p = m.getPosition();
+      if (!confirm(`"${z.name || '방역불가'}" 위치를 이동할까요?`)) {
+        m.setPosition(new kakao.maps.LatLng(z.lat, z.lng));
+        circle.setPosition(new kakao.maps.LatLng(z.lat, z.lng));
+        return;
+      }
+      const d = loadData();
+      const target = (d.noSprayZones || []).find(x => x.id === z.id);
+      if (target) {
+        target.lat = p.getLat(); target.lng = p.getLng();
+        saveData(d);
+      }
+      refreshAll();
     });
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
@@ -1659,7 +1678,7 @@ function renderMap() {
     const pos = new kakao.maps.LatLng(c.lat, c.lng);
     bounds.extend(pos); hasPoints = true;
     const m = new kakao.maps.Marker({
-      position: pos, map,
+      position: pos, map, draggable: true,
       image: new kakao.maps.MarkerImage(
         'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
         new kakao.maps.Size(28, 28),
@@ -1667,6 +1686,20 @@ function renderMap() {
       ),
       title: '[민원] ' + (c.phone || ''),
       zIndex: 8
+    });
+    kakao.maps.event.addListener(m, 'dragend', () => {
+      const p = m.getPosition();
+      if (!confirm(`이 민원 위치를 이동할까요?`)) {
+        m.setPosition(new kakao.maps.LatLng(c.lat, c.lng));
+        return;
+      }
+      const d = loadData();
+      const target = (d.complaints || []).find(x => x.id === c.id);
+      if (target) {
+        target.lat = p.getLat(); target.lng = p.getLng();
+        saveData(d);
+      }
+      refreshAll();
     });
     const phoneTel = (c.phone || '').replace(/[^0-9+]/g, '');
     const phoneLink = c.phone

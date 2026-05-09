@@ -3,7 +3,7 @@
 ## 다음 세션에서 시작 시 읽을 것
 
 ### 현재 상태
-- 캐시 버전: `20260510k` (모든 HTML에 동일)
+- 캐시 버전: `20260510l` (모든 HTML에 동일)
 - 신규 기능: 민원, 방역불가 핀, 거점 InfoWindow 수정/순번/삭제, 텔레그램, 네이버 SMS 설정 UI
 - 효도위안잔치: 거점에 이장님 배정, 차량정보, 탑승완료 알림 진행 중
 
@@ -32,10 +32,9 @@
 1. **방역금지 핀 수정 / 거점 InfoWindow 수정 탭**
    - 민원은 4번에서 처리됨. 방역금지(noSprayZone)도 InfoWindow ✎ 버튼 필요
 
-2. **민원/방역금지 핀 드래그로 위치 이동**
-   - kakao.maps.Marker `draggable: true`
-   - dragend 시 confirm 모달 → 좌표 업데이트
-   - 거점은 이미 admin에서 됨, 동일하게 적용
+2. ~~**민원/방역금지 핀 드래그로 위치 이동**~~ ✅ 처리됨
+   - 민원: draggable + dragend confirm → complaints[id].lat/lng 업데이트
+   - 방역불가: draggable + drag(원 따라감) + dragend confirm → noSprayZones[id].lat/lng 업데이트
 
 3. **방역금지 주변 GPS 알림**
    - today.html onGpsUpdate에서 noSprayZones 순회
