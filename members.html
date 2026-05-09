@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510j">
+  <link rel="stylesheet" href="style.css?v=20260510k">
   <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
@@ -82,8 +82,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510j"></script>
-<script src="common.js?v=20260510j"></script>
+<script src="firebase-config.js?v=20260510k"></script>
+<script src="common.js?v=20260510k"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -284,6 +284,12 @@ document.getElementById('memUpload').addEventListener('change', async (e) => {
   if (!file) return;
   e.target.value = '';
 
+  // Firebase 데이터 동기화 전에는 업로드 금지 — 빈 캐시로 저장하면 전체 DB가 날아감
+  if (typeof _cache === 'undefined' || !_cache) {
+    alert('⚠️ 데이터 동기화 중입니다. 잠시 후 다시 시도해주세요.\n(업로드를 지금 하면 기존 데이터가 사라질 수 있어요)');
+    return;
+  }
+
   let rows;
   try {
     if (file.name.match(/\.(xlsx|xls)$/i)) {
@@ -351,7 +357,7 @@ document.getElementById('memUpload').addEventListener('change', async (e) => {
   const firstHeaders = rows.length ? Object.keys(rows[0]).join(', ') : '(없음)';
   for (const row of rows) {
     const name = String(pick(row, '이름', '성명', '회원', 'name')).trim();
-    const position = String(pick(row, '직책', '직급', '직위', 'position', 'role')).trim();
+    const position = String(pick(row, '직책', '직급', '직위', '소속', '담당', 'position', 'role')).trim();
     const phone = normalizePhone(pick(row, '연락처', '연락', '전화', '핸드폰', '휴대폰', '번호', 'phone', 'tel', 'mobile'));
     const birthday = normalizeDate(pick(row, '생년월일', '생일', '나이', 'birth'));
     const address = String(pick(row, '주소', '거주지', 'address', 'addr')).trim();
@@ -373,14 +379,34 @@ document.getElementById('memUpload').addEventListener('change', async (e) => {
   alert(msg);
 });
 
+// 따옴표/콤마 들어간 필드(예: 주소) 안전 파싱 + 줄 안 따옴표 안에 줄바꿈 허용
 function parseCSVMembers(text) {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(s => s.trim());
-  return lines.slice(1).map(line => {
-    const cells = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+  text = text.replace(/^﻿/, '');
+  const rows = [];
+  let cur = [], cell = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (text[i+1] === '"') { cell += '"'; i++; }
+        else inQ = false;
+      } else cell += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === ',') { cur.push(cell); cell = ''; }
+      else if (ch === '\r') {/* skip */}
+      else if (ch === '\n') { cur.push(cell); rows.push(cur); cur = []; cell = ''; }
+      else cell += ch;
+    }
+  }
+  if (cell !== '' || cur.length) { cur.push(cell); rows.push(cur); }
+  // 빈 줄 제거
+  const nonEmpty = rows.filter(r => r.some(c => String(c).trim() !== ''));
+  if (nonEmpty.length < 2) return [];
+  const headers = nonEmpty[0].map(s => String(s).trim());
+  return nonEmpty.slice(1).map(cells => {
     const row = {};
-    headers.forEach((h, i) => { row[h] = cells[i] || ''; });
+    headers.forEach((h, i) => { row[h] = (cells[i] !== undefined ? String(cells[i]).trim() : ''); });
     return row;
   });
 }

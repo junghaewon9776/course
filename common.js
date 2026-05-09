@@ -206,6 +206,12 @@ function loadData() {
 }
 
 function saveData(data, force) {
+  // 동기화 전 저장 차단: 캐시가 비어있는데 set('/')를 부르면 기존 DB가 통째로 날아감
+  if (!force && !_cacheReady) {
+    console.error('saveData 차단됨: Firebase 동기화 전 저장 시도');
+    alert('⚠️ 데이터 동기화 중입니다. 잠시 후 다시 시도해주세요.');
+    return;
+  }
   // 데이터 보호: 키가 빠진 상태로 저장 시도하면 캐시 값으로 복원 (force 시 무시)
   if (!force && _cache) {
     for (const k of ['events','members','teams','anchors','logs','requests','complaints','noSprayZones','memberAuth','savedTeams']) {
@@ -239,7 +245,12 @@ async function adminSignOut() {
   location.href = 'index.html';
 }
 
+// Firebase 영속 세션이 hydrate 될 때까지 기다린 뒤 결정 — 안 그러면 admin 로그인 직후
+// 홈을 들렀을 때 currentUser가 아직 null이라 익명 세션을 만들어 admin 세션을 덮어씀.
 async function ensureAnonAuth() {
+  await new Promise(resolve => {
+    const off = fbAuth.onAuthStateChanged(u => { off(); resolve(u); });
+  });
   if (!fbAuth.currentUser) {
     try { await fbAuth.signInAnonymously(); }
     catch (e) { console.error('익명 로그인 실패:', e); }

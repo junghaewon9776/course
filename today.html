@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>오늘의 운영</title>
-  <link rel="stylesheet" href="style.css?v=20260510j">
+  <link rel="stylesheet" href="style.css?v=20260510k">
 </head>
 <body>
 <header>
@@ -83,8 +83,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510j"></script>
-<script src="common.js?v=20260510j"></script>
+<script src="firebase-config.js?v=20260510k"></script>
+<script src="common.js?v=20260510k"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
 <div id="errBar"></div>
@@ -771,7 +771,8 @@ function renderMapForSession() {
   });
 
   // 민원 마커 (빨간 전화 아이콘) - 이 행사의 미처리 민원만
-  const complaints = (data.complaints || []).filter(c => c.eventId === currentSession.eventId && c.status !== 'resolved');
+  // 민원은 행사 무관 모든 미처리 핀 표시 (가다가 보이면 처리)
+  const complaints = (data.complaints || []).filter(c => c.status !== 'resolved');
   complaints.forEach(c => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
       <circle cx="14" cy="14" r="12" fill="#f1c40f" stroke="white" stroke-width="2"/>
@@ -788,14 +789,19 @@ function renderMapForSession() {
       zIndex: 8
     });
     const phoneTel = (c.phone || '').replace(/[^0-9+]/g, '');
-    const phoneBtn = c.phone
-      ? `<a href="tel:${phoneTel}" style="display:block;margin-top:6px;background:#27ae60;color:#fff;padding:8px 12px;border-radius:6px;text-align:center;font-weight:700;text-decoration:none;font-size:13px;">📞 ${c.phone} 전화걸기</a>`
-      : '<div style="color:#888;font-size:11px;">연락처 없음</div>';
+    const phoneLink = c.phone
+      ? `<div style="margin-top:8px;font-size:11px;text-align:right;"><a href="tel:${phoneTel}" style="color:#27ae60;text-decoration:none;">📞 ${c.phone}</a></div>`
+      : '';
+    const actBtns = `
+      <div style="display:flex;gap:4px;margin-top:8px;">
+        <button onclick="resolveComplaintFromMap('${c.id}')" style="flex:1;padding:6px 4px;background:#27ae60;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">✓ 처리완료</button>
+      </div>`;
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:10px;font-size:12px;max-width:240px;">
         <div style="font-weight:700;color:#b7950b;margin-bottom:4px;">📞 민원</div>
         <div style="color:#444;white-space:pre-wrap;">${(c.content||'').replace(/</g,'&lt;')}</div>
-        ${phoneBtn}
+        ${actBtns}
+        ${phoneLink}
       </div>`
     });
     kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
@@ -1271,6 +1277,17 @@ function requestNewAnchor() {
   // 텔레그램: 거점추가 요청 알림
   sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n요청자: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / ' + currentSession.crew.assist : ''}`);
   alert('관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
+}
+
+function resolveComplaintFromMap(id) {
+  if (!confirm('이 민원을 처리완료로 바꿀까요?')) return;
+  const data = loadData();
+  const c = (data.complaints || []).find(x => x.id === id);
+  if (!c) return;
+  c.status = 'resolved';
+  saveData(data);
+  if (window.__openIw) { try { window.__openIw.close(); } catch (e) {} window.__openIw = null; }
+  renderMapForSession();
 }
 
 function reportComplaint() {
