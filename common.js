@@ -70,8 +70,36 @@ const defaultData = {
   requests: [],
   complaints: [],  // 민원: { id, eventId, lat, lng, phone, content, status:'pending'|'resolved', createdAt }
   noSprayZones: [],  // 방역불가: { id, lat, lng, name, reason, createdAt }
-  telegram: { botToken: '', chatId: '', enabled: false }
+  telegram: { botToken: '', chatId: '', enabled: false },
+  naverSms: { proxyUrl: '', serviceId: '', accessKey: '', secretKey: '', from: '', enabled: false }
 };
+
+// ───────── 네이버 SENS SMS (프록시 서버 경유) ─────────
+async function sendSms(toPhone, content) {
+  try {
+    const data = (typeof _cache !== 'undefined' && _cache) || loadData();
+    const cfg = data.naverSms || {};
+    if (!cfg.enabled || !cfg.proxyUrl) return { ok: false, skipped: true };
+    const tel = String(toPhone).replace(/\D/g, '');
+    if (!tel) return { ok: false, error: 'no phone' };
+    const res = await fetch(cfg.proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serviceId: cfg.serviceId,
+        accessKey: cfg.accessKey,
+        secretKey: cfg.secretKey,
+        from: cfg.from,
+        to: tel,
+        content
+      })
+    });
+    return { ok: res.ok, status: res.status };
+  } catch (e) {
+    console.warn('SMS 전송 실패:', e);
+    return { ok: false, error: e.message };
+  }
+}
 
 // ───────── 카카오 InfoWindow 토글 ─────────
 // 같은 마커 다시 누르면 닫히고, 다른 마커 누르면 이전 거 닫고 새 거 열기
@@ -331,7 +359,7 @@ function showLoginGate() {
           간부 <b>이메일</b> 또는 회원 <b>전화번호 + PIN</b>으로 들어올 수 있어요.
         </p>
         <label>이메일 또는 전화번호</label>
-        <input id="loginEmail" type="text" autocomplete="username" placeholder="bsp1001@naver.com 또는 01012345678" value="${savedId}">
+        <input id="loginEmail" type="text" autocomplete="username" placeholder="bsp1001@naver.com 또는 010-1234-5678" value="${savedId}" oninput="autoFormatLoginId(this)">
         <label>비밀번호 또는 PIN</label>
         <input id="loginPw" type="password" autocomplete="current-password" placeholder="간부:비번 / 회원:PIN" onkeydown="if(event.key==='Enter')doLogin()">
         <div id="loginErr" style="color:#e74c3c;font-size:12px;margin-top:6px;min-height:14px;"></div>
@@ -353,6 +381,21 @@ function showLoginGate() {
   document.body.insertAdjacentHTML('beforeend', html);
   const focusTarget = savedId ? 'loginPw' : 'loginEmail';
   setTimeout(() => document.getElementById(focusTarget).focus(), 100);
+}
+
+// 전화번호 입력 시 자동 하이픈 (010-XXXX-XXXX)
+function autoFormatLoginId(input) {
+  const v = input.value;
+  if (v.includes('@')) return; // 이메일은 그대로
+  const digits = v.replace(/\D/g, '');
+  if (!digits.startsWith('01')) return; // 010, 011 등 핸드폰만 포맷
+  let formatted = digits;
+  if (digits.length >= 4 && digits.length <= 7) {
+    formatted = digits.slice(0, 3) + '-' + digits.slice(3);
+  } else if (digits.length >= 8) {
+    formatted = digits.slice(0, 3) + '-' + digits.slice(3, 7) + '-' + digits.slice(7, 11);
+  }
+  if (formatted !== v) input.value = formatted;
 }
 
 // 현재 로그인 사용자의 권한 (admin/super/viewer)

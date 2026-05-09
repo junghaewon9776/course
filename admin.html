@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510b">
+  <link rel="stylesheet" href="style.css?v=20260510f">
 </head>
 <body>
 <header>
@@ -166,8 +166,8 @@
         <p class="muted" style="font-size:11px;margin-bottom:6px;">
           로그인 / 시작 / 거점추가 / 종료 시 텔레그램으로 알림 받기
         </p>
-        <label>봇 토큰</label>
-        <input id="tgBot" type="text" placeholder="123456:ABC-DEF...">
+        <label>봇 토큰 <span class="muted" style="font-size:10px;">(가려서 표시)</span></label>
+        <input id="tgBot" type="password" placeholder="123456:ABC-DEF...">
         <label>채팅 ID (여러 명은 콤마로 구분)</label>
         <input id="tgChat" type="text" placeholder="8613833560, 1234567, ...">
         <label style="display:flex;align-items:center;margin-top:8px;cursor:pointer;">
@@ -178,6 +178,36 @@
           <button class="small success" style="flex:1;" onclick="saveTelegramConfig()">저장</button>
           <button class="small" onclick="testTelegram()">📨 테스트</button>
         </div>
+      </div>
+
+      <!-- 네이버 SENS SMS -->
+      <div class="card" style="border-left:4px solid #03c75a;">
+        <h2>📲 네이버 SMS (SENS)</h2>
+        <p class="muted" style="font-size:11px;margin-bottom:6px;">
+          이장님께 자동 SMS 발송 (서버 프록시 URL 필요 — 자세한 셋업은 별도)
+        </p>
+        <label>서버 프록시 URL</label>
+        <input id="smsProxy" type="text" placeholder="https://your-server.com/api/sms (Cloud Function 등)">
+        <label>Service ID</label>
+        <input id="smsServiceId" type="text" placeholder="ncp:sms:kr:000000000000:xxx">
+        <label>Access Key <span class="muted" style="font-size:10px;">(가려서 표시)</span></label>
+        <input id="smsAccessKey" type="password" placeholder="네이버 클라우드 IAM Access Key">
+        <label>Secret Key</label>
+        <input id="smsSecretKey" type="password" placeholder="Secret Key (서버에만 저장 권장)">
+        <label>발신번호 (사전 등록)</label>
+        <input id="smsFrom" type="text" placeholder="01012345678">
+        <label style="display:flex;align-items:center;margin-top:8px;cursor:pointer;">
+          <input id="smsEnabled" type="checkbox" style="width:18px;height:18px;margin-right:6px;">
+          <span>SMS 자동 발송 켜기</span>
+        </label>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="small success" style="flex:1;" onclick="saveSmsConfig()">저장</button>
+          <button class="small" onclick="testSms()">📨 테스트</button>
+        </div>
+        <p class="muted" style="font-size:11px;margin-top:6px;line-height:1.5;">
+          ⚠️ 브라우저에서 네이버 SENS 직접 호출 불가 (CORS + 시크릿 노출).<br>
+          → Firebase Cloud Function 같은 프록시 서버 필요. 셋업 가이드 요청 가능.
+        </p>
       </div>
 
       <!-- 스케줄 -->
@@ -196,8 +226,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510b"></script>
-<script src="common.js?v=20260510b"></script>
+<script src="firebase-config.js?v=20260510f"></script>
+<script src="common.js?v=20260510f"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -238,12 +268,35 @@ function initMap() {
     level: data.mapDefault.level || 5
   });
   map.relayout();
+  // 지도 종류 토글 컨트롤 (좌상단 오버레이)
+  const ctrl = document.createElement('div');
+  ctrl.style.cssText = 'position:absolute;top:10px;left:10px;z-index:5;background:#fff;border:1px solid #ddd;border-radius:6px;padding:4px;display:flex;gap:2px;font-size:12px;';
+  ctrl.innerHTML = `
+    <button onclick="setMapType('roadmap')" id="mt-r" class="small" style="background:#3498db;color:#fff;padding:4px 8px;">일반</button>
+    <button onclick="setMapType('skyview')" id="mt-s" class="small gray" style="padding:4px 8px;">위성</button>
+    <button onclick="setMapType('hybrid')" id="mt-h" class="small gray" style="padding:4px 8px;">위성+도로</button>
+  `;
+  document.getElementById('map').parentElement.style.position = 'relative';
+  document.getElementById('map').parentElement.appendChild(ctrl);
   kakao.maps.event.addListener(map, 'click', (e) => {
     const lat = e.latLng.getLat();
     const lng = e.latLng.getLng();
     handleMapClick(lat, lng);
   });
   refreshAll();
+}
+
+function setMapType(type) {
+  if (!map || !window.kakao) return;
+  const ids = { roadmap: kakao.maps.MapTypeId.ROADMAP, skyview: kakao.maps.MapTypeId.SKYVIEW, hybrid: kakao.maps.MapTypeId.HYBRID };
+  map.setMapTypeId(ids[type]);
+  ['r','s','h'].forEach(k => {
+    const btn = document.getElementById('mt-' + k);
+    if (btn) { btn.classList.add('gray'); btn.style.background = ''; btn.style.color = ''; }
+  });
+  const active = { roadmap: 'r', skyview: 's', hybrid: 'h' }[type];
+  const aBtn = document.getElementById('mt-' + active);
+  if (aBtn) { aBtn.classList.remove('gray'); aBtn.style.background = '#3498db'; aBtn.style.color = '#fff'; }
 }
 
 // 클릭 모드: 'anchor' (기본) | 'complaint' | 'noSpray'
@@ -674,6 +727,39 @@ function renderTelegramConfig() {
   if (document.getElementById('tgBot')) document.getElementById('tgBot').value = cfg.botToken || '';
   if (document.getElementById('tgChat')) document.getElementById('tgChat').value = cfg.chatId || '';
   if (document.getElementById('tgEnabled')) document.getElementById('tgEnabled').checked = !!cfg.enabled;
+  // SMS 설정도 같이
+  const sms = data.naverSms || {};
+  if (document.getElementById('smsProxy')) document.getElementById('smsProxy').value = sms.proxyUrl || '';
+  if (document.getElementById('smsServiceId')) document.getElementById('smsServiceId').value = sms.serviceId || '';
+  if (document.getElementById('smsAccessKey')) document.getElementById('smsAccessKey').value = sms.accessKey || '';
+  if (document.getElementById('smsSecretKey')) document.getElementById('smsSecretKey').value = sms.secretKey || '';
+  if (document.getElementById('smsFrom')) document.getElementById('smsFrom').value = sms.from || '';
+  if (document.getElementById('smsEnabled')) document.getElementById('smsEnabled').checked = !!sms.enabled;
+}
+
+function saveSmsConfig() {
+  const data = loadData();
+  data.naverSms = {
+    proxyUrl: document.getElementById('smsProxy').value.trim(),
+    serviceId: document.getElementById('smsServiceId').value.trim(),
+    accessKey: document.getElementById('smsAccessKey').value.trim(),
+    secretKey: document.getElementById('smsSecretKey').value.trim(),
+    from: document.getElementById('smsFrom').value.trim(),
+    enabled: document.getElementById('smsEnabled').checked
+  };
+  saveData(data);
+  alert('✅ 저장됨');
+}
+
+async function testSms() {
+  const data = loadData();
+  const cfg = data.naverSms || {};
+  if (!cfg.proxyUrl) { alert('서버 프록시 URL을 먼저 입력하세요'); return; }
+  const to = prompt('테스트 받을 번호 (예: 01012345678)');
+  if (!to) return;
+  const res = await sendSms(to, '[방역코스 시스템] SMS 테스트 메시지');
+  if (res.ok) alert('✅ SMS 발송 요청됨 (실제 도착 여부는 폰 확인)');
+  else alert('❌ 실패: ' + (res.error || res.status || '알 수 없음'));
 }
 
 function saveTelegramConfig() {
@@ -1088,7 +1174,25 @@ function editAnchor(id) {
   if (name === null) return;
   const memo = prompt('메모', a.memo || '');
   if (memo === null) return;
-  a.name = name; a.memo = memo;
+  // 이장 배정 (콤마로 여러 명, 이름 또는 전화번호로 매칭)
+  const villageHeads = (a.villageHeadIds || [])
+    .map(mid => (data.members || []).find(m => m.id === mid))
+    .filter(Boolean)
+    .map(m => m.name)
+    .join(', ');
+  const newHeads = prompt(
+    '담당 이장님 (콤마로 여러 명, 이름 입력)\n예: 김이장, 박이장\n빈칸 = 없음',
+    villageHeads
+  );
+  if (newHeads === null) return;
+  const headNames = newHeads.split(',').map(s => s.trim()).filter(Boolean);
+  const headIds = [];
+  for (const nm of headNames) {
+    const m = (data.members || []).find(x => x.name === nm);
+    if (m) headIds.push(m.id);
+    else alert(`회원 명단에 "${nm}" 없음 — 건너뜀 (members.html에서 먼저 등록)`);
+  }
+  a.name = name; a.memo = memo; a.villageHeadIds = headIds;
   saveData(data); refreshAll();
 }
 function deleteAnchor(id) {
@@ -1390,6 +1494,7 @@ function deleteSchedule(idx) {
 }
 
 // ────── 지도 렌더링 ──────
+let __adminMapFitDone = false;
 function renderMap() {
   if (!map) return;
   kakaoMarkers.forEach(m => m.setMap(null));
@@ -1439,7 +1544,16 @@ function renderMap() {
         renderMap();
       });
       const iw = new kakao.maps.InfoWindow({
-        content: `<div style="padding:4px 8px;font-size:12px;"><b>${course.name} ${i+1}</b><br>${a.name}</div>`
+        content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
+          <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${course.name} ${i+1}번</div>
+          <div style="margin-bottom:6px;">${(a.name||'').replace(/</g,'&lt;')}</div>
+          ${a.memo ? `<div class="sub" style="margin-bottom:6px;">${a.memo.replace(/</g,'&lt;')}</div>` : ''}
+          <div style="display:flex;gap:4px;">
+            <a href="#" onclick="editAnchor('${a.id}');return false;" style="flex:1;background:#3498db;color:#fff;padding:6px 8px;border-radius:4px;text-align:center;font-size:11px;text-decoration:none;font-weight:600;">✎ 수정</a>
+            <a href="#" onclick="moveAnchorTo('${a.id}', ${(getCourseAnchors(loadData(), course.id)).length});return false;" style="flex:1;background:#9b59b6;color:#fff;padding:6px 8px;border-radius:4px;text-align:center;font-size:11px;text-decoration:none;font-weight:600;">№ 순번</a>
+            <a href="#" onclick="if(confirm('이 거점 삭제?'))deleteAnchor('${a.id}');return false;" style="background:#e74c3c;color:#fff;padding:6px 8px;border-radius:4px;text-align:center;font-size:11px;text-decoration:none;font-weight:600;">🗑</a>
+          </div>
+        </div>`
       });
       kakao.maps.event.addListener(marker, 'click', () => {
         if (reorderMode && course.id === reorderCourseId) {
@@ -1546,7 +1660,11 @@ function renderMap() {
     kakaoMarkers.push(m);
   });
 
-  if (hasPoints) map.setBounds(bounds);
+  // 첫 렌더링에만 자동 fit, 이후엔 사용자 줌/위치 유지
+  if (hasPoints && !__adminMapFitDone) {
+    map.setBounds(bounds);
+    __adminMapFitDone = true;
+  }
 }
 </script>
 </body>

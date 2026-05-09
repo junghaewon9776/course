@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>오늘의 운영</title>
-  <link rel="stylesheet" href="style.css?v=20260510b">
+  <link rel="stylesheet" href="style.css?v=20260510f">
 </head>
 <body>
 <header>
@@ -83,8 +83,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510b"></script>
-<script src="common.js?v=20260510b"></script>
+<script src="firebase-config.js?v=20260510f"></script>
+<script src="common.js?v=20260510f"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
 <div id="errBar"></div>
@@ -411,6 +411,17 @@ function openStartForm(eventId, courseId) {
         <div id="fAssistSuggest" class="suggestList"></div>
       </div>
 
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <div style="flex:2;">
+          <label>차량번호 (선택)</label>
+          <input id="fVehicle" type="text" placeholder="예: 12가3456">
+        </div>
+        <div style="flex:1;">
+          <label>차량색 (선택)</label>
+          <input id="fVehicleColor" type="text" placeholder="예: 흰색">
+        </div>
+      </div>
+
       <div style="display:flex;gap:6px;margin-top:14px;">
         <button class="success" style="flex:1;" onclick="confirmStartForm('${eventId}','${courseId}')">▶ 시작</button>
         <button class="gray" onclick="closeStartForm()">취소</button>
@@ -481,8 +492,10 @@ function confirmStartForm(eventId, courseId) {
   const driver = document.getElementById('fDriver').value.trim();
   if (!driver) { alert('운전자 이름을 입력하세요'); return; }
   const assist = (document.getElementById('fAssist')?.value || '').trim();
+  const vehicle = (document.getElementById('fVehicle')?.value || '').trim();
+  const vehicleColor = (document.getElementById('fVehicleColor')?.value || '').trim();
   closeStartForm();
-  startSession(eventId, courseId, teamId, { driver, assist });
+  startSession(eventId, courseId, teamId, { driver, assist, vehicle, vehicleColor });
 }
 
 function quickStart(eventId, courseId, teamId) {
@@ -561,7 +574,8 @@ function startSession(eventId, courseId, teamId, crew) {
   renderMapForSession();
 
   // 텔레그램: 코스 시작 알림
-  sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${crew?.driver || '-'}${crew?.assist ? '\n보조: ' + crew.assist : ''}\n시작: ${new Date().toLocaleString('ko-KR')}`);
+  const vehInfo = [crew?.vehicle, crew?.vehicleColor].filter(Boolean).join(' / ');
+  sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${crew?.driver || '-'}${crew?.assist ? '\n보조: ' + crew.assist : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시작: ${new Date().toLocaleString('ko-KR')}`);
 
   // 시작하면 GPS 자동 ON
   if (watchId === null) {
@@ -684,9 +698,33 @@ function renderMapForSession() {
       image: numberedMarkerImage(i+1, course.color, isDone),
       zIndex: 10
     });
-    kakao.maps.event.addListener(marker, 'click', () => {
-      if (confirm(`${a.name}\n${a.memo || ''}\n\n카카오내비로 안내?`)) navTo(a.id);
+    // 이장님 정보 가져오기
+    const villageHeads = (a.villageHeadIds || [])
+      .map(mid => (data.members || []).find(m => m.id === mid))
+      .filter(Boolean);
+    const headInfoHtml = villageHeads.length
+      ? villageHeads.map(h => {
+          const tel = (h.phone||'').replace(/[^0-9+]/g,'');
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-top:1px solid #eee;">
+            <span><b>${h.name}</b> 이장</span>
+            ${h.phone ? `<a href="tel:${tel}" style="color:#27ae60;font-weight:600;text-decoration:none;font-size:11px;">📞 ${h.phone}</a>` : ''}
+          </div>`;
+        }).join('')
+      : '';
+
+    const aId = a.id;
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:10px;font-size:12px;max-width:260px;">
+        <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')} ${isDone?'<span style="font-size:10px;background:#27ae60;color:#fff;padding:1px 6px;border-radius:3px;">탑승완료</span>':''}</div>
+        ${a.memo ? `<div style="color:#444;white-space:pre-wrap;margin-bottom:6px;">${a.memo.replace(/</g,'&lt;')}</div>` : ''}
+        ${headInfoHtml}
+        <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">
+          <a href="#" onclick="navTo('${aId}');return false;" style="flex:1;min-width:110px;background:#3498db;color:#fff;padding:8px;border-radius:6px;text-align:center;font-weight:700;text-decoration:none;font-size:12px;">🧭 내비</a>
+          ${villageHeads.length ? `<a href="#" onclick="shareAnchorInfoToVillageHead('${aId}');return false;" style="flex:1;min-width:110px;background:#f39c12;color:#fff;padding:8px;border-radius:6px;text-align:center;font-weight:700;text-decoration:none;font-size:12px;">📤 이장님 공유</a>` : ''}
+        </div>
+      </div>`
     });
+    kakao.maps.event.addListener(marker, 'click', () => toggleInfoWindow(iw, marker, map));
     anchorMarkers.push(marker);
   });
   if (path.length >= 2) {
@@ -815,16 +853,79 @@ function navTo(anchorId) {
   const a = data.anchors.find(x => x.id === anchorId);
   if (a) openKakaoNavi(a.name, a.lat, a.lng);
 }
+// 거점 InfoWindow에서 이장님께 운전자 정보 공유 (SMS/카톡)
+async function shareAnchorInfoToVillageHead(anchorId) {
+  const data = loadData();
+  const a = (data.anchors || []).find(x => x.id === anchorId);
+  if (!a) return;
+  const heads = (a.villageHeadIds || [])
+    .map(mid => (data.members || []).find(m => m.id === mid))
+    .filter(Boolean);
+  if (!heads.length) { alert('담당 이장님 정보가 없습니다'); return; }
+  const event = getEvent(data, currentSession?.eventId);
+  const course = getCourse(data, currentSession?.courseId);
+  const driver = currentSession?.crew?.driver || '운전자 미정';
+  const driverMember = (data.members || []).find(m => m.name === driver);
+  const driverPhoneText = driverMember?.phone ? `\n운전자 연락처: ${driverMember.phone}` : '';
+  const vehInfo = [currentSession?.crew?.vehicle, currentSession?.crew?.vehicleColor].filter(Boolean).join(' / ');
+  const text =
+`[${event?.name || ''} ${course?.name || ''}]
+${a.name} 거점 픽업 알림
+운전: ${driver}${driverPhoneText}
+보조: ${currentSession?.crew?.assist || '-'}${vehInfo ? '\n차량: ' + vehInfo : ''}
+거점 도착 예정 — 어르신들 준비 부탁드립니다.`;
+
+  // 네이버 SMS 활성화돼있으면 자동 발송, 아니면 SMS 앱 열기
+  const smsCfg = data.naverSms || {};
+  if (smsCfg.enabled && smsCfg.proxyUrl) {
+    // 모든 이장님께 자동 SMS 발송
+    let sent = 0, failed = 0;
+    for (const head of heads) {
+      const tel = (head.phone || '').replace(/[^0-9+]/g, '');
+      if (!tel) { failed++; continue; }
+      const res = await sendSms(tel, text);
+      if (res.ok) sent++; else failed++;
+    }
+    alert(`SMS 발송: ${sent}건 성공${failed?` / ${failed}건 실패`:''}`);
+    return;
+  }
+
+  // 자동 발송 미설정 시 → SMS 앱 열기 (첫 이장님)
+  const head = heads[0];
+  const tel = (head.phone || '').replace(/[^0-9+]/g, '');
+  if (!tel) { alert('이장님 연락처가 없습니다'); return; }
+  const smsUrl = `sms:${tel}?body=${encodeURIComponent(text)}`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).catch(()=>{});
+  }
+  if (heads.length > 1) {
+    alert(`이장님 ${heads.length}명: ${heads.map(h=>h.name).join(', ')}\n첫 번째 분께 SMS로 연결됩니다.\n메시지 내용은 클립보드에 복사됨 → 다른 분께 카톡으로 붙여넣기 가능`);
+  }
+  location.href = smsUrl;
+}
+
 function toggleDone(anchorId) {
   if (!currentSession) return;
   const set = new Set(currentSession.completions);
-  if (set.has(anchorId)) set.delete(anchorId);
+  const wasDone = set.has(anchorId);
+  if (wasDone) set.delete(anchorId);
   else set.add(anchorId);
   currentSession.completions = [...set];
   saveSession();
   renderAnchorRows();
   renderMapForSession();
   updateNextInfo();
+
+  // 새로 탑승완료된 거점이면 텔레그램 알림
+  if (!wasDone) {
+    const data = loadData();
+    const a = (data.anchors || []).find(x => x.id === anchorId);
+    const event = getEvent(data, currentSession.eventId);
+    const course = getCourse(data, currentSession.courseId);
+    const vehInfo = [currentSession.crew?.vehicle, currentSession.crew?.vehicleColor].filter(Boolean).join(' / ');
+    const idx = (data.anchors || []).filter(x => x.courseId === currentSession.courseId).sort((x,y)=>(x.order||0)-(y.order||0)).findIndex(x => x.id === anchorId) + 1;
+    sendTelegram(`🚐 <b>탑승완료</b>\n${event?.name || ''} · ${course?.name || ''}\n${idx}번 ${a?.name || ''}\n운전: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / 보조: ' + currentSession.crew.assist : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시각: ${new Date().toLocaleTimeString('ko-KR')}`);
+  }
 }
 
 // ────── GPS ──────
@@ -868,8 +969,9 @@ function toggleFollow() {
   followMode = !followMode;
   updateFollowBtn();
   if (followMode && currentPos && map) {
-    // 줌은 사용자가 설정한 그대로 유지, 위치만 이동
+    // 따라가기 켤 때 내비처럼 가까운 줌으로 한 번 잡고, 그 후엔 사용자 +/- 그대로
     map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+    map.setLevel(3);
   }
 }
 function updateFollowBtn() {
@@ -1117,7 +1219,8 @@ function finishCourse() {
     for (let i = 1; i < t.length; i++) d += distance(t[i-1][0], t[i-1][1], t[i][0], t[i][1]);
     return (d/1000).toFixed(1);
   })();
-  sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / 보조: ' + currentSession.crew.assist : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분`);
+  const vehInfoFinish = [currentSession.crew?.vehicle, currentSession.crew?.vehicleColor].filter(Boolean).join(' / ');
+  sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / 보조: ' + currentSession.crew.assist : ''}${vehInfoFinish ? '\n차량: ' + vehInfoFinish : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분`);
 
   alert('✅ 코스 완료 보고됨');
   if (watchId !== null) toggleGPS();
