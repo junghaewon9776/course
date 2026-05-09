@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>오늘의 운영</title>
-  <link rel="stylesheet" href="style.css?v=20260509g">
+  <link rel="stylesheet" href="style.css?v=20260509q">
 </head>
 <body>
 <header>
@@ -82,8 +82,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509g"></script>
-<script src="common.js?v=20260509g"></script>
+<script src="firebase-config.js?v=20260509q"></script>
+<script src="common.js?v=20260509q"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
 <div id="errBar"></div>
@@ -385,9 +385,9 @@ function openStartForm(eventId, courseId) {
       <h2>📝 ${event.name} · ${course.name}</h2>
       <p class="muted" style="margin-bottom:8px;">운전자와 보조자 선택 (조 선택은 선택사항)</p>
 
-      <label>조 (선택 시 자동 채움 - 안 골라도 됨)</label>
+      <label>조 *</label>
       <select id="fTeam" onchange="autoFillFromTeam()">
-        <option value="">조 선택 안 함</option>
+        <option value="">-- 조 선택 --</option>
         ${teamOpts}
       </select>
 
@@ -400,19 +400,14 @@ function openStartForm(eventId, courseId) {
         <div id="fDriverSuggest" class="suggestList"></div>
       </div>
 
-      <label>보조자 (여러 명 가능)</label>
+      <label>보조자</label>
       <div style="position:relative;">
-        <div style="display:flex;gap:4px;">
-          <input id="fAssistInput" type="text" placeholder="이름 검색..." style="flex:1;" autocomplete="off"
-                 oninput="showSuggestions('fAssistInput','fAssistSuggest')"
-                 onfocus="showSuggestions('fAssistInput','fAssistSuggest')"
-                 onblur="setTimeout(()=>document.getElementById('fAssistSuggest').style.display='none',200)"
-                 onkeydown="if(event.key==='Enter'){event.preventDefault();addAssistChip();}">
-          <button class="small" onclick="addAssistChip()">+ 추가</button>
-        </div>
+        <input id="fAssist" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
+               oninput="showSuggestions('fAssist','fAssistSuggest')"
+               onfocus="showSuggestions('fAssist','fAssistSuggest')"
+               onblur="setTimeout(()=>document.getElementById('fAssistSuggest').style.display='none',200)">
         <div id="fAssistSuggest" class="suggestList"></div>
       </div>
-      <div id="fAssistChips" style="margin-top:6px;min-height:34px;padding:6px;border:1px solid #ddd;border-radius:4px;background:#fafafa;"></div>
 
       <div style="display:flex;gap:6px;margin-top:14px;">
         <button class="success" style="flex:1;" onclick="confirmStartForm('${eventId}','${courseId}')">▶ 시작</button>
@@ -430,10 +425,25 @@ function showSuggestions(inputId, listId) {
   const list = document.getElementById(listId);
   const q = input.value.trim().toLowerCase();
   const data = loadData();
-  const members = (data.members || []);
+  const allMembers = (data.members || []);
 
-  let matches = members;
-  if (q) matches = members.filter(m => (m.name||'').toLowerCase().includes(q) || (m.phone||'').includes(q));
+  // 조가 선택되어 있고 검색어 없으면 → 그 조원만 (조장+부조장+조원)
+  // 검색어 있으면 → 전체 회원에서 매칭 (다른 조에서 투입되는 경우 대비)
+  const teamId = document.getElementById('fTeam')?.value;
+  let matches;
+  if (q) {
+    matches = allMembers.filter(m => (m.name||'').toLowerCase().includes(q) || (m.phone||'').includes(q));
+  } else if (teamId) {
+    const team = getTeam(data, teamId);
+    if (team) {
+      const allowedIds = new Set([team.leaderId, team.viceLeaderId, ...(team.memberIds || [])].filter(Boolean));
+      matches = allMembers.filter(m => allowedIds.has(m.id));
+    } else {
+      matches = allMembers;
+    }
+  } else {
+    matches = allMembers;
+  }
   matches = matches.slice(0, 8);
 
   if (!matches.length) { list.style.display = 'none'; return; }
@@ -449,111 +459,27 @@ function showSuggestions(inputId, listId) {
 function pickSuggestion(inputId, listId, name) {
   document.getElementById(inputId).value = name;
   document.getElementById(listId).style.display = 'none';
-  // 보조자 입력은 자동으로 칩 추가
-  if (inputId === 'fAssistInput') {
-    addAssistChip();
-  }
 }
 
 function autoFillFromTeam() {
   const teamId = document.getElementById('fTeam').value;
-  if (!teamId) {
-    // 조 선택 해제 시 기존 체크리스트 제거
-    const old = document.getElementById('teamCheckListContainer');
-    if (old) old.remove();
-    return;
-  }
+  if (!teamId) return;
   const data = loadData();
   const team = getTeam(data, teamId);
   if (!team) return;
 
   const leader = getMember(data, team.leaderId);
-  document.getElementById('fDriver').value = leader?.name || '';
   const vice = getMember(data, team.viceLeaderId);
-  const members = (team.memberIds || []).map(id => getMember(data, id)).filter(Boolean);
-  assistList = [vice?.name, ...members.map(m => m.name)].filter(Boolean);
-  renderAssistChips();
-}
-
-function showTeamCheckList(team) {
-  const data = loadData();
-  const allTeamMembers = [];
-  if (team.leaderId) allTeamMembers.push({ ...getMember(data, team.leaderId), role: '조장' });
-  if (team.viceLeaderId) allTeamMembers.push({ ...getMember(data, team.viceLeaderId), role: '부조장' });
-  for (const id of (team.memberIds || [])) {
-    const m = getMember(data, id);
-    if (m) allTeamMembers.push({ ...m, role: '조원' });
-  }
-
-  const html = `
-    <div style="margin-top:10px;padding:8px;background:#f8f9fa;border:1px solid #ddd;border-radius:5px;">
-      <label style="margin:0 0 6px;display:block;font-weight:600;">출석 체크 (체크 해제 = 결석)</label>
-      <div style="max-height:200px;overflow-y:auto;">
-        ${allTeamMembers.filter(m => m.id).map(m => `
-          <label style="display:flex;align-items:center;padding:4px;cursor:pointer;border-bottom:1px solid #eee;">
-            <input type="checkbox" class="attCheck" data-name="${m.name}" checked
-                   onchange="updateAttendance()" style="width:18px;height:18px;margin-right:8px;">
-            <span style="flex:1;">${m.name} <span class="sub" style="color:#888;font-size:11px;">${m.role} · ${m.phone || ''}</span></span>
-          </label>
-        `).join('')}
-      </div>
-    </div>
-  `;
-  // fTeam select 다음에 삽입
-  let cont = document.getElementById('teamCheckListContainer');
-  if (!cont) {
-    cont = document.createElement('div');
-    cont.id = 'teamCheckListContainer';
-    document.getElementById('fTeam').parentNode.insertBefore(cont, document.getElementById('fTeam').nextSibling);
-  }
-  cont.innerHTML = html;
-}
-
-function updateAttendance() {
-  // 체크된 멤버 → 운전자(첫번째)/보조자(나머지) 자동 갱신
-  const checks = document.querySelectorAll('.attCheck:checked');
-  const names = [...checks].map(c => c.dataset.name);
-  if (names.length === 0) return;
-  document.getElementById('fDriver').value = names[0];
-  assistList = names.slice(1);
-  renderAssistChips();
-}
-
-function addAssistChip() {
-  const inp = document.getElementById('fAssistInput');
-  const name = inp.value.trim();
-  if (!name) return;
-  if (!assistList.includes(name)) assistList.push(name);
-  inp.value = '';
-  inp.focus();
-  renderAssistChips();
-}
-
-function removeAssistChip(name) {
-  assistList = assistList.filter(n => n !== name);
-  renderAssistChips();
-}
-
-function renderAssistChips() {
-  const el = document.getElementById('fAssistChips');
-  if (!el) return;
-  if (!assistList.length) {
-    el.innerHTML = '<span style="color:#aaa;font-size:12px;">보조자 없음 - 위에서 추가</span>';
-    return;
-  }
-  el.innerHTML = assistList.map(name => `
-    <span style="display:inline-block;background:#3498db;color:#fff;padding:3px 8px;border-radius:4px;margin:2px;font-size:12px;">
-      ${name}
-      <span onclick="removeAssistChip('${name.replace(/'/g, "\\'")}')" style="cursor:pointer;margin-left:4px;">✕</span>
-    </span>
-  `).join('');
+  document.getElementById('fDriver').value = leader?.name || '';
+  document.getElementById('fAssist').value = vice?.name || '';
 }
 
 function confirmStartForm(eventId, courseId) {
   const teamId = document.getElementById('fTeam').value;
+  if (!teamId) { alert('조를 선택하세요'); return; }
   const driver = document.getElementById('fDriver').value.trim();
   if (!driver) { alert('운전자 이름을 입력하세요'); return; }
-  const assist = assistList.join(', ');
+  const assist = (document.getElementById('fAssist')?.value || '').trim();
   closeStartForm();
   startSession(eventId, courseId, teamId, { driver, assist });
 }
@@ -631,6 +557,9 @@ function startSession(eventId, courseId, teamId, crew) {
 
   renderAnchorRows();
   renderMapForSession();
+
+  // 텔레그램: 코스 시작 알림
+  sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${crew?.driver || '-'}${crew?.assist ? '\n보조: ' + crew.assist : ''}\n시작: ${new Date().toLocaleString('ko-KR')}`);
 
   // 시작하면 GPS 자동 ON
   if (watchId === null) {
@@ -1111,6 +1040,19 @@ function finishCourse() {
   fresh.logs.push({ ...currentSession });
   saveData(fresh);
 
+  // 텔레그램: 코스 완료 알림
+  const event = getEvent(fresh, currentSession.eventId);
+  const course = getCourse(fresh, currentSession.courseId);
+  const totalA = (fresh.anchors || []).filter(a => a.courseId === currentSession.courseId).length;
+  const dur = Math.round((currentSession.finishedAt - currentSession.startedAt) / 60000);
+  const dist = (function() {
+    let d = 0;
+    const t = currentSession.track || [];
+    for (let i = 1; i < t.length; i++) d += distance(t[i-1][0], t[i-1][1], t[i][0], t[i][1]);
+    return (d/1000).toFixed(1);
+  })();
+  sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / 보조: ' + currentSession.crew.assist : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분`);
+
   alert('✅ 코스 완료 보고됨');
   if (watchId !== null) toggleGPS();
   releaseWakeLock();
@@ -1157,6 +1099,8 @@ function requestNewAnchor() {
     return;
   }
   renderMapForSession();
+  // 텔레그램: 거점추가 요청 알림
+  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n요청자: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / ' + currentSession.crew.assist : ''}`);
   alert('관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
 }
 
@@ -1190,6 +1134,9 @@ function reportComplaint() {
     return;
   }
   renderMapForSession();
+  // 텔레그램: 민원 접수 알림
+  const ev = getEvent(data, currentSession.eventId);
+  sendTelegram(`📞 <b>민원 접수</b>\n${ev?.name || ''}\n연락처: ${phone || '-'}\n내용: ${content || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n접수자: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / ' + currentSession.crew.assist : ''}`);
   alert('✅ 민원 접수됨\n관리자가 확인할 수 있습니다.');
 }
 

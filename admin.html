@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260509g">
+  <link rel="stylesheet" href="style.css?v=20260509q">
 </head>
 <body>
 <header>
@@ -122,6 +122,26 @@
         <div id="teamList"></div>
       </div>
 
+      <!-- 텔레그램 알림 -->
+      <div class="card" style="border-left:4px solid #0088cc;">
+        <h2>📱 텔레그램 알림</h2>
+        <p class="muted" style="font-size:11px;margin-bottom:6px;">
+          로그인 / 시작 / 거점추가 / 종료 시 텔레그램으로 알림 받기
+        </p>
+        <label>봇 토큰</label>
+        <input id="tgBot" type="text" placeholder="123456:ABC-DEF...">
+        <label>채팅 ID</label>
+        <input id="tgChat" type="text" placeholder="-100123456789 또는 본인 ID">
+        <label style="display:flex;align-items:center;margin-top:8px;cursor:pointer;">
+          <input id="tgEnabled" type="checkbox" style="width:18px;height:18px;margin-right:6px;">
+          <span>알림 켜기</span>
+        </label>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="small success" style="flex:1;" onclick="saveTelegramConfig()">저장</button>
+          <button class="small" onclick="testTelegram()">📨 테스트</button>
+        </div>
+      </div>
+
       <!-- 스케줄 -->
       <div class="card">
         <div class="flex-between"><h2>운영 스케줄</h2>
@@ -137,8 +157,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509g"></script>
-<script src="common.js?v=20260509g"></script>
+<script src="firebase-config.js?v=20260509q"></script>
+<script src="common.js?v=20260509q"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -542,7 +562,47 @@ function refreshAll() {
   renderComplaints();
   renderTeams();
   renderSchedules();
+  renderTelegramConfig();
   renderMap();
+}
+
+function renderTelegramConfig() {
+  const data = loadData();
+  const cfg = data.telegram || {};
+  if (document.getElementById('tgBot')) document.getElementById('tgBot').value = cfg.botToken || '';
+  if (document.getElementById('tgChat')) document.getElementById('tgChat').value = cfg.chatId || '';
+  if (document.getElementById('tgEnabled')) document.getElementById('tgEnabled').checked = !!cfg.enabled;
+}
+
+function saveTelegramConfig() {
+  const data = loadData();
+  data.telegram = {
+    botToken: document.getElementById('tgBot').value.trim(),
+    chatId: document.getElementById('tgChat').value.trim(),
+    enabled: document.getElementById('tgEnabled').checked
+  };
+  saveData(data);
+  alert('✅ 저장됨');
+}
+
+async function testTelegram() {
+  const data = loadData();
+  const cfg = data.telegram || {};
+  if (!cfg.botToken || !cfg.chatId) { alert('봇 토큰과 채팅 ID를 먼저 입력하세요'); return; }
+  // 일시적으로 enabled 무시하고 보내기 위해 cfg 직접 호출
+  try {
+    const url = `https://api.telegram.org/bot${cfg.botToken}/sendMessage`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: cfg.chatId, text: '✅ 방역코스 시스템 테스트 메시지', parse_mode: 'HTML' })
+    });
+    const j = await res.json();
+    if (j.ok) alert('✅ 텔레그램 전송 성공');
+    else alert('❌ 실패: ' + (j.description || JSON.stringify(j)));
+  } catch (e) {
+    alert('❌ 오류: ' + e.message);
+  }
 }
 
 // ────── 행사 ──────
@@ -779,15 +839,24 @@ function renderAnchors() {
   el.innerHTML = anchors.map((a, i) => `
     <div class="list-item">
       <div class="info">
-        <div class="name">${i+1}. ${a.name}</div>
+        <div class="name">${a.featured ? '⭐ ' : ''}${i+1}. ${a.name}</div>
         <div class="sub">${a.memo || '메모 없음'}</div>
       </div>
+      <button class="small ${a.featured ? 'success' : 'gray'}" onclick="toggleFeaturedAnchor('${a.id}')" title="대표 거점 표시">⭐</button>
       <button class="small gray" onclick="moveAnchor('${a.id}', -1)">↑</button>
       <button class="small gray" onclick="moveAnchor('${a.id}', 1)">↓</button>
       <button class="small" onclick="editAnchor('${a.id}')">수정</button>
       <button class="small danger" onclick="deleteAnchor('${a.id}')">삭제</button>
     </div>
   `).join('');
+}
+
+function toggleFeaturedAnchor(id) {
+  const data = loadData();
+  const a = data.anchors.find(x => x.id === id);
+  if (!a) return;
+  a.featured = !a.featured;
+  saveData(data); refreshAll();
 }
 function moveAnchor(id, dir) {
   const data = loadData();

@@ -68,8 +68,30 @@ const defaultData = {
   ],
   logs: [],
   requests: [],
-  complaints: []  // 민원: { id, eventId, lat, lng, phone, content, status:'pending'|'resolved', createdAt }
+  complaints: [],  // 민원: { id, eventId, lat, lng, phone, content, status:'pending'|'resolved', createdAt }
+  telegram: { botToken: '', chatId: '', enabled: false }
 };
+
+// ───────── 텔레그램 알림 ─────────
+async function sendTelegram(text) {
+  try {
+    const data = (typeof _cache !== 'undefined' && _cache) || loadData();
+    const cfg = data.telegram || {};
+    if (!cfg.enabled || !cfg.botToken || !cfg.chatId) return;
+    const url = `https://api.telegram.org/bot${cfg.botToken}/sendMessage`;
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: cfg.chatId,
+        text,
+        parse_mode: 'HTML'
+      })
+    });
+  } catch (e) {
+    console.warn('텔레그램 전송 실패:', e);
+  }
+}
 
 // ───────── Firebase 동기화 캐시 ─────────
 let _cache = null;
@@ -186,7 +208,7 @@ function memberEmail(phone) {
 function pinToPassword(pin) {
   return String(pin).padStart(4, '0') + 'bsp';
 }
-const DEFAULT_PIN = '1234';
+const DEFAULT_PIN = '123456';
 
 async function memberLogin(phone, pin) {
   return fbAuth.signInWithEmailAndPassword(memberEmail(phone), pinToPassword(pin));
@@ -272,38 +294,80 @@ function checkAdminAuth() {
   });
 }
 
+// ID → 이메일 변환 (계정 생성/로그인 통일)
+function idToEmail(id) {
+  const t = (id || '').trim();
+  if (!t) return '';
+  if (t.includes('@')) return t; // 이미 이메일이면 그대로
+  return t + '@bsp.local';
+}
+
 function showLoginGate() {
+  const savedId = localStorage.getItem('lastAdminId') || '';
   const html = `
     <div id="loginGate" style="position:fixed;inset:0;background:rgba(44,62,80,0.95);z-index:99999;display:flex;align-items:center;justify-content:center;">
       <div style="background:#fff;padding:30px;border-radius:10px;width:320px;max-width:90vw;">
-        <h2 style="margin-bottom:16px;color:#2c3e50;">🔐 관리자 로그인</h2>
+        <h2 style="margin-bottom:16px;color:#2c3e50;">🔐 로그인</h2>
         <label>이메일</label>
-        <input id="loginEmail" type="email" autocomplete="username">
+        <input id="loginEmail" type="email" autocomplete="username" placeholder="bsp1001@naver.com" value="${savedId}">
         <label>비밀번호</label>
-        <input id="loginPw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+        <input id="loginPw" type="password" autocomplete="current-password" placeholder="초기 비번: 123456" onkeydown="if(event.key==='Enter')doLogin()">
         <div id="loginErr" style="color:#e74c3c;font-size:12px;margin-top:6px;min-height:14px;"></div>
         <button onclick="doLogin()" style="width:100%;margin-top:10px;padding:10px;">로그인</button>
-        <p style="margin-top:10px;font-size:11px;color:#888;text-align:center;">Firebase Auth로 가입한 이메일</p>
+        <p style="margin-top:10px;font-size:11px;color:#888;text-align:center;">관리자가 발급한 이메일/비번 입력</p>
       </div>
     </div>
   `;
   document.body.insertAdjacentHTML('beforeend', html);
-  setTimeout(() => document.getElementById('loginEmail').focus(), 100);
+  const focusTarget = savedId ? 'loginPw' : 'loginEmail';
+  setTimeout(() => document.getElementById(focusTarget).focus(), 100);
+}
+
+// 현재 로그인 사용자의 권한 (admin/super/viewer)
+function getMyRole() {
+  const u = fbAuth.currentUser;
+  if (!u || !u.email || u.isAnonymous) return null;
+  if (typeof _cache === 'undefined' || !_cache) return 'admin'; // 데이터 미로드 시 기본
+  const userInfo = (_cache.users || {})[u.uid];
+  return userInfo?.role || 'admin';
 }
 
 async function doLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
+  const id = document.getElementById('loginEmail').value.trim();
+  const email = idToEmail(id);
   const pw = document.getElementById('loginPw').value;
   const err = document.getElementById('loginErr');
   err.textContent = '로그인 중...';
   try {
     await adminSignIn(email, pw);
+    localStorage.setItem('lastAdminId', id);
     document.getElementById('loginGate').remove();
     initFirebaseSync();
     if (window.onAuthSuccess) window.onAuthSuccess();
+    // 텔레그램: 로그인 알림 (Firebase 데이터 도착 후)
+    onDataReady(() => {
+      const u = (loadData().users || {})[fbAuth.currentUser?.uid] || {};
+      sendTelegram(`🔐 <b>관리자 로그인</b>\nID: ${id}\n이름: ${u.name || '-'}\n시각: ${new Date().toLocaleString('ko-KR')}`);
+    });
+    // 초기비번 123456면 변경 강제
+    if (pw === '123456') setTimeout(promptPasswordChange, 600);
   } catch (e) {
-    err.textContent = '로그인 실패: ' + (e.message.includes('password') || e.message.includes('user') ? '아이디/비밀번호 확인' : e.message);
+    err.textContent = '로그인 실패: ' + (e.message.includes('password') || e.message.includes('user') ? 'ID/비번 확인' : e.message);
     document.getElementById('loginPw').value = '';
+  }
+}
+
+async function promptPasswordChange() {
+  alert('초기 비밀번호(123456) 사용 중. 안전을 위해 새 비밀번호로 변경하세요.');
+  const np = prompt('새 비밀번호 (6자 이상)');
+  if (!np || np.length < 6) { alert('6자 이상이어야 합니다. 나중에 다시 시도하세요.'); return; }
+  const np2 = prompt('새 비밀번호 한 번 더');
+  if (np !== np2) { alert('일치하지 않습니다. 나중에 다시 시도하세요.'); return; }
+  try {
+    await fbAuth.currentUser.updatePassword(np);
+    alert('✅ 비밀번호 변경 완료');
+  } catch (e) {
+    alert('변경 실패: ' + e.message + '\n\n다시 로그인 후 시도하세요.');
   }
 }
 

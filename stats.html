@@ -7,12 +7,13 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>통계 - 방역 횟수</title>
-  <link rel="stylesheet" href="style.css?v=20260509g">
+  <link rel="stylesheet" href="style.css?v=20260509q">
   <style>
     table { width:100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 6px 8px; border: 1px solid #ddd; text-align: center; }
     th { background: #34495e; color: #fff; position: sticky; top: 0; }
-    td:first-child { text-align: left; font-weight: 600; background: #f8f9fa; }
+    td:first-child { text-align: left; font-weight: 600; background: #f8f9fa; white-space: nowrap; }
+    th:first-child { white-space: nowrap; }
     tr:hover td { background: #fffde7; }
     .num-zero { color: #ccc; }
     .num-high { background: #c8e6c9; font-weight: 700; }
@@ -105,14 +106,17 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509g"></script>
-<script src="common.js?v=20260509g"></script>
+<script src="firebase-config.js?v=20260509q"></script>
+<script src="common.js?v=20260509q"></script>
 <script>
 let memberChart, courseChart;
 
 window.onAuthSuccess = () => onDataReady(render);
 window.onDataChanged = () => render();
 checkAdminAuth().then(ok => { if (ok) onDataReady(render); });
+
+// 관리자만 들어올 수 있으니 항상 admin 권한
+function isEventVisibleForViewer() { return true; }
 
 function onPeriodChange() {
   const period = document.getElementById('period').value;
@@ -166,6 +170,7 @@ function getFilteredLogs() {
     if (t < from || t > to) return false;
     if (!l.finishedAt) return false;
     if (eventFilter && l.eventId !== eventFilter) return false;
+    if (!isEventVisibleForViewer(l.eventId, data)) return false;
     return true;
   });
 }
@@ -175,8 +180,9 @@ function renderEventFilterOptions() {
   if (!sel) return;
   const data = loadData();
   const cur = sel.value;
+  const visible = (data.events || []).filter(e => isEventVisibleForViewer(e.id, data));
   sel.innerHTML = '<option value="">전체 행사</option>' +
-    (data.events || []).map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
+    visible.map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
 }
 
 // 한 로그에서 그룹 키 뽑아내기 (groupBy에 따라)
@@ -217,10 +223,13 @@ function render() {
   const titleEl = document.getElementById('memberChartTitle');
   if (titleEl) titleEl.textContent = labels.title;
 
-  // 행사 필터에 맞는 코스만 (필터 없으면 전체)
+  // 행사 필터에 맞는 코스만 (필터 없으면 전체) + 비관리자는 숨김 행사 제외
   const eventFilter = document.getElementById('eventFilter')?.value || '';
   const courses = [];
+  const visibleEventIds = new Set();
   for (const e of data.events) {
+    if (!isEventVisibleForViewer(e.id, data)) continue;
+    visibleEventIds.add(e.id);
     if (eventFilter && e.id !== eventFilter) continue;
     for (const c of e.courses) courses.push({ id: c.id, label: `${e.name}-${c.name}`, color: c.color });
   }

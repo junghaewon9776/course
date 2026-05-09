@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>인쇄용 - 방역코스</title>
+  <link rel="stylesheet" href="style.css?v=20260509q">
+  <style>
+    body { background: #fff; }
+    .print-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
+    .print-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .print-toolbar select, .print-toolbar button, .print-toolbar input { padding: 6px 10px; }
+
+    /* 크기 설정 — body에 size class 붙임 */
+    body.sz-s .print-content { font-size: 11px; }
+    body.sz-s .team-header, body.sz-s .warn-box { font-size: 14px; }
+    body.sz-s .team-table th, body.sz-s .team-table td { padding: 3px 5px; }
+    body.sz-s .course-item { padding: 6px 8px; }
+
+    body.sz-m .print-content { font-size: 13px; }
+    body.sz-m .team-header { font-size: 16px; }
+    body.sz-m .warn-box { font-size: 18px; }
+
+    body.sz-l .print-content { font-size: 16px; }
+    body.sz-l .team-header { font-size: 20px; }
+    body.sz-l .warn-box { font-size: 22px; }
+    body.sz-l .team-table th, body.sz-l .team-table td { padding: 8px 10px; }
+
+    .teams-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+    .team-table { width: 100%; border-collapse: collapse; border: 2px solid #1f2937; }
+    .team-table th, .team-table td { border: 1px solid #4b5563; padding: 6px 8px; }
+    .team-header { background: #87ceeb; font-weight: 700; text-align: center; }
+    .team-header.t2 { background: #fde68a; }
+    .team-header.t3 { background: #fca5a5; }
+    .team-header.t4 { background: #c4b5fd; }
+    .team-header.t5 { background: #a7f3d0; }
+    .role-cell { background: #f3f4f6; font-weight: 600; text-align: center; width: 60px; }
+    .name-cell { font-weight: 600; }
+    .phone-cell { white-space: nowrap; font-family: monospace; }
+
+    .reserve-box { margin-top: 8px; padding: 8px; border: 2px solid #6b7280; background: #f9fafb; text-align: center; }
+    .reserve-box b { color: #374151; }
+
+    .warn-box { background: #fef3c7; border: 2px solid #d97706; padding: 10px; text-align: center; font-weight: 700; color: #b91c1c; margin: 12px 0; white-space: pre-wrap; }
+
+    .course-list { margin-top: 14px; }
+    .course-item { margin: 8px 0; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px; }
+    .course-item .label { font-weight: 700; margin-bottom: 4px; }
+    .course-item .anchors { line-height: 1.7; }
+
+    .notes { margin-top: 16px; line-height: 1.7; color: #374151; }
+    .notes p { margin: 2px 0; font-size: 12px; }
+
+    .qr-row { display: flex; gap: 14px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+    .qr-cell { text-align: center; font-size: 12px; }
+    .qr-cell img { display: block; margin: 0 auto 4px; }
+
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff; }
+      .print-wrap { padding: 8px; max-width: none; }
+      .course-item { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body class="sz-m">
+<div class="print-wrap">
+  <div class="print-toolbar no-print">
+    <a href="index.html" class="btn gray small">← 홈</a>
+    <label>행사:</label>
+    <select id="eventFilter" onchange="render()">
+      <option value="">전체</option>
+    </select>
+    <label>크기:</label>
+    <select id="sizeSel" onchange="changeSize()">
+      <option value="sz-s">작게</option>
+      <option value="sz-m" selected>보통</option>
+      <option value="sz-l">크게</option>
+    </select>
+    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+      <input id="onlyFeatured" type="checkbox" onchange="render()">
+      <span>⭐ 대표거점만</span>
+    </label>
+    <button class="success" onclick="window.print()">🖨 인쇄</button>
+    <button class="small" onclick="editNotice()">✎ 공지 편집</button>
+    <span style="color:#888;font-size:12px;">PC: Ctrl+P / 폰: 메뉴 → 인쇄/PDF</span>
+  </div>
+
+  <div id="printContent" class="print-content"></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js?v=20260509q"></script>
+<script src="common.js?v=20260509q"></script>
+<script>
+window.onAuthSuccess = () => onDataReady(initEventFilter);
+window.onDataChanged = () => render();
+checkAdminAuth().then(ok => { if (ok) onDataReady(initEventFilter); });
+
+function initEventFilter() {
+  const data = loadData();
+  const sel = document.getElementById('eventFilter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">전체</option>' +
+    (data.events || []).map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
+  render();
+}
+
+function changeSize() {
+  const v = document.getElementById('sizeSel').value;
+  document.body.className = v;
+}
+
+function editNotice() {
+  const data = loadData();
+  const cur = data.printNotice || '⚠ 우천시 방역 금지!';
+  const next = prompt('인쇄 시 표시할 공지 멘트 (줄바꿈 가능)', cur);
+  if (next === null) return;
+  data.printNotice = next;
+  saveData(data);
+}
+
+function render() {
+  const data = loadData();
+  const eventFilter = document.getElementById('eventFilter').value;
+
+  // ─── 조 테이블 ───
+  const teams = data.teams || [];
+  const teamTables = teams.map((t, idx) => {
+    const headerClass = ['', 't2', 't3', 't4', 't5'][idx % 5];
+    const leader = getMember(data, t.leaderId);
+    const vice = getMember(data, t.viceLeaderId);
+    const memberRows = (t.memberIds || []).map(id => {
+      const m = getMember(data, id);
+      if (!m) return '';
+      return `
+        <tr>
+          <td class="role-cell">팀원</td>
+          <td class="name-cell">${m.name}</td>
+          <td class="phone-cell">${m.phone || ''}</td>
+        </tr>
+      `;
+    }).join('');
+    return `
+      <table class="team-table">
+        <tr><td colspan="3" class="team-header ${headerClass}">${t.name}</td></tr>
+        <tr>
+          <td class="role-cell">조장</td>
+          <td class="name-cell">${leader?.name || ''}</td>
+          <td class="phone-cell">${leader?.phone || ''}</td>
+        </tr>
+        <tr>
+          <td class="role-cell">부조장</td>
+          <td class="name-cell">${vice?.name || ''}</td>
+          <td class="phone-cell">${vice?.phone || ''}</td>
+        </tr>
+        ${memberRows}
+      </table>
+    `;
+  }).join('');
+
+  // ─── 예비조 ───
+  const reserveIds = data.reserveMemberIds || [];
+  const reserveText = reserveIds
+    .map(id => { const m = getMember(data, id); return m ? `${m.position ? m.position + ' ' : ''}${m.name}` : ''; })
+    .filter(Boolean).join(' · ');
+
+  // ─── 행사/코스 + 거점 순서 (대표거점만 옵션) ───
+  const onlyFeatured = document.getElementById('onlyFeatured')?.checked;
+  let courseHtml = '';
+  for (const ev of (data.events || [])) {
+    if (eventFilter && ev.id !== eventFilter) continue;
+    courseHtml += `<h2 style="margin:14px 0 6px;border-bottom:2px solid #1f2937;padding-bottom:4px;">${ev.name}</h2>`;
+    for (const c of (ev.courses || [])) {
+      const allAnchors = (data.anchors || [])
+        .filter(a => a.courseId === c.id)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      const featuredAnchors = allAnchors.filter(a => a.featured);
+      // 대표거점만 모드 + 대표 있으면 그것만, 없으면 전체
+      const useAnchors = (onlyFeatured && featuredAnchors.length) ? featuredAnchors : allAnchors;
+      if (!useAnchors.length) {
+        courseHtml += `<div class="course-item"><div class="label" style="color:${c.color}">${c.name}</div><div class="sub">거점 없음</div></div>`;
+        continue;
+      }
+      const arrowList = useAnchors.map(a => a.featured ? `<b>⭐${a.name}</b>` : a.name).join(' → ');
+      const noteLabel = (onlyFeatured && featuredAnchors.length)
+        ? `대표 ${featuredAnchors.length}개 / 전체 ${allAnchors.length}개`
+        : `${allAnchors.length}개 거점`;
+      courseHtml += `
+        <div class="course-item">
+          <div class="label" style="color:${c.color}">${c.name} <span style="color:#888;font-weight:400;font-size:0.85em;">(${noteLabel})</span></div>
+          <div class="anchors">출발 → ${arrowList}</div>
+        </div>
+      `;
+    }
+  }
+
+  // ─── QR ───
+  const baseUrl = location.origin + location.pathname.replace(/print\.html$/, '');
+  const todayUrl = baseUrl + 'today.html';
+  const monitorUrl = baseUrl + 'monitor.html';
+  const qrSize = 130;
+  const qrApi = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(url)}`;
+
+  // ─── 공지 ───
+  const notice = (data.printNotice || '⚠ 우천시 방역 금지!').replace(/</g, '&lt;');
+
+  document.getElementById('printContent').innerHTML = `
+    <div class="teams-grid">
+      ${teamTables}
+    </div>
+
+    ${reserveIds.length ? `
+      <div class="reserve-box">
+        <b>🔁 예비조 (인원 부족시 대리방역):</b>
+        <span style="margin-left:6px;">${reserveText}</span>
+      </div>
+    ` : ''}
+
+    <div class="warn-box">${notice}</div>
+
+    <div class="course-list">
+      ${courseHtml || '<div class="empty">코스가 없습니다</div>'}
+    </div>
+
+    <div class="notes">
+      <p>※ 방역 참여인원은 방역기록시트에 입력하고 사무국장에게 카톡으로 출석문자 발송 필</p>
+      <p>※ 방역 실시후 사무국장에게 출발사진 및 방역 실시 사진 3매 이상 발송 필</p>
+      <p>※ 각 조장님들께서는 해당 일자에 조원분들 편성 통제해주시기 바랍니다.</p>
+    </div>
+
+    <div class="qr-row">
+      <div class="qr-cell">
+        <img src="${qrApi(todayUrl)}" alt="오늘운영 QR" width="${qrSize}" height="${qrSize}">
+        오늘운영 (방역 시작)
+      </div>
+      <div class="qr-cell">
+        <img src="${qrApi(monitorUrl)}" alt="모니터링 QR" width="${qrSize}" height="${qrSize}">
+        모니터링
+      </div>
+    </div>
+  `;
+}
+</script>
+</body>
+</html>

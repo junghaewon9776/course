@@ -7,7 +7,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260509g">
+  <link rel="stylesheet" href="style.css?v=20260509q">
+  <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
 <header>
@@ -30,11 +31,11 @@
     <div class="col" style="flex:1;min-width:320px;">
       <div class="card">
         <div class="flex-between"><h2>회원 목록 <span id="memberCount" class="muted"></span></h2>
-          <div>
+          <div class="admin-only">
             <button class="small" onclick="addMember()">+ 추가</button>
           </div>
         </div>
-        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
+        <div class="admin-only" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;">
           <button class="small gray" onclick="downloadMemberTemplate()">📄 양식</button>
           <button class="small gray" onclick="exportMembersCSV()">⬇️ 다운로드</button>
           <button class="small gray" onclick="document.getElementById('memUpload').click()">📤 엑셀 업로드</button>
@@ -58,7 +59,7 @@
       <div class="card">
         <div class="flex-between">
           <h2>방역조 편성</h2>
-          <div>
+          <div class="admin-only">
             <button onclick="randomAssign()" class="success">🎲 팀짜기</button>
             <button onclick="saveTeamSnapshot()">💾 현재 팀 저장</button>
             <button onclick="resetTeams()" class="gray small">조원 리셋</button>
@@ -81,14 +82,18 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509g"></script>
-<script src="common.js?v=20260509g"></script>
+<script src="firebase-config.js?v=20260509q"></script>
+<script src="common.js?v=20260509q"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
 checkAdminAuth().then(ok => { if (ok) onDataReady(refreshAll); });
 
+// 권한에 따라 isAdmin 결정 (viewer면 조회만)
+let isAdmin = true;
+
 function refreshAll() {
+  document.body.classList.toggle('viewer-mode', !isAdmin);
   renderMembers();
   renderTeams();
   renderSavedTeams();
@@ -156,17 +161,26 @@ function renderMembers() {
       html += `<h3 style="margin:12px 0 6px;color:#34495e;border-bottom:2px solid #34495e;padding-bottom:4px;">${pos} <span class="muted" style="font-size:11px;">(${groupCount}명)</span></h3><div>`;
     }
     const hasAccount = !!memberUidByMemberId[m.id];
+    const phoneTel = (m.phone || '').replace(/[^0-9+]/g, '');
+    const phoneHtml = m.phone
+      ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;" onclick="event.stopPropagation()">📞 ${m.phone}</a>`
+      : '';
+    const posTag = m.position
+      ? ` <span class="tag" style="background:#34495e;color:#fff;">${m.position}</span>`
+      : '';
     html += `
       <div class="list-item">
         <div class="info">
-          <div class="name">${m.name} <span class="sub">${m.phone || ''}</span> ${hasAccount ? '<span class="tag" style="background:#27ae60">🔑</span>' : ''}</div>
+          <div class="name">${m.name}${posTag} <span class="sub">${phoneHtml}</span> ${hasAccount ? '<span class="tag" style="background:#27ae60">🔑</span>' : ''}</div>
           <div class="sub">${assignedTo[m.id] || '<span style="color:#aaa;">조 미배정</span>'}${m.birthday ? ' · 🎂 ' + m.birthday : ''}${m.address ? ' · 📍 ' + m.address : ''}${m.note ? ' · ' + m.note : ''}</div>
         </div>
-        ${hasAccount
-          ? `<button class="small gray" onclick="resetMemberPin('${m.id}')">PIN</button>`
-          : `<button class="small success" onclick="makeMemberAccount('${m.id}')">계정</button>`}
-        <button class="small" onclick="editMember('${m.id}')">수정</button>
-        <button class="small danger" onclick="deleteMember('${m.id}')">삭제</button>
+        <span class="admin-only">
+          ${hasAccount
+            ? `<button class="small gray" onclick="resetMemberPin('${m.id}')">PIN</button>`
+            : `<button class="small success" onclick="makeMemberAccount('${m.id}')">계정</button>`}
+          <button class="small" onclick="editMember('${m.id}')">수정</button>
+          <button class="small danger" onclick="deleteMember('${m.id}')">삭제</button>
+        </span>
       </div>
     `;
   }
@@ -456,12 +470,16 @@ function renderTeams() {
       const m = getMember(data, id);
       if (!m) return '';
       const isFixed = fixed.has(id);
+      const phoneTel = (m.phone || '').replace(/[^0-9+]/g, '');
+      const phoneCell = m.phone
+        ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;">📞 ${m.phone}</a>`
+        : '';
       return `
         <tr style="${isFixed ? 'background:#fff8e1;' : ''}">
           <td style="color:#888;font-size:11px;width:50px;padding:6px 4px;">회원${idx+1}</td>
           <td style="padding:6px 4px;"><b>${m.name}</b></td>
-          <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${m.phone || ''}</td>
-          <td style="width:50px;text-align:right;padding:6px 4px;">
+          <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${phoneCell}</td>
+          <td class="admin-only" style="width:50px;text-align:right;padding:6px 4px;">
             <span onclick="togglePinMember('${t.id}','${id}')" style="cursor:pointer;font-size:14px;" title="고정/해제">${isFixed ? '📌' : '📍'}</span>
             <span onclick="removeFromTeam('${t.id}','${id}')" style="cursor:pointer;color:#e74c3c;margin-left:2px;">✕</span>
           </td>
@@ -476,14 +494,14 @@ function renderTeams() {
             <span style="font-size:16px;font-weight:700;">${t.name}</span>
             <span style="font-size:11px;opacity:0.8;margin-left:6px;">${total}명</span>
           </div>
-          <button class="small gray" onclick="editTeamInfo('${t.id}')">⚙</button>
+          <button class="small gray admin-only" onclick="editTeamInfo('${t.id}')">⚙</button>
         </div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <tr style="background:#fef3c7;border-bottom:1px solid #eee;">
             <td style="color:#92400e;font-size:11px;width:50px;padding:6px 4px;font-weight:700;">조장</td>
             <td style="padding:6px 4px;"><b>${leader?.name || '<span style="color:#aaa;font-weight:400;">(미지정)</span>'}</b></td>
-            <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${leader?.phone || ''}</td>
-            <td style="padding:4px;width:80px;text-align:right;">
+            <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${leader?.phone ? `<a href="tel:${leader.phone.replace(/[^0-9+]/g,'')}" style="color:#3498db;text-decoration:none;">📞 ${leader.phone}</a>` : ''}</td>
+            <td class="admin-only" style="padding:4px;width:80px;text-align:right;">
               <select onchange="setLeader('${t.id}', this.value)" style="font-size:11px;padding:2px;width:100%;">
                 <option value="">선택</option>
                 ${memberOpts.replace(`value="${t.leaderId}"`, `value="${t.leaderId}" selected`)}
@@ -493,8 +511,8 @@ function renderTeams() {
           <tr style="background:#dbeafe;border-bottom:1px solid #eee;">
             <td style="color:#1e40af;font-size:11px;padding:6px 4px;font-weight:700;">부조장</td>
             <td style="padding:6px 4px;"><b>${vice?.name || '<span style="color:#aaa;font-weight:400;">(미지정)</span>'}</b></td>
-            <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${vice?.phone || ''}</td>
-            <td style="padding:4px;text-align:right;">
+            <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${vice?.phone ? `<a href="tel:${vice.phone.replace(/[^0-9+]/g,'')}" style="color:#3498db;text-decoration:none;">📞 ${vice.phone}</a>` : ''}</td>
+            <td class="admin-only" style="padding:4px;text-align:right;">
               <select onchange="setViceLeader('${t.id}', this.value)" style="font-size:11px;padding:2px;width:100%;">
                 <option value="">선택</option>
                 ${memberOpts.replace(`value="${t.viceLeaderId}"`, `value="${t.viceLeaderId}" selected`)}
@@ -503,7 +521,7 @@ function renderTeams() {
           </tr>
           ${memberRows || '<tr><td colspan="4" style="padding:14px;text-align:center;color:#aaa;font-size:12px;">조원 없음<br>(팀짜기 또는 직접 추가)</td></tr>'}
         </table>
-        <div style="padding:6px;background:#f8f9fa;display:flex;gap:4px;border-top:1px solid #eee;">
+        <div class="admin-only" style="padding:6px;background:#f8f9fa;display:flex;gap:4px;border-top:1px solid #eee;">
           <select id="addToTeam_${t.id}" style="flex:1;font-size:12px;padding:3px;">
             <option value="">조원 추가...</option>
             ${memberOpts}
@@ -514,11 +532,72 @@ function renderTeams() {
     `;
   }).join('');
 
+  // 예비조 카드
+  const reserveIds = data.reserveMemberIds || [];
+  const reserveRows = reserveIds.map(id => {
+    const m = getMember(data, id);
+    if (!m) return '';
+    const phoneTel = (m.phone || '').replace(/[^0-9+]/g, '');
+    const phoneCell = m.phone
+      ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;">📞 ${m.phone}</a>`
+      : '';
+    return `
+      <tr>
+        <td style="padding:6px 4px;"><b>${m.name}</b> <span class="sub">${m.position || ''}</span></td>
+        <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${phoneCell}</td>
+        <td class="admin-only" style="width:30px;text-align:right;padding:6px 4px;">
+          <span onclick="removeFromReserve('${id}')" style="cursor:pointer;color:#e74c3c;">✕</span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const reserveCard = `
+    <div style="border:1px solid #ddd;border-radius:8px;background:#fff;overflow:hidden;border-left:4px solid #95a5a6;">
+      <div style="background:#7f8c8d;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <span style="font-size:16px;font-weight:700;">🔁 예비조</span>
+          <span style="font-size:11px;opacity:0.8;margin-left:6px;">${reserveIds.length}명 · 랜덤 분배 제외</span>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        ${reserveRows || '<tr><td colspan="3" style="padding:14px;text-align:center;color:#aaa;font-size:12px;">예비조 회원 없음<br>(아래에서 추가)</td></tr>'}
+      </table>
+      <div class="admin-only" style="padding:6px;background:#f8f9fa;display:flex;gap:4px;border-top:1px solid #eee;">
+        <select id="addToReserve" style="flex:1;font-size:12px;padding:3px;">
+          <option value="">예비조 추가...</option>
+          ${memberOpts}
+        </select>
+        <button class="small" onclick="addToReserve()">+</button>
+      </div>
+    </div>
+  `;
+
   document.getElementById('teamPanels').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;">
       ${teamCards}
+      ${reserveCard}
     </div>
   `;
+}
+
+function addToReserve() {
+  const sel = document.getElementById('addToReserve');
+  const memberId = sel.value;
+  if (!memberId) return;
+  const data = loadData();
+  if (!data.reserveMemberIds) data.reserveMemberIds = [];
+  if (data.reserveMemberIds.includes(memberId)) { alert('이미 예비조에 있습니다'); return; }
+  // 다른 조에 있으면 거기서 제거
+  removeFromAllTeams(data, memberId);
+  data.reserveMemberIds.push(memberId);
+  saveData(data);
+}
+
+function removeFromReserve(memberId) {
+  const data = loadData();
+  data.reserveMemberIds = (data.reserveMemberIds || []).filter(id => id !== memberId);
+  saveData(data);
 }
 
 function setLeader(teamId, memberId) {
@@ -604,12 +683,15 @@ function randomAssign() {
     for (const id of (t.fixedMemberIds || [])) fixedIds.add(id);
   }
 
-  // 일반 조원 후보 = 전체 - 고정된 회원
+  // 예비조 회원 (랜덤 분배 제외)
+  const reserveIds = new Set(data.reserveMemberIds || []);
+
+  // 일반 조원 후보 = 전체 - 고정된 회원 - 예비조
   const candidates = (data.members || [])
-    .filter(m => !fixedIds.has(m.id))
+    .filter(m => !fixedIds.has(m.id) && !reserveIds.has(m.id))
     .map(m => m.id);
 
-  if (candidates.length === 0) { alert('랜덤 배정할 회원이 없습니다 (전부 고정됨)'); return; }
+  if (candidates.length === 0) { alert('랜덤 배정할 회원이 없습니다 (전부 고정/예비조)'); return; }
 
   // 셔플
   for (let i = candidates.length - 1; i > 0; i--) {

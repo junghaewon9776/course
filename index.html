@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>법성포청년회 - 코스 관리 시스템</title>
-  <link rel="stylesheet" href="style.css?v=20260509g">
+  <link rel="stylesheet" href="style.css?v=20260509q">
 </head>
 <body>
 <header>
@@ -47,6 +47,11 @@
       <div class="title">계정관리</div>
       <div class="desc">관리자 계정 추가·권한</div>
     </a>
+    <a href="print.html" class="menu-card">
+      <div class="icon">🖨</div>
+      <div class="title">인쇄용</div>
+      <div class="desc">조·코스·QR 한 페이지로</div>
+    </a>
   </div>
 
   <div class="card" style="max-width:600px;margin:0 auto;">
@@ -66,8 +71,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509g"></script>
-<script src="common.js?v=20260509g"></script>
+<script src="firebase-config.js?v=20260509q"></script>
+<script src="common.js?v=20260509q"></script>
 <script>
   ensureAnonAuth().then(() => {
     initFirebaseSync();

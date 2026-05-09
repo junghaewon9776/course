@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>계정관리</title>
-  <link rel="stylesheet" href="style.css?v=20260509g">
+  <link rel="stylesheet" href="style.css?v=20260509q">
 </head>
 <body>
 <header>
@@ -44,14 +44,13 @@
   <div id="addCard" class="card" style="display:none;border:2px solid #3498db;">
     <h2>+ 새 계정 추가</h2>
     <label>이메일</label>
-    <input id="newEmail" type="email" placeholder="manager@bsp.com">
-    <label>비밀번호 (6자 이상)</label>
-    <input id="newPw" type="text" placeholder="bsp1234">
+    <input id="newEmail" type="email" placeholder="bsp1001@naver.com">
     <label>이름 (표시용)</label>
-    <input id="newName" type="text" placeholder="홍길동">
+    <input id="newName" type="text" placeholder="정해원">
     <label>권한</label>
     <select id="newRole">
-      <option value="admin">admin (일반 관리자)</option>
+      <option value="viewer">viewer (인원/통계 조회만)</option>
+      <option value="admin">admin (일반 관리자, 수정 가능)</option>
       <option value="super">super (모든 권한 + 계정관리)</option>
     </select>
     <div style="display:flex;gap:6px;margin-top:10px;">
@@ -59,7 +58,8 @@
       <button class="gray" onclick="closeAddAccount()">취소</button>
     </div>
     <p class="muted" style="font-size:11px;margin-top:6px;">
-      ⚠️ 생성하면 그 사람이 이 이메일/비번으로 로그인 가능. 비번을 본인에게 안전하게 전달하세요.
+      💡 초기 비밀번호는 자동으로 <b>123456</b>입니다. 본인에게 이메일·초기비번 전달 →
+      첫 로그인 시 본인이 새 비번으로 변경합니다.
     </p>
   </div>
 </div>
@@ -67,8 +67,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509g"></script>
-<script src="common.js?v=20260509g"></script>
+<script src="firebase-config.js?v=20260509q"></script>
+<script src="common.js?v=20260509q"></script>
 <script>
 // 계정 생성용 보조 Firebase 앱 (현재 로그인 유지하기 위함)
 let secondaryApp = null;
@@ -165,24 +165,23 @@ function openAddAccount() {
 function closeAddAccount() {
   document.getElementById('addCard').style.display = 'none';
   document.getElementById('newEmail').value = '';
-  document.getElementById('newPw').value = '';
   document.getElementById('newName').value = '';
 }
 
 async function createAccount() {
   const email = document.getElementById('newEmail').value.trim();
-  const pw = document.getElementById('newPw').value;
   const name = document.getElementById('newName').value.trim();
   const role = document.getElementById('newRole').value;
-  if (!email || !pw || !name) { alert('모두 입력하세요'); return; }
-  if (pw.length < 6) { alert('비밀번호는 6자 이상'); return; }
+  if (!email || !name) { alert('이메일과 이름을 입력하세요'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('올바른 이메일 형식이 아닙니다'); return; }
+
+  const pw = '123456';
 
   try {
-    // 보조 앱으로 가입 (현재 로그인 유지)
     const secAuth = getSecondaryAuth();
     const cred = await secAuth.createUserWithEmailAndPassword(email, pw);
     const newUid = cred.user.uid;
-    await secAuth.signOut(); // 보조 앱 로그아웃
+    await secAuth.signOut();
 
     const data = loadData();
     if (!data.users) data.users = {};
@@ -193,7 +192,7 @@ async function createAccount() {
     };
     saveData(data);
     closeAddAccount();
-    alert(`✅ 계정 생성 완료\n\n${name}님께 이메일/비번 전달하세요.`);
+    alert(`✅ 계정 생성 완료\n\n${name}님께 전달:\n  이메일: ${email}\n  초기 비번: 123456\n\n첫 로그인 후 본인이 비번을 바꾸도록 안내하세요.`);
   } catch (e) {
     alert('생성 실패: ' + e.message);
   }
