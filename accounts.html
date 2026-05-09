@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>계정관리</title>
-  <link rel="stylesheet" href="style.css?v=20260509q">
+  <link rel="stylesheet" href="style.css?v=20260510b">
 </head>
 <body>
 <header>
@@ -67,8 +67,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509q"></script>
-<script src="common.js?v=20260509q"></script>
+<script src="firebase-config.js?v=20260510b"></script>
+<script src="common.js?v=20260510b"></script>
 <script>
 // 계정 생성용 보조 Firebase 앱 (현재 로그인 유지하기 위함)
 let secondaryApp = null;
@@ -130,6 +130,7 @@ function renderAccounts() {
         </div>
         ${myRole === 'super' && !isMe ? `
           <button class="small" onclick="changeRole('${uid}', '${u.role||'admin'}')">권한</button>
+          <button class="small" style="background:#9b59b6;" onclick="resetPassword('${uid}')">🔑 비번재설정</button>
           <button class="small ${u.disabled?'success':'danger'}" onclick="toggleDisabled('${uid}')">${u.disabled?'활성화':'비활성'}</button>
           <button class="small danger" onclick="removeAccount('${uid}')">제거</button>
         ` : ''}
@@ -195,6 +196,26 @@ async function createAccount() {
     alert(`✅ 계정 생성 완료\n\n${name}님께 전달:\n  이메일: ${email}\n  초기 비번: 123456\n\n첫 로그인 후 본인이 비번을 바꾸도록 안내하세요.`);
   } catch (e) {
     alert('생성 실패: ' + e.message);
+  }
+}
+
+async function resetPassword(uid) {
+  const data = loadData();
+  const u = (data.users || {})[uid];
+  if (!u || !u.email) { alert('계정 정보가 없습니다'); return; }
+
+  // 가짜 이메일 (@bsp.local 등) 인지 체크 — 이런 건 메일 못 보냄
+  if (/@(bsp|viewer)\.local$/i.test(u.email)) {
+    alert(`⚠️ ${u.email}\n\n이 계정은 가짜 이메일 도메인이라 재설정 메일을 받을 수 없습니다.\n\n대신:\n1) 이 계정 [제거]\n2) 새 계정 만들기 (초기비번 123456)\n3) 본인이 첫 로그인 시 비번 변경`);
+    return;
+  }
+
+  if (!confirm(`${u.name || u.email}님의 비밀번호 재설정 메일을 보낼까요?\n\n메일주소: ${u.email}\n\n→ 본인이 메일 받고 직접 새 비번 설정합니다.`)) return;
+  try {
+    await fbAuth.sendPasswordResetEmail(u.email);
+    alert(`✅ ${u.email}로 재설정 메일 발송됨\n\n본인에게 "받은편지함 (또는 스팸함) 확인해서 링크 클릭" 안내해주세요.`);
+  } catch (e) {
+    alert('재설정 메일 발송 실패:\n' + e.message);
   }
 }
 

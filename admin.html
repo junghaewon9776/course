@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260509q">
+  <link rel="stylesheet" href="style.css?v=20260510b">
 </head>
 <body>
 <header>
@@ -39,6 +39,35 @@
             </select>
           </div>
         </div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;" id="modeButtons">
+          <button class="small mode-btn" data-mode="anchor" style="flex:1;min-width:90px;" onclick="toggleMode('anchor')">
+            <span class="mode-dot anchor-dot"></span>거점
+          </button>
+          <button class="small mode-btn" data-mode="complaint" style="flex:1;min-width:90px;" onclick="toggleMode('complaint')">
+            <span class="mode-dot complaint-dot"></span>민원
+          </button>
+          <button class="small mode-btn" data-mode="noSpray" style="flex:1;min-width:90px;" onclick="toggleMode('noSpray')">
+            <span class="mode-dot noSpray-dot"></span>방역불가
+          </button>
+        </div>
+        <style>
+          .mode-btn {
+            background: #fff; color: #2c3e50; border: 1px solid #cbd0d4;
+            display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+            padding: 6px 10px; font-weight: 600;
+          }
+          .mode-dot {
+            display: inline-block; width: 16px; height: 16px;
+            border: 2px solid #95a5a6; border-radius: 50%;
+            background: #fff; flex-shrink: 0;
+          }
+          .mode-btn.active .anchor-dot { background: #27ae60; border-color: #1e8449; }
+          .mode-btn.active .complaint-dot { background: #f1c40f; border-color: #b7950b; }
+          .mode-btn.active .noSpray-dot { background: #e74c3c; border-color: #a93226; }
+          .mode-btn.active[data-mode="anchor"] { background: #d4efdf; border-color: #27ae60; }
+          .mode-btn.active[data-mode="complaint"] { background: #fcf3cf; border-color: #f1c40f; }
+          .mode-btn.active[data-mode="noSpray"] { background: #fadbd8; border-color: #e74c3c; }
+        </style>
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <input id="searchInput" type="text" placeholder="주소 또는 장소 검색 (예: 영광읍사무소, 영광로 123)" onkeydown="if(event.key==='Enter')searchPlace()">
           <button onclick="searchPlace()" style="white-space:nowrap;">🔍 검색</button>
@@ -87,8 +116,18 @@
         <input type="file" id="csvUpload" accept=".csv,.xlsx,.xls" style="display:none">
         <label>대상 코스</label>
         <select id="anchorCourseSel" onchange="renderAnchors()"></select>
-        <div style="margin-top:6px;">
+        <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="small" style="background:#9b59b6;" onclick="startReorderMode()">🔗 순서 다시 짜기</button>
           <button class="small danger" onclick="deleteCourseAnchors()">🗑 이 코스 거점 모두 삭제</button>
+        </div>
+        <div id="reorderBanner" style="display:none;margin-top:6px;padding:8px;background:#fef3c7;border:2px solid #d97706;border-radius:6px;">
+          <div style="font-weight:700;color:#b45309;margin-bottom:4px;">🔗 순서 다시 짜기 모드</div>
+          <div class="sub" style="margin-bottom:6px;">지도에서 거점을 새 순서대로 클릭하세요. (남은 거점은 자동으로 뒤에 붙음)</div>
+          <div id="reorderProgress" style="font-size:12px;margin-bottom:6px;"></div>
+          <div style="display:flex;gap:6px;">
+            <button class="small success" style="flex:1;" onclick="finishReorderMode()">✓ 완료</button>
+            <button class="small gray" onclick="cancelReorderMode()">취소</button>
+          </div>
         </div>
         <div id="anchorList" style="margin-top:8px;"></div>
         <p class="muted" style="margin-top:6px;font-size:11px;">💡 업로드는 추가 모드 (기존 거점은 유지). 갈아끼우려면 "모두 삭제" 후 업로드</p>
@@ -106,9 +145,8 @@
         <input type="file" id="complaintCsvUpload" accept=".csv,.xlsx,.xls" style="display:none">
         <label>대상 행사</label>
         <select id="complaintEventSel" onchange="renderComplaints()"></select>
-        <div style="display:flex;gap:6px;margin-top:6px;">
-          <button class="small" style="flex:1;background:#e74c3c;" onclick="startAddComplaintByMap()">📍 지도 클릭으로 추가</button>
-          <button class="small" style="flex:1;background:#e74c3c;" onclick="startAddComplaintBySearch()">🔍 주소 검색으로 추가</button>
+        <div style="margin-top:6px;">
+          <button class="small" style="width:100%;background:#e74c3c;font-size:13px;padding:8px;" onclick="startAddComplaint()">+ 민원 추가</button>
         </div>
         <div id="complaintList" style="margin-top:8px;"></div>
         <p class="muted" style="margin-top:6px;font-size:11px;">💡 민원은 운영(today) 지도에 빨간 핀으로 표시되고 클릭하면 전화걸기 가능</p>
@@ -130,8 +168,8 @@
         </p>
         <label>봇 토큰</label>
         <input id="tgBot" type="text" placeholder="123456:ABC-DEF...">
-        <label>채팅 ID</label>
-        <input id="tgChat" type="text" placeholder="-100123456789 또는 본인 ID">
+        <label>채팅 ID (여러 명은 콤마로 구분)</label>
+        <input id="tgChat" type="text" placeholder="8613833560, 1234567, ...">
         <label style="display:flex;align-items:center;margin-top:8px;cursor:pointer;">
           <input id="tgEnabled" type="checkbox" style="width:18px;height:18px;margin-right:6px;">
           <span>알림 켜기</span>
@@ -154,11 +192,12 @@
 </div>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509q"></script>
-<script src="common.js?v=20260509q"></script>
+<script src="firebase-config.js?v=20260510b"></script>
+<script src="common.js?v=20260510b"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -207,15 +246,68 @@ function initMap() {
   refreshAll();
 }
 
-// 클릭 모드: 'anchor' (기본) | 'complaint'
+// 클릭 모드: 'anchor' (기본) | 'complaint' | 'noSpray'
 let pendingClickMode = 'anchor';
 let pendingSearchMode = 'anchor';
+
+function setMode(mode) {
+  pendingClickMode = mode;
+  pendingSearchMode = mode;
+  // 버튼 시각 갱신
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  // 거점 모드 외 옛날 indicator 숨김
+  const ind = document.getElementById('clickModeIndicator');
+  if (ind) ind.style.display = 'none';
+}
+
+function toggleMode(mode) {
+  // 같은 거 다시 누르면 거점(기본)로
+  if (pendingClickMode === mode && mode !== 'anchor') {
+    setMode('anchor');
+    return;
+  }
+  setMode(mode);
+}
+
+function addNoSprayAt(lat, lng, areaHint = '') {
+  const name = prompt('방역불가 지역 이름 (예: 장어 양식장, 양봉장)', areaHint);
+  if (name === null) return;
+  const reason = prompt('이유 / 메모 (선택)', '') || '';
+  const radiusInput = prompt('금지 반경 (미터, 예: 50)', '50');
+  if (radiusInput === null) return;
+  const radius = Math.max(5, parseInt(radiusInput, 10) || 50);
+  const data = loadData();
+  if (!Array.isArray(data.noSprayZones)) data.noSprayZones = [];
+  data.noSprayZones.push({
+    id: uid(),
+    lat, lng,
+    name: (name || '방역불가').trim(),
+    reason: reason.trim(),
+    radius,
+    createdAt: Date.now()
+  });
+  saveData(data);
+  refreshAll();
+}
+
+function deleteNoSprayZone(id) {
+  if (!confirm('이 방역불가 지역을 삭제할까요?')) return;
+  const data = loadData();
+  data.noSprayZones = (data.noSprayZones || []).filter(z => z.id !== id);
+  saveData(data); refreshAll();
+}
 
 function handleMapClick(lat, lng) {
   if (pendingClickMode === 'complaint') {
     addComplaintAt(lat, lng);
-    pendingClickMode = 'anchor';
-    document.getElementById('clickModeIndicator').style.display = 'none';
+    setMode('anchor');
+    return;
+  }
+  if (pendingClickMode === 'noSpray') {
+    addNoSprayAt(lat, lng);
+    setMode('anchor');
     return;
   }
   const data = loadData();
@@ -518,9 +610,15 @@ function pickSearchResult(r) {
 
   // 민원 모드면 민원 추가로 분기
   if (pendingSearchMode === 'complaint') {
-    pendingSearchMode = 'anchor';
-    document.getElementById('clickModeIndicator').style.display = 'none';
     addComplaintAt(r.lat, r.lng, r.name + ' / ' + (r.address || ''));
+    setMode('anchor');
+    closeSearchResults();
+    return;
+  }
+  // 방역불가 모드
+  if (pendingSearchMode === 'noSpray') {
+    addNoSprayAt(r.lat, r.lng, r.name);
+    setMode('anchor');
     closeSearchResults();
     return;
   }
@@ -564,6 +662,10 @@ function refreshAll() {
   renderSchedules();
   renderTelegramConfig();
   renderMap();
+  // 모드 버튼 시각 동기화 (현재 모드 표시)
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === pendingClickMode);
+  });
 }
 
 function renderTelegramConfig() {
@@ -837,9 +939,13 @@ function renderAnchors() {
   const anchors = getCourseAnchors(data, courseId);
   if (!anchors.length) { el.innerHTML = '<div class="empty">지도 클릭으로 거점 추가</div>'; return; }
   el.innerHTML = anchors.map((a, i) => `
-    <div class="list-item">
+    <div class="list-item" data-anchor-id="${a.id}">
+      <span class="drag-handle" style="cursor:grab;padding:0 6px;color:#999;font-size:18px;user-select:none;touch-action:none;">⋮⋮</span>
+      <button class="small gray" onclick="moveAnchorTo('${a.id}', ${anchors.length})" title="순서 직접 입력" style="font-weight:700;min-width:36px;">
+        ${i+1}
+      </button>
       <div class="info">
-        <div class="name">${a.featured ? '⭐ ' : ''}${i+1}. ${a.name}</div>
+        <div class="name">${a.featured ? '⭐ ' : ''}${a.name}</div>
         <div class="sub">${a.memo || '메모 없음'}</div>
       </div>
       <button class="small ${a.featured ? 'success' : 'gray'}" onclick="toggleFeaturedAnchor('${a.id}')" title="대표 거점 표시">⭐</button>
@@ -849,6 +955,113 @@ function renderAnchors() {
       <button class="small danger" onclick="deleteAnchor('${a.id}')">삭제</button>
     </div>
   `).join('');
+
+  // 드래그앤드롭 활성화 (PC/모바일 둘 다)
+  if (window.Sortable) {
+    if (el.__sortable) el.__sortable.destroy();
+    el.__sortable = Sortable.create(el, {
+      handle: '.drag-handle',
+      animation: 150,
+      onEnd: (evt) => {
+        if (evt.oldIndex === evt.newIndex) return;
+        const data = loadData();
+        const courseId = document.getElementById('anchorCourseSel').value;
+        const list = getCourseAnchors(data, courseId);
+        const moved = list[evt.oldIndex];
+        if (!moved) return;
+        const reordered = [...list];
+        reordered.splice(evt.oldIndex, 1);
+        reordered.splice(evt.newIndex, 0, moved);
+        reordered.forEach((a, i) => { a.order = i + 1; });
+        saveData(data); refreshAll();
+      }
+    });
+  }
+}
+
+// ───────── 순서 다시 짜기 모드 ─────────
+let reorderMode = false;
+let reorderCourseId = null;
+let reorderSequence = [];
+
+function startReorderMode() {
+  const courseId = document.getElementById('anchorCourseSel').value;
+  if (!courseId) { alert('먼저 대상 코스를 선택하세요'); return; }
+  reorderMode = true;
+  reorderCourseId = courseId;
+  reorderSequence = [];
+  document.getElementById('reorderBanner').style.display = 'block';
+  updateReorderProgress();
+  renderMap();
+  document.getElementById('map').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function handleReorderClick(anchorId) {
+  if (reorderSequence.includes(anchorId)) {
+    // 같은 거 다시 누르면 마지막 선택 취소
+    reorderSequence = reorderSequence.filter(id => id !== anchorId);
+  } else {
+    reorderSequence.push(anchorId);
+  }
+  updateReorderProgress();
+  renderMap();
+}
+
+function updateReorderProgress() {
+  const data = loadData();
+  const all = getCourseAnchors(data, reorderCourseId);
+  const total = all.length;
+  const done = reorderSequence.length;
+  const lines = reorderSequence.map((id, i) => {
+    const a = all.find(x => x.id === id);
+    return `${i+1}. ${a?.name || ''}`;
+  });
+  document.getElementById('reorderProgress').innerHTML =
+    `<b>${done}/${total}</b> 선택됨` +
+    (lines.length ? '<br>' + lines.join('<br>') : '');
+}
+
+function finishReorderMode() {
+  if (!reorderMode) return;
+  const data = loadData();
+  const all = getCourseAnchors(data, reorderCourseId);
+  // 클릭한 순서 + 안 클릭한 거점은 기존 순서대로 뒤에 붙임
+  const clickedIds = new Set(reorderSequence);
+  const restIds = all.filter(a => !clickedIds.has(a.id)).map(a => a.id);
+  const finalOrder = [...reorderSequence, ...restIds];
+  finalOrder.forEach((id, i) => {
+    const a = data.anchors.find(x => x.id === id);
+    if (a) a.order = i + 1;
+  });
+  saveData(data);
+  cancelReorderMode();
+}
+
+function cancelReorderMode() {
+  reorderMode = false;
+  reorderCourseId = null;
+  reorderSequence = [];
+  document.getElementById('reorderBanner').style.display = 'none';
+  refreshAll();
+}
+
+function moveAnchorTo(id, total) {
+  const data = loadData();
+  const anchor = data.anchors.find(a => a.id === id);
+  if (!anchor) return;
+  const list = getCourseAnchors(data, anchor.courseId);
+  const curIdx = list.indexOf(anchor);
+  const input = prompt(`현재 ${curIdx + 1}번\n\n어느 번호로 옮길까요? (1 ~ ${total})\n예: 3 입력 → 3번 자리로 이동, 나머지 자동 정렬`, String(curIdx + 1));
+  if (input === null) return;
+  const newIdx = parseInt(input, 10) - 1;
+  if (isNaN(newIdx) || newIdx < 0 || newIdx >= total) { alert('잘못된 번호'); return; }
+  if (newIdx === curIdx) return;
+  // 배열에서 빼서 새 위치에 삽입 → order 재할당
+  const reordered = [...list];
+  reordered.splice(curIdx, 1);
+  reordered.splice(newIdx, 0, anchor);
+  reordered.forEach((a, i) => { a.order = i + 1; });
+  saveData(data); refreshAll();
 }
 
 function toggleFeaturedAnchor(id) {
@@ -886,34 +1099,10 @@ function deleteAnchor(id) {
 }
 
 // ────── 민원 ──────
-function startAddComplaintByMap() {
+function startAddComplaint() {
   const eventId = document.getElementById('complaintEventSel').value;
   if (!eventId) { alert('먼저 대상 행사를 선택하세요'); return; }
-  pendingClickMode = 'complaint';
-  const ind = document.getElementById('clickModeIndicator');
-  ind.textContent = '🗺 지도를 클릭하세요 (취소하려면 다시 누름)';
-  ind.style.display = 'inline-block';
-  ind.onclick = () => {
-    pendingClickMode = 'anchor';
-    ind.style.display = 'none';
-  };
-  ind.style.cursor = 'pointer';
-  document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function startAddComplaintBySearch() {
-  const eventId = document.getElementById('complaintEventSel').value;
-  if (!eventId) { alert('먼저 대상 행사를 선택하세요'); return; }
-  pendingSearchMode = 'complaint';
-  const ind = document.getElementById('clickModeIndicator');
-  ind.textContent = '🔍 위 검색창에서 주소 검색 후 결과 클릭';
-  ind.style.display = 'inline-block';
-  ind.onclick = () => {
-    pendingSearchMode = 'anchor';
-    ind.style.display = 'none';
-  };
-  ind.style.cursor = 'pointer';
-  document.getElementById('searchInput').focus();
+  toggleMode('complaint');
   document.getElementById('searchInput').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -955,9 +1144,9 @@ function renderComplaints() {
   el.innerHTML = all.map(c => {
     const resolved = c.status === 'resolved';
     return `
-      <div class="list-item" style="flex-direction:column;align-items:stretch;border-left:3px solid ${resolved ? '#bbb' : '#e74c3c'};${resolved ? 'opacity:0.6;' : ''}">
+      <div class="list-item" style="flex-direction:column;align-items:stretch;border-left:3px solid ${resolved ? '#bbb' : '#f1c40f'};${resolved ? 'opacity:0.6;' : ''}">
         <div class="flex-between">
-          <div><b>${c.phone || '(연락처 없음)'}</b> ${resolved ? '<span class="tag" style="background:#7f8c8d;">처리완료</span>' : '<span class="tag" style="background:#e74c3c;">대기</span>'}</div>
+          <div><b>📞 민원</b> ${resolved ? '<span class="tag" style="background:#7f8c8d;">처리완료</span>' : '<span class="tag" style="background:#f1c40f;color:#000;">대기</span>'}${c.phone ? ` <span class="sub">${c.phone}</span>` : ''}</div>
           <div style="display:flex;gap:4px;">
             <button class="small gray" onclick="centerOnComplaint('${c.id}')" title="지도에서 보기">📍</button>
             <button class="small danger" onclick="deleteComplaint('${c.id}')">삭제</button>
@@ -1252,7 +1441,13 @@ function renderMap() {
       const iw = new kakao.maps.InfoWindow({
         content: `<div style="padding:4px 8px;font-size:12px;"><b>${course.name} ${i+1}</b><br>${a.name}</div>`
       });
-      kakao.maps.event.addListener(marker, 'click', () => iw.open(map, marker));
+      kakao.maps.event.addListener(marker, 'click', () => {
+        if (reorderMode && course.id === reorderCourseId) {
+          handleReorderClick(a.id);
+          return;
+        }
+        toggleInfoWindow(iw, marker, map);
+      });
       kakaoMarkers.push(marker);
       path.push(pos);
     });
@@ -1268,6 +1463,89 @@ function renderMap() {
       }
     }
   }
+
+  // ─── 방역불가 핀 (빨간 ⛔ 아이콘 + 반경 원) ───
+  const noSprayZones = data.noSprayZones || [];
+  noSprayZones.forEach(z => {
+    const radius = z.radius || 50;
+    const pos = new kakao.maps.LatLng(z.lat, z.lng);
+    // 반경 원
+    const circle = new kakao.maps.Circle({
+      center: pos,
+      radius,
+      strokeWeight: 2,
+      strokeColor: '#e74c3c',
+      strokeOpacity: 0.7,
+      strokeStyle: 'solid',
+      fillColor: '#e74c3c',
+      fillOpacity: 0.18,
+      map
+    });
+    kakaoLines.push(circle);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="12" fill="#e74c3c" stroke="white" stroke-width="2"/>
+      <path d="M5 14a9 9 0 0118 0 9 9 0 01-18 0zm3.5-6.5l13 13" stroke="white" stroke-width="2.5" fill="none"/>
+    </svg>`;
+    bounds.extend(pos); hasPoints = true;
+    const m = new kakao.maps.Marker({
+      position: pos, map,
+      image: new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(28, 28),
+        { offset: new kakao.maps.Point(14, 14) }
+      ),
+      title: '[방역불가] ' + (z.name || ''),
+      zIndex: 7
+    });
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
+        <div style="font-weight:700;color:#7f8c8d;margin-bottom:4px;">⛔ 방역불가</div>
+        <div><b>${(z.name || '').replace(/</g,'&lt;')}</b></div>
+        ${z.reason ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;">${z.reason.replace(/</g,'&lt;')}</div>` : ''}
+        <div style="margin-top:6px;"><a href="#" onclick="deleteNoSprayZone('${z.id}');return false;" style="color:#e74c3c;font-size:11px;">삭제</a></div>
+      </div>`
+    });
+    kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
+    kakaoMarkers.push(m);
+  });
+
+  // ─── 민원 핀 (빨간 전화 아이콘) ─── 표시된 행사의 민원만
+  const visibleEventIds = new Set(courses.map(x => x.event.id));
+  const complaints = (data.complaints || []).filter(c => visibleEventIds.has(c.eventId));
+  complaints.forEach(c => {
+    const isResolved = c.status === 'resolved';
+    const fill = isResolved ? '#bdc3c7' : '#f1c40f';
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="12" fill="${fill}" stroke="white" stroke-width="2"/>
+      <path d="M11 9c-.5 0-1 .4-1 1 0 4 3 7 7 7 .6 0 1-.4 1-1v-2c0-.5-.4-1-1-1l-2 .3c-.4-.6-.8-1-1.3-1.3l.3-2c0-.6-.4-1-1-1H11z" fill="white"/>
+    </svg>`;
+    const pos = new kakao.maps.LatLng(c.lat, c.lng);
+    bounds.extend(pos); hasPoints = true;
+    const m = new kakao.maps.Marker({
+      position: pos, map,
+      image: new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(28, 28),
+        { offset: new kakao.maps.Point(14, 14) }
+      ),
+      title: '[민원] ' + (c.phone || ''),
+      zIndex: 8
+    });
+    const phoneTel = (c.phone || '').replace(/[^0-9+]/g, '');
+    const phoneBtn = c.phone
+      ? `<a href="tel:${phoneTel}" style="display:block;margin-top:6px;background:#27ae60;color:#fff;padding:8px 12px;border-radius:6px;text-align:center;font-weight:700;text-decoration:none;font-size:13px;">📞 ${c.phone} 전화걸기</a>`
+      : '<div style="color:#888;font-size:11px;">연락처 없음</div>';
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:10px;font-size:12px;max-width:240px;">
+        <div style="font-weight:700;color:${isResolved ? '#7f8c8d' : '#b7950b'};margin-bottom:4px;">📞 민원 ${isResolved ? '<span style="font-size:10px;background:#7f8c8d;color:#fff;padding:1px 6px;border-radius:3px;">처리완료</span>' : ''}</div>
+        <div style="color:#444;white-space:pre-wrap;">${(c.content||'').replace(/</g,'&lt;')}</div>
+        ${phoneBtn}
+      </div>`
+    });
+    kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
+    kakaoMarkers.push(m);
+  });
+
   if (hasPoints) map.setBounds(bounds);
 }
 </script>

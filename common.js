@@ -69,8 +69,26 @@ const defaultData = {
   logs: [],
   requests: [],
   complaints: [],  // 민원: { id, eventId, lat, lng, phone, content, status:'pending'|'resolved', createdAt }
+  noSprayZones: [],  // 방역불가: { id, lat, lng, name, reason, createdAt }
   telegram: { botToken: '', chatId: '', enabled: false }
 };
+
+// ───────── 카카오 InfoWindow 토글 ─────────
+// 같은 마커 다시 누르면 닫히고, 다른 마커 누르면 이전 거 닫고 새 거 열기
+window.__openIw = null;
+function toggleInfoWindow(iw, marker, mapRef) {
+  // getMap()으로 실제 열림 여부 확인 (re-render 후에도 안전)
+  if (iw.getMap && iw.getMap()) {
+    iw.close();
+    if (window.__openIw === iw) window.__openIw = null;
+  } else {
+    if (window.__openIw && window.__openIw !== iw) {
+      try { window.__openIw.close(); } catch (e) {}
+    }
+    iw.open(mapRef, marker);
+    window.__openIw = iw;
+  }
+}
 
 // ───────── 텔레그램 알림 ─────────
 async function sendTelegram(text) {
@@ -79,15 +97,15 @@ async function sendTelegram(text) {
     const cfg = data.telegram || {};
     if (!cfg.enabled || !cfg.botToken || !cfg.chatId) return;
     const url = `https://api.telegram.org/bot${cfg.botToken}/sendMessage`;
-    await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: cfg.chatId,
-        text,
-        parse_mode: 'HTML'
+    // 콤마/공백/줄바꿈으로 여러 대상 분리
+    const chatIds = String(cfg.chatId).split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    await Promise.all(chatIds.map(chatId =>
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
       })
-    });
+    ));
   } catch (e) {
     console.warn('텔레그램 전송 실패:', e);
   }
@@ -150,6 +168,7 @@ function loadData() {
   if (data.logs && !Array.isArray(data.logs)) data.logs = Object.values(data.logs);
   if (data.requests && !Array.isArray(data.requests)) data.requests = Object.values(data.requests);
   if (data.complaints && !Array.isArray(data.complaints)) data.complaints = Object.values(data.complaints);
+  if (data.noSprayZones && !Array.isArray(data.noSprayZones)) data.noSprayZones = Object.values(data.noSprayZones);
   if (data.savedTeams && !Array.isArray(data.savedTeams)) data.savedTeams = Object.values(data.savedTeams);
   for (const t of (data.teams || [])) {
     if (t && t.memberIds && !Array.isArray(t.memberIds)) t.memberIds = Object.values(t.memberIds);
@@ -161,7 +180,7 @@ function loadData() {
 function saveData(data, force) {
   // 데이터 보호: 키가 빠진 상태로 저장 시도하면 캐시 값으로 복원 (force 시 무시)
   if (!force && _cache) {
-    for (const k of ['events','members','teams','anchors','logs','requests','complaints','memberAuth','savedTeams']) {
+    for (const k of ['events','members','teams','anchors','logs','requests','complaints','noSprayZones','memberAuth','savedTeams']) {
       if (_cache[k] && Array.isArray(_cache[k]) && _cache[k].length > 0 && data[k] === undefined) {
         console.warn(`saveData: ${k} 보호됨 (캐시에는 ${_cache[k].length}개 있는데 키 누락)`);
         data[k] = _cache[k];
@@ -306,15 +325,28 @@ function showLoginGate() {
   const savedId = localStorage.getItem('lastAdminId') || '';
   const html = `
     <div id="loginGate" style="position:fixed;inset:0;background:rgba(44,62,80,0.95);z-index:99999;display:flex;align-items:center;justify-content:center;">
-      <div style="background:#fff;padding:30px;border-radius:10px;width:320px;max-width:90vw;">
-        <h2 style="margin-bottom:16px;color:#2c3e50;">🔐 로그인</h2>
-        <label>이메일</label>
-        <input id="loginEmail" type="email" autocomplete="username" placeholder="bsp1001@naver.com" value="${savedId}">
-        <label>비밀번호</label>
-        <input id="loginPw" type="password" autocomplete="current-password" placeholder="초기 비번: 123456" onkeydown="if(event.key==='Enter')doLogin()">
+      <div style="background:#fff;padding:24px;border-radius:10px;width:340px;max-width:92vw;">
+        <h2 style="margin-bottom:8px;color:#2c3e50;">🔐 로그인</h2>
+        <p style="font-size:12px;color:#7f8c8d;margin-bottom:14px;line-height:1.5;">
+          간부 <b>이메일</b> 또는 회원 <b>전화번호 + PIN</b>으로 들어올 수 있어요.
+        </p>
+        <label>이메일 또는 전화번호</label>
+        <input id="loginEmail" type="text" autocomplete="username" placeholder="bsp1001@naver.com 또는 01012345678" value="${savedId}">
+        <label>비밀번호 또는 PIN</label>
+        <input id="loginPw" type="password" autocomplete="current-password" placeholder="간부:비번 / 회원:PIN" onkeydown="if(event.key==='Enter')doLogin()">
         <div id="loginErr" style="color:#e74c3c;font-size:12px;margin-top:6px;min-height:14px;"></div>
         <button onclick="doLogin()" style="width:100%;margin-top:10px;padding:10px;">로그인</button>
-        <p style="margin-top:10px;font-size:11px;color:#888;text-align:center;">관리자가 발급한 이메일/비번 입력</p>
+        <details style="margin-top:14px;font-size:11px;color:#666;">
+          <summary style="cursor:pointer;color:#3498db;">계정/PIN이 없거나 비번을 모르면?</summary>
+          <div style="padding:8px;background:#f8f9fa;border-radius:5px;margin-top:6px;line-height:1.6;">
+            <b>회원이면:</b> 사무국장에게 PIN 발급 요청 → 전화번호 + 4자리 PIN으로 로그인<br>
+            <b>간부면:</b> super 관리자에게 이메일+초기비번(123456) 발급 요청 → 첫 로그인 후 비번 변경<br>
+            <b>비번 분실:</b> super 관리자에게 비번재설정 메일 요청
+          </div>
+        </details>
+        <div style="margin-top:10px;text-align:center;">
+          <a href="index.html" style="font-size:11px;color:#888;">← 홈으로</a>
+        </div>
       </div>
     </div>
   `;
@@ -334,12 +366,25 @@ function getMyRole() {
 
 async function doLogin() {
   const id = document.getElementById('loginEmail').value.trim();
-  const email = idToEmail(id);
   const pw = document.getElementById('loginPw').value;
   const err = document.getElementById('loginErr');
   err.textContent = '로그인 중...';
+
+  // 자동 판단:
+  //  - @ 있으면 → 이메일 (간부 계정)
+  //  - 숫자만 있으면 → 전화번호 + PIN (회원)
+  const isPhone = /^[0-9\-\s]+$/.test(id) && !id.includes('@');
+  let email, password;
+  if (isPhone) {
+    email = memberEmail(id);
+    password = pinToPassword(pw);
+  } else {
+    email = idToEmail(id);
+    password = pw;
+  }
+
   try {
-    await adminSignIn(email, pw);
+    await adminSignIn(email, password);
     localStorage.setItem('lastAdminId', id);
     document.getElementById('loginGate').remove();
     initFirebaseSync();

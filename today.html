@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>오늘의 운영</title>
-  <link rel="stylesheet" href="style.css?v=20260509q">
+  <link rel="stylesheet" href="style.css?v=20260510b">
 </head>
 <body>
 <header>
@@ -59,6 +59,7 @@
         <div class="map-ctrl map-ctrl-right">
           <button class="map-btn" onclick="zoomIn()" aria-label="확대">+</button>
           <button class="map-btn" onclick="zoomOut()" aria-label="축소">−</button>
+          <button class="map-btn map-btn-wide" id="mapTypeBtn" onclick="cycleMapType()" title="지도 종류">🗺</button>
         </div>
         <div class="map-ctrl map-ctrl-bottom">
           <button class="map-btn map-btn-wide" onclick="fitToCourse()">🗺 전체</button>
@@ -82,8 +83,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260509q"></script>
-<script src="common.js?v=20260509q"></script>
+<script src="firebase-config.js?v=20260510b"></script>
+<script src="common.js?v=20260510b"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
 <div id="errBar"></div>
@@ -115,6 +116,7 @@ dateLabel.textContent = todayStr() + ' (' + ['일','월','화','수','목','금'
 // Firebase 동기화
 window.onDataChanged = () => { if (!currentSession) renderAssignments(); updateMeIndicator(); };
 
+let __mapInitialFitDone = false;
 let _initStarted = false;
 function startInit() {
   if (_initStarted) return;
@@ -415,7 +417,6 @@ function openStartForm(eventId, courseId) {
       </div>
     </div>
   `;
-  renderAssistChips();
   // 폼 영역으로 자동 스크롤
   setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 }
@@ -544,6 +545,7 @@ function startSession(eventId, courseId, teamId, crew) {
 
   document.getElementById('assignmentCard').style.display = 'none';
   document.getElementById('opPanel').style.display = 'block';
+  __mapInitialFitDone = false; // 새 세션 시작 → 첫 렌더링 때 줌/위치 초기화
 
   const event = getEvent(data, eventId);
   const course = getCourse(data, courseId);
@@ -607,6 +609,7 @@ function resumeSession(s) {
   currentSession = s;
   document.getElementById('assignmentCard').style.display = 'none';
   document.getElementById('opPanel').style.display = 'block';
+  __mapInitialFitDone = false;
   const data = loadData();
   const event = getEvent(data, s.eventId);
   const course = getCourse(data, s.courseId);
@@ -695,11 +698,15 @@ function renderMapForSession() {
       anchorMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
     }
   }
-  // 내 위치가 있으면 거기 중심 (줌은 사용자 설정 유지), 없으면 거점 bounds에 맞춤
-  if (currentPos) {
-    map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
-  } else if (anchors.length) {
-    map.setBounds(bounds);
+  // 첫 렌더링(코스 시작 시)에만 초기 위치 잡기
+  // 그 후 호출(거점신청 등)은 사용자 줌/위치 그대로 유지
+  if (!__mapInitialFitDone) {
+    if (currentPos) {
+      map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+    } else if (anchors.length) {
+      map.setBounds(bounds);
+    }
+    __mapInitialFitDone = true;
   }
 
   // 요청 마커 (주황 별)
@@ -721,7 +728,7 @@ function renderMapForSession() {
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:4px 8px;font-size:12px;"><b>[요청] ${r.name}</b><br>${r.memo || ''}</div>`
     });
-    kakao.maps.event.addListener(m, 'click', () => iw.open(map, m));
+    kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
     anchorMarkers.push(m);
   });
 
@@ -729,7 +736,7 @@ function renderMapForSession() {
   const complaints = (data.complaints || []).filter(c => c.eventId === currentSession.eventId && c.status !== 'resolved');
   complaints.forEach(c => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-      <circle cx="14" cy="14" r="12" fill="#e74c3c" stroke="white" stroke-width="2"/>
+      <circle cx="14" cy="14" r="12" fill="#f1c40f" stroke="white" stroke-width="2"/>
       <path d="M11 9c-.5 0-1 .4-1 1 0 4 3 7 7 7 .6 0 1-.4 1-1v-2c0-.5-.4-1-1-1l-2 .3c-.4-.6-.8-1-1.3-1.3l.3-2c0-.6-.4-1-1-1H11z" fill="white"/>
     </svg>`;
     const m = new kakao.maps.Marker({
@@ -742,15 +749,54 @@ function renderMapForSession() {
       title: '[민원] ' + (c.phone || ''),
       zIndex: 8
     });
-    const phoneLink = c.phone ? `<a href="tel:${c.phone.replace(/[^0-9+]/g,'')}" style="color:#e74c3c;font-weight:600;text-decoration:none;">📞 ${c.phone}</a>` : '(연락처 없음)';
+    const phoneTel = (c.phone || '').replace(/[^0-9+]/g, '');
+    const phoneBtn = c.phone
+      ? `<a href="tel:${phoneTel}" style="display:block;margin-top:6px;background:#27ae60;color:#fff;padding:8px 12px;border-radius:6px;text-align:center;font-weight:700;text-decoration:none;font-size:13px;">📞 ${c.phone} 전화걸기</a>`
+      : '<div style="color:#888;font-size:11px;">연락처 없음</div>';
     const iw = new kakao.maps.InfoWindow({
-      content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
-        <div style="font-weight:700;color:#e74c3c;margin-bottom:4px;">📞 민원</div>
-        <div>${phoneLink}</div>
-        <div style="margin-top:4px;color:#444;white-space:pre-wrap;">${(c.content||'').replace(/</g,'&lt;')}</div>
+      content: `<div style="padding:10px;font-size:12px;max-width:240px;">
+        <div style="font-weight:700;color:#b7950b;margin-bottom:4px;">📞 민원</div>
+        <div style="color:#444;white-space:pre-wrap;">${(c.content||'').replace(/</g,'&lt;')}</div>
+        ${phoneBtn}
       </div>`
     });
-    kakao.maps.event.addListener(m, 'click', () => iw.open(map, m));
+    kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
+    anchorMarkers.push(m);
+  });
+
+  // 방역불가 핀 (빨간 ⛔ 아이콘 + 반경 원)
+  const noSprayZones = data.noSprayZones || [];
+  noSprayZones.forEach(z => {
+    const radius = z.radius || 50;
+    const pos = new kakao.maps.LatLng(z.lat, z.lng);
+    const circle = new kakao.maps.Circle({
+      center: pos, radius,
+      strokeWeight: 2, strokeColor: '#e74c3c', strokeOpacity: 0.7, strokeStyle: 'solid',
+      fillColor: '#e74c3c', fillOpacity: 0.18, map
+    });
+    anchorMarkers.push({ setMap: (m) => circle.setMap(m) });
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="12" fill="#e74c3c" stroke="white" stroke-width="2"/>
+      <path d="M5 14a9 9 0 0118 0 9 9 0 01-18 0zm3.5-6.5l13 13" stroke="white" stroke-width="2.5" fill="none"/>
+    </svg>`;
+    const m = new kakao.maps.Marker({
+      position: pos, map,
+      image: new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(28, 28),
+        { offset: new kakao.maps.Point(14, 14) }
+      ),
+      title: '[방역불가] ' + (z.name || ''),
+      zIndex: 7
+    });
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
+        <div style="font-weight:700;color:#e74c3c;margin-bottom:4px;">⛔ 방역 금지</div>
+        <div><b>${(z.name || '').replace(/</g,'&lt;')}</b></div>
+        ${z.reason ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;">${z.reason.replace(/</g,'&lt;')}</div>` : ''}
+      </div>`
+    });
+    kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
     anchorMarkers.push(m);
   });
 
@@ -854,6 +900,26 @@ function zoomIn() {
 function zoomOut() {
   if (!map) return;
   map.setLevel(Math.min(14, map.getLevel() + 1));
+}
+
+// 지도 종류: 일반(R) → 위성(S) → 위성+도로(H) → 일반
+let __mapTypeIdx = 0;
+const MAP_TYPES = [
+  { label: '일반', icon: '🗺' },
+  { label: '위성', icon: '🛰' },
+  { label: '위성+도로', icon: '🛰+' }
+];
+function cycleMapType() {
+  if (!map || !window.kakao) return;
+  __mapTypeIdx = (__mapTypeIdx + 1) % MAP_TYPES.length;
+  const ids = [
+    kakao.maps.MapTypeId.ROADMAP,
+    kakao.maps.MapTypeId.SKYVIEW,
+    kakao.maps.MapTypeId.HYBRID
+  ];
+  map.setMapTypeId(ids[__mapTypeIdx]);
+  const btn = document.getElementById('mapTypeBtn');
+  if (btn) btn.textContent = MAP_TYPES[__mapTypeIdx].icon;
 }
 
 function fitToCourse() {
