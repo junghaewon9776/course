@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260508b">
+  <link rel="stylesheet" href="style.css?v=20260509g">
 </head>
 <body>
 <header>
@@ -26,17 +26,34 @@
 
 <div class="container">
   <div class="card">
-    <div class="flex-between">
+    <div class="flex-between" style="flex-wrap:wrap;gap:8px;">
       <h2>운행 기록</h2>
-      <div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <label style="display:inline;font-size:12px;">행사:</label>
+        <select id="eventFilter" style="width:auto;display:inline-block;" onchange="render()">
+          <option value="">전체 행사</option>
+        </select>
         <label style="display:inline;font-size:12px;">기간:</label>
-        <select id="periodSel" style="width:auto;display:inline-block;" onchange="render()">
+        <select id="periodSel" style="width:auto;display:inline-block;" onchange="onPeriodChange()">
           <option value="today">오늘</option>
           <option value="week">최근 7일</option>
           <option value="month" selected>최근 30일</option>
+          <option value="day">일별 선택</option>
+          <option value="monthly">월별 선택</option>
+          <option value="range">기간 선택</option>
           <option value="all">전체</option>
         </select>
-        <button class="small danger" onclick="clearLogs()">로그 삭제</button>
+        <span id="dayPicker" style="display:none;">
+          <input type="date" id="dayInput" onchange="render()" style="width:auto;display:inline-block;">
+        </span>
+        <span id="monthPicker" style="display:none;">
+          <input type="month" id="monthInput" onchange="render()" style="width:auto;display:inline-block;">
+        </span>
+        <span id="rangePicker" style="display:none;">
+          <input type="date" id="rangeStart" onchange="render()" style="width:auto;display:inline-block;">
+          ~
+          <input type="date" id="rangeEnd" onchange="render()" style="width:auto;display:inline-block;">
+        </span>
       </div>
     </div>
   </div>
@@ -55,7 +72,10 @@
         <div id="summary"></div>
       </div>
       <div class="card">
-        <h2>운행 목록</h2>
+        <div class="flex-between">
+          <h2>운행 목록</h2>
+          <button class="small danger" onclick="clearLogs()">🗑 전체삭제</button>
+        </div>
         <div id="logList"></div>
       </div>
     </div>
@@ -65,8 +85,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260508b"></script>
-<script src="common.js?v=20260508b"></script>
+<script src="firebase-config.js?v=20260509g"></script>
+<script src="common.js?v=20260509g"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
@@ -105,23 +125,77 @@ function initMonitorMap() {
   render();
 }
 
+function onPeriodChange() {
+  const period = document.getElementById('periodSel').value;
+  document.getElementById('dayPicker').style.display = period === 'day' ? 'inline-block' : 'none';
+  document.getElementById('monthPicker').style.display = period === 'monthly' ? 'inline-block' : 'none';
+  document.getElementById('rangePicker').style.display = period === 'range' ? 'inline-block' : 'none';
+  // 기본값 자동 채움
+  if (period === 'day' && !document.getElementById('dayInput').value) {
+    document.getElementById('dayInput').value = todayStr();
+  } else if (period === 'monthly' && !document.getElementById('monthInput').value) {
+    document.getElementById('monthInput').value = todayStr().slice(0, 7);
+  } else if (period === 'range') {
+    if (!document.getElementById('rangeStart').value) document.getElementById('rangeStart').value = todayStr();
+    if (!document.getElementById('rangeEnd').value) document.getElementById('rangeEnd').value = todayStr();
+  }
+  render();
+}
+
 function getFilteredLogs() {
   const data = loadData();
   const period = document.getElementById('periodSel').value;
   const now = new Date();
-  let cutoff = 0;
+  let from = 0, to = Infinity;
   if (period === 'today') {
     const d = new Date(); d.setHours(0,0,0,0);
-    cutoff = d.getTime();
-  } else if (period === 'week') cutoff = now.getTime() - 7*24*60*60*1000;
-  else if (period === 'month') cutoff = now.getTime() - 30*24*60*60*1000;
+    from = d.getTime();
+  } else if (period === 'week') from = now.getTime() - 7*24*60*60*1000;
+  else if (period === 'month') from = now.getTime() - 30*24*60*60*1000;
+  else if (period === 'day') {
+    const v = document.getElementById('dayInput').value;
+    if (v) {
+      const d = new Date(v + 'T00:00:00');
+      from = d.getTime();
+      to = from + 24*60*60*1000;
+    }
+  } else if (period === 'monthly') {
+    const v = document.getElementById('monthInput').value;
+    if (v) {
+      const [y, m] = v.split('-').map(Number);
+      from = new Date(y, m-1, 1).getTime();
+      to = new Date(y, m, 1).getTime();
+    }
+  } else if (period === 'range') {
+    const s = document.getElementById('rangeStart').value;
+    const e = document.getElementById('rangeEnd').value;
+    if (s) from = new Date(s + 'T00:00:00').getTime();
+    if (e) to = new Date(e + 'T23:59:59').getTime();
+  }
 
-  return data.logs
-    .filter(l => (l.startedAt || 0) >= cutoff)
+  const eventFilter = document.getElementById('eventFilter')?.value || '';
+
+  return (data.logs || [])
+    .filter(l => {
+      const t = l.startedAt || 0;
+      if (t < from || t > to) return false;
+      if (eventFilter && l.eventId !== eventFilter) return false;
+      return true;
+    })
     .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
 }
 
+function renderEventFilterOptions() {
+  const sel = document.getElementById('eventFilter');
+  if (!sel) return;
+  const data = loadData();
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">전체 행사</option>' +
+    (data.events || []).map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
+}
+
 function render() {
+  renderEventFilterOptions();
   const data = loadData();
   const logs = getFilteredLogs();
 
@@ -153,13 +227,17 @@ function render() {
     const totalA = data.anchors.filter(a => a.courseId === l.courseId).length;
     const dur = l.finishedAt ? formatDuration(l.finishedAt - l.startedAt) : '진행중';
     const dist = (trackDistance(l.track || []) / 1000).toFixed(1);
+    const driver = l.crew?.driver || '';
+    const assist = l.crew?.assist || '';
     return `
       <div class="anchor-row" style="cursor:pointer;${selectedLogIdx===i?'background:#fff9e6;':''}" onclick="selectLog(${i})">
-        <div class="num" style="background:${course?.color || '#999'}">${team?.name?.[0] || '?'}</div>
+        <div class="num" style="background:${course?.color || '#999'}">${(driver||team?.name||'?').slice(0,1)}</div>
         <div style="flex:1;min-width:0;">
           <div class="name">${event?.name || '?'} · ${course?.name || '?'}</div>
-          <div class="sub">${l.date} · ${team?.name || '?'} · ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}</div>
+          <div class="sub">${l.date} · ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}</div>
+          ${driver || assist ? `<div class="sub">운전: ${driver || '-'}${assist ? ' · 보조: ' + assist : ''}</div>` : ''}
         </div>
+        <button class="small danger" onclick="event.stopPropagation();deleteLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑</button>
       </div>
     `;
   }).join('');
@@ -210,9 +288,11 @@ function drawLog(log) {
   const event = getEvent(data, log.eventId);
   const course = getCourse(data, log.courseId);
   const team = getTeam(data, log.teamId);
+  const driver = log.crew?.driver || '';
+  const assist = log.crew?.assist || '';
   document.getElementById('logInfo').innerHTML = `
-    <b>${event?.name} · ${course?.name}</b> · ${team?.name} (${team?.vehicle || ''})<br>
-    조원: ${(team?.members||[]).join(', ') || '-'} ·
+    <b>${event?.name} · ${course?.name}</b>${team ? ' · ' + team.name : ''}<br>
+    ${driver || assist ? `운전: <b>${driver || '-'}</b>${assist ? ' · 보조: <b>' + assist + '</b>' : ''}<br>` : ''}
     완료 ${(log.completions||[]).length}/${anchors.length} ·
     이동 ${(trackDistance(log.track || []) / 1000).toFixed(2)}km ·
     소요 ${log.finishedAt ? formatDuration(log.finishedAt - log.startedAt) : '진행중'}
@@ -233,9 +313,19 @@ function formatDuration(ms) {
   return h ? `${h}시간 ${m%60}분` : `${m}분`;
 }
 function clearLogs() {
-  if (!confirm('모든 운행 기록을 삭제할까요?')) return;
+  if (!confirm('필터 무시하고 모든 운행 기록을 영구 삭제할까요?')) return;
   const data = loadData();
   data.logs = [];
+  saveData(data);
+  selectedLogIdx = null;
+  render();
+}
+
+function deleteLog(key) {
+  if (!key) { alert('이 기록은 삭제 식별자가 없습니다 (이전 버전 데이터)'); return; }
+  if (!confirm('이 운행 기록 한 건만 삭제할까요?')) return;
+  const data = loadData();
+  data.logs = (data.logs || []).filter(l => l.key !== key);
   saveData(data);
   selectedLogIdx = null;
   render();

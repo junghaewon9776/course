@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>오늘의 운영</title>
-  <link rel="stylesheet" href="style.css?v=20260508b">
+  <link rel="stylesheet" href="style.css?v=20260509g">
 </head>
 <body>
 <header>
@@ -47,6 +47,7 @@
           <button class="small gray" id="followToggle" onclick="toggleFollow()">🎯 따라가기</button>
           <button class="small gray" id="naviToggle" onclick="toggleNavi()">🧭 내비모드</button>
           <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
+          <button class="small" onclick="reportComplaint()" style="background:#e74c3c;">📞 민원접수</button>
         </div>
       </div>
       <div id="gpsStatus" class="muted" style="margin-top:6px;">GPS 대기중</div>
@@ -81,8 +82,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260508b"></script>
-<script src="common.js?v=20260508b"></script>
+<script src="firebase-config.js?v=20260509g"></script>
+<script src="common.js?v=20260509g"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
 <div id="errBar"></div>
@@ -352,7 +353,7 @@ function renderAssignments() {
       <div class="anchor-row" onclick="startCourse('${event.id}','${course.id}')" style="cursor:pointer;">
         <div class="num" style="background:${course.color}">${course.name[0]}</div>
         <div style="flex:1;">
-          <div><b>${event.name}</b> · <span style="color:${course.color}">${course.name}</span> ${event.requireAttendance ? '<span class="tag" style="background:#e74c3c;font-size:10px;">출석필요</span>' : ''}</div>
+          <div><b>${event.name}</b> · <span style="color:${course.color}">${course.name}</span></div>
           <div class="sub">거점 ${anchorCount}개</div>
         </div>
         <button class="success">코스보기 ▶</button>
@@ -363,15 +364,8 @@ function renderAssignments() {
 let assistList = [];
 
 function startCourse(eventId, courseId) {
-  const data = loadData();
-  const event = getEvent(data, eventId);
-  if (event?.requireAttendance) {
-    // 출석 필요한 행사 → 폼 띄움
-    openStartForm(eventId, courseId);
-  } else {
-    // 출석 불필요 → 바로 코스 보기
-    startSession(eventId, courseId, '', { driver: '', assist: '' });
-  }
+  // 항상 운전자/보조자 선택 폼 띄움
+  openStartForm(eventId, courseId);
 }
 
 function openStartForm(eventId, courseId) {
@@ -389,7 +383,7 @@ function openStartForm(eventId, courseId) {
   card.innerHTML = `
     <div class="card" style="border:2px solid #3498db;">
       <h2>📝 ${event.name} · ${course.name}</h2>
-      <p class="muted" style="margin-bottom:8px;">아래에서 조와 출석 인원 선택</p>
+      <p class="muted" style="margin-bottom:8px;">운전자와 보조자 선택 (조 선택은 선택사항)</p>
 
       <label>조 (선택 시 자동 채움 - 안 골라도 됨)</label>
       <select id="fTeam" onchange="autoFillFromTeam()">
@@ -463,17 +457,18 @@ function pickSuggestion(inputId, listId, name) {
 
 function autoFillFromTeam() {
   const teamId = document.getElementById('fTeam').value;
-  if (!teamId) return;
+  if (!teamId) {
+    // 조 선택 해제 시 기존 체크리스트 제거
+    const old = document.getElementById('teamCheckListContainer');
+    if (old) old.remove();
+    return;
+  }
   const data = loadData();
   const team = getTeam(data, teamId);
   if (!team) return;
 
-  // 조 멤버 체크리스트 표시
-  showTeamCheckList(team);
-
   const leader = getMember(data, team.leaderId);
   document.getElementById('fDriver').value = leader?.name || '';
-  // 보조자 칩 자동 채움 (체크리스트로 나중에 변경됨)
   const vice = getMember(data, team.viceLeaderId);
   const members = (team.memberIds || []).map(id => getMember(data, id)).filter(Boolean);
   assistList = [vice?.name, ...members.map(m => m.name)].filter(Boolean);
@@ -771,10 +766,9 @@ function renderMapForSession() {
       anchorMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
     }
   }
-  // 내 위치가 있으면 거기 중심, 없으면 거점 bounds에 맞춤
+  // 내 위치가 있으면 거기 중심 (줌은 사용자 설정 유지), 없으면 거점 bounds에 맞춤
   if (currentPos) {
     map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
-    map.setLevel(4);
   } else if (anchors.length) {
     map.setBounds(bounds);
   }
@@ -797,6 +791,35 @@ function renderMapForSession() {
     });
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:4px 8px;font-size:12px;"><b>[요청] ${r.name}</b><br>${r.memo || ''}</div>`
+    });
+    kakao.maps.event.addListener(m, 'click', () => iw.open(map, m));
+    anchorMarkers.push(m);
+  });
+
+  // 민원 마커 (빨간 전화 아이콘) - 이 행사의 미처리 민원만
+  const complaints = (data.complaints || []).filter(c => c.eventId === currentSession.eventId && c.status !== 'resolved');
+  complaints.forEach(c => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="12" fill="#e74c3c" stroke="white" stroke-width="2"/>
+      <path d="M11 9c-.5 0-1 .4-1 1 0 4 3 7 7 7 .6 0 1-.4 1-1v-2c0-.5-.4-1-1-1l-2 .3c-.4-.6-.8-1-1.3-1.3l.3-2c0-.6-.4-1-1-1H11z" fill="white"/>
+    </svg>`;
+    const m = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(c.lat, c.lng), map,
+      image: new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(28, 28),
+        { offset: new kakao.maps.Point(14, 14) }
+      ),
+      title: '[민원] ' + (c.phone || ''),
+      zIndex: 8
+    });
+    const phoneLink = c.phone ? `<a href="tel:${c.phone.replace(/[^0-9+]/g,'')}" style="color:#e74c3c;font-weight:600;text-decoration:none;">📞 ${c.phone}</a>` : '(연락처 없음)';
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
+        <div style="font-weight:700;color:#e74c3c;margin-bottom:4px;">📞 민원</div>
+        <div>${phoneLink}</div>
+        <div style="margin-top:4px;color:#444;white-space:pre-wrap;">${(c.content||'').replace(/</g,'&lt;')}</div>
+      </div>`
     });
     kakao.maps.event.addListener(m, 'click', () => iw.open(map, m));
     anchorMarkers.push(m);
@@ -870,8 +893,8 @@ function toggleFollow() {
   followMode = !followMode;
   updateFollowBtn();
   if (followMode && currentPos && map) {
+    // 줌은 사용자가 설정한 그대로 유지, 위치만 이동
     map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
-    map.setLevel(3);
   }
 }
 function updateFollowBtn() {
@@ -913,7 +936,8 @@ function fitToCourse() {
   anchors.forEach(a => bounds.extend(new kakao.maps.LatLng(a.lat, a.lng)));
   if (currentPos) bounds.extend(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
   map.setBounds(bounds);
-  followMode = false;
+  // 따라가기는 그대로 두고 10초 일시정지 → 그 동안 전체 보이고, 끝나면 자동 복귀
+  followPauseUntil = Date.now() + 10000;
   naviMode = false;
   applyNaviRotation(0);
   updateFollowBtn();
@@ -1023,8 +1047,8 @@ function onGpsUpdate(pos) {
       if (isNear) {
         if (!currentSession.nearTimers[a.id]) {
           currentSession.nearTimers[a.id] = now;
-        } else if (now - currentSession.nearTimers[a.id] >= 10000) {
-          // 10초 머묾 → 자동 체크
+        } else if (now - currentSession.nearTimers[a.id] >= 1000) {
+          // 1초 머묾 → 자동 체크
           toggleDone(a.id);
           delete currentSession.nearTimers[a.id];
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
@@ -1113,6 +1137,7 @@ function requestNewAnchor() {
   const memo = prompt('메모 / 사유 (선택)\n(예: 다음 방역에 추가 필요)', '') || '';
 
   const data = loadData();
+  if (!Array.isArray(data.requests)) data.requests = [];
   const req = {
     id: uid(),
     lat: currentPos.lat, lng: currentPos.lng,
@@ -1120,13 +1145,52 @@ function requestNewAnchor() {
     eventId: currentSession.eventId,
     courseId: currentSession.courseId,
     requestedBy: currentSession.crew?.driver || '',
+    requestedAssist: currentSession.crew?.assist || '',
     requestedAt: Date.now(),
     status: 'pending'
   };
   data.requests.push(req);
-  saveData(data);
+  try {
+    saveData(data);
+  } catch (e) {
+    alert('저장 실패: ' + (e.message || e));
+    return;
+  }
   renderMapForSession();
   alert('관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
+}
+
+function reportComplaint() {
+  if (!currentSession) { alert('먼저 코스를 시작하세요'); return; }
+  if (!currentPos) { alert('GPS 위치가 잡히지 않았습니다.\nGPS를 켜고 위치 잡힌 후 다시 시도하세요'); return; }
+
+  const phone = prompt('민원인 연락처 (예: 010-1234-5678)', '');
+  if (phone === null) return;
+  const content = prompt('민원 내용', '');
+  if (content === null) return;
+
+  const data = loadData();
+  if (!Array.isArray(data.complaints)) data.complaints = [];
+  data.complaints.push({
+    id: uid(),
+    eventId: currentSession.eventId,
+    lat: currentPos.lat, lng: currentPos.lng,
+    phone: (phone || '').trim(),
+    content: (content || '').trim(),
+    area: '',
+    status: 'pending',
+    reportedBy: currentSession.crew?.driver || '',
+    reportedAssist: currentSession.crew?.assist || '',
+    createdAt: Date.now()
+  });
+  try {
+    saveData(data);
+  } catch (e) {
+    alert('저장 실패: ' + (e.message || e));
+    return;
+  }
+  renderMapForSession();
+  alert('✅ 민원 접수됨\n관리자가 확인할 수 있습니다.');
 }
 
 function resetCourse() {

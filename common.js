@@ -67,7 +67,8 @@ const defaultData = {
     { id: 't3', name: '3조', leaderId: '', viceLeaderId: '', memberIds: [], fixedMemberIds: [] }
   ],
   logs: [],
-  requests: []
+  requests: [],
+  complaints: []  // 민원: { id, eventId, lat, lng, phone, content, status:'pending'|'resolved', createdAt }
 };
 
 // ───────── Firebase 동기화 캐시 ─────────
@@ -126,6 +127,7 @@ function loadData() {
   if (data.teams && !Array.isArray(data.teams)) data.teams = Object.values(data.teams);
   if (data.logs && !Array.isArray(data.logs)) data.logs = Object.values(data.logs);
   if (data.requests && !Array.isArray(data.requests)) data.requests = Object.values(data.requests);
+  if (data.complaints && !Array.isArray(data.complaints)) data.complaints = Object.values(data.complaints);
   if (data.savedTeams && !Array.isArray(data.savedTeams)) data.savedTeams = Object.values(data.savedTeams);
   for (const t of (data.teams || [])) {
     if (t && t.memberIds && !Array.isArray(t.memberIds)) t.memberIds = Object.values(t.memberIds);
@@ -137,7 +139,7 @@ function loadData() {
 function saveData(data, force) {
   // 데이터 보호: 키가 빠진 상태로 저장 시도하면 캐시 값으로 복원 (force 시 무시)
   if (!force && _cache) {
-    for (const k of ['events','members','teams','anchors','logs','requests','memberAuth','savedTeams']) {
+    for (const k of ['events','members','teams','anchors','logs','requests','complaints','memberAuth','savedTeams']) {
       if (_cache[k] && Array.isArray(_cache[k]) && _cache[k].length > 0 && data[k] === undefined) {
         console.warn(`saveData: ${k} 보호됨 (캐시에는 ${_cache[k].length}개 있는데 키 누락)`);
         data[k] = _cache[k];

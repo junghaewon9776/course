@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>통계 - 방역 횟수</title>
-  <link rel="stylesheet" href="style.css?v=20260508b">
+  <link rel="stylesheet" href="style.css?v=20260509g">
   <style>
     table { width:100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 6px 8px; border: 1px solid #ddd; text-align: center; }
@@ -36,15 +36,34 @@
 
 <div class="container">
   <div class="card">
-    <div class="flex-between">
-      <h2>기간</h2>
-      <div>
-        <select id="period" onchange="render()" style="width:auto;display:inline-block;">
+    <div class="flex-between" style="flex-wrap:wrap;gap:8px;">
+      <h2>필터</h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <label style="display:inline;font-size:12px;">행사:</label>
+        <select id="eventFilter" onchange="render()" style="width:auto;display:inline-block;">
+          <option value="">전체 행사</option>
+        </select>
+        <label style="display:inline;font-size:12px;">기간:</label>
+        <select id="period" onchange="onPeriodChange()" style="width:auto;display:inline-block;">
           <option value="all">전체</option>
           <option value="month">최근 30일</option>
           <option value="week">최근 7일</option>
           <option value="today">오늘</option>
+          <option value="day">일별 선택</option>
+          <option value="monthly">월별 선택</option>
+          <option value="range">기간 선택</option>
         </select>
+        <span id="dayPicker" style="display:none;">
+          <input type="date" id="dayInput" onchange="render()" style="width:auto;display:inline-block;">
+        </span>
+        <span id="monthPicker" style="display:none;">
+          <input type="month" id="monthInput" onchange="render()" style="width:auto;display:inline-block;">
+        </span>
+        <span id="rangePicker" style="display:none;">
+          <input type="date" id="rangeStart" onchange="render()" style="width:auto;display:inline-block;">
+          ~
+          <input type="date" id="rangeEnd" onchange="render()" style="width:auto;display:inline-block;">
+        </span>
         <button class="small" onclick="exportStatsCSV()">⬇️ 엑셀</button>
       </div>
     </div>
@@ -53,7 +72,15 @@
   <div class="row">
     <div class="col" style="flex:1;min-width:320px;">
       <div class="card">
-        <h2>회원별 방역 총 횟수</h2>
+        <div class="flex-between">
+          <h2 id="memberChartTitle">회원별 방역 횟수 (코스별 누적)</h2>
+          <select id="memberGroupBy" onchange="render()" style="width:auto;display:inline-block;">
+            <option value="member" selected>회원 전체</option>
+            <option value="driver">운전자만</option>
+            <option value="assist">보조자만</option>
+            <option value="team">조별</option>
+          </select>
+        </div>
         <canvas id="memberChart" style="max-height:400px;"></canvas>
       </div>
     </div>
@@ -78,8 +105,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260508b"></script>
-<script src="common.js?v=20260508b"></script>
+<script src="firebase-config.js?v=20260509g"></script>
+<script src="common.js?v=20260509g"></script>
 <script>
 let memberChart, courseChart;
 
@@ -87,67 +114,141 @@ window.onAuthSuccess = () => onDataReady(render);
 window.onDataChanged = () => render();
 checkAdminAuth().then(ok => { if (ok) onDataReady(render); });
 
+function onPeriodChange() {
+  const period = document.getElementById('period').value;
+  document.getElementById('dayPicker').style.display = period === 'day' ? 'inline-block' : 'none';
+  document.getElementById('monthPicker').style.display = period === 'monthly' ? 'inline-block' : 'none';
+  document.getElementById('rangePicker').style.display = period === 'range' ? 'inline-block' : 'none';
+  if (period === 'day' && !document.getElementById('dayInput').value) {
+    document.getElementById('dayInput').value = todayStr();
+  } else if (period === 'monthly' && !document.getElementById('monthInput').value) {
+    document.getElementById('monthInput').value = todayStr().slice(0, 7);
+  } else if (period === 'range') {
+    if (!document.getElementById('rangeStart').value) document.getElementById('rangeStart').value = todayStr();
+    if (!document.getElementById('rangeEnd').value) document.getElementById('rangeEnd').value = todayStr();
+  }
+  render();
+}
+
 function getFilteredLogs() {
   const data = loadData();
   const period = document.getElementById('period').value;
   const now = Date.now();
-  let cutoff = 0;
+  let from = 0, to = Infinity;
   if (period === 'today') {
     const d = new Date(); d.setHours(0,0,0,0);
-    cutoff = d.getTime();
-  } else if (period === 'week') cutoff = now - 7*24*60*60*1000;
-  else if (period === 'month') cutoff = now - 30*24*60*60*1000;
-  return (data.logs || []).filter(l => (l.startedAt || 0) >= cutoff && l.finishedAt);
+    from = d.getTime();
+  } else if (period === 'week') from = now - 7*24*60*60*1000;
+  else if (period === 'month') from = now - 30*24*60*60*1000;
+  else if (period === 'day') {
+    const v = document.getElementById('dayInput').value;
+    if (v) {
+      const d = new Date(v + 'T00:00:00');
+      from = d.getTime();
+      to = from + 24*60*60*1000;
+    }
+  } else if (period === 'monthly') {
+    const v = document.getElementById('monthInput').value;
+    if (v) {
+      const [y, m] = v.split('-').map(Number);
+      from = new Date(y, m-1, 1).getTime();
+      to = new Date(y, m, 1).getTime();
+    }
+  } else if (period === 'range') {
+    const s = document.getElementById('rangeStart').value;
+    const e = document.getElementById('rangeEnd').value;
+    if (s) from = new Date(s + 'T00:00:00').getTime();
+    if (e) to = new Date(e + 'T23:59:59').getTime();
+  }
+  const eventFilter = document.getElementById('eventFilter')?.value || '';
+  return (data.logs || []).filter(l => {
+    const t = l.startedAt || 0;
+    if (t < from || t > to) return false;
+    if (!l.finishedAt) return false;
+    if (eventFilter && l.eventId !== eventFilter) return false;
+    return true;
+  });
 }
 
-// 한 로그에 참여한 멤버 이름 모음
-function logParticipants(log) {
-  const names = [];
-  if (log.crew?.driver) names.push(log.crew.driver.trim());
-  if (log.crew?.assist) {
-    log.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.push(n));
-  }
-  return names;
+function renderEventFilterOptions() {
+  const sel = document.getElementById('eventFilter');
+  if (!sel) return;
+  const data = loadData();
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">전체 행사</option>' +
+    (data.events || []).map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
 }
+
+// 한 로그에서 그룹 키 뽑아내기 (groupBy에 따라)
+function logGroupKeys(log, groupBy, data) {
+  const keys = [];
+  if (groupBy === 'member') {
+    if (log.crew?.driver) keys.push(log.crew.driver.trim());
+    if (log.crew?.assist) {
+      log.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
+    }
+  } else if (groupBy === 'driver') {
+    if (log.crew?.driver) keys.push(log.crew.driver.trim());
+  } else if (groupBy === 'assist') {
+    if (log.crew?.assist) {
+      log.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
+    }
+  } else if (groupBy === 'team') {
+    const team = getTeam(data, log.teamId);
+    if (team) keys.push(team.name);
+  }
+  return keys;
+}
+
+const GROUP_LABELS = {
+  member: { row: '회원', title: '회원별 방역 횟수 (코스별 누적)' },
+  driver: { row: '운전자', title: '운전자별 방역 횟수 (코스별 누적)' },
+  assist: { row: '보조자', title: '보조자별 방역 횟수 (코스별 누적)' },
+  team:   { row: '조',   title: '조별 방역 횟수 (코스별 누적)' }
+};
 
 function render() {
+  renderEventFilterOptions();
   const data = loadData();
   const logs = getFilteredLogs();
   const members = data.members || [];
+  const groupBy = document.getElementById('memberGroupBy')?.value || 'member';
+  const labels = GROUP_LABELS[groupBy] || GROUP_LABELS.member;
+  const titleEl = document.getElementById('memberChartTitle');
+  if (titleEl) titleEl.textContent = labels.title;
 
-  // 모든 코스 (event.name + course.name)
+  // 행사 필터에 맞는 코스만 (필터 없으면 전체)
+  const eventFilter = document.getElementById('eventFilter')?.value || '';
   const courses = [];
   for (const e of data.events) {
+    if (eventFilter && e.id !== eventFilter) continue;
     for (const c of e.courses) courses.push({ id: c.id, label: `${e.name}-${c.name}`, color: c.color });
   }
 
-  // matrix[memberName][courseId] = count
+  // matrix[key][courseId] = count
   const matrix = {};
   const memberTotals = {};
   const courseTotals = {};
-  // 멤버 등록되어있지 않은 사람도 카운트 (로그에는 있지만 회원이 아닌 경우)
-  const allNames = new Set(members.map(m => m.name));
 
   for (const log of logs) {
     const courseId = log.courseId;
-    const names = logParticipants(log);
-    for (const name of names) {
+    const keys = logGroupKeys(log, groupBy, data);
+    for (const name of keys) {
       if (!matrix[name]) matrix[name] = {};
       matrix[name][courseId] = (matrix[name][courseId] || 0) + 1;
       memberTotals[name] = (memberTotals[name] || 0) + 1;
-      allNames.add(name);
     }
     courseTotals[courseId] = (courseTotals[courseId] || 0) + 1;
   }
 
-  // 표 그리기
-  const memberList = [...allNames].sort();
-  let thead = '<tr><th>회원</th><th>총합</th>' + courses.map(c => `<th>${c.label}</th>`).join('') + '</tr>';
+  // 표 그리기 (0회 제외, 많은 순)
+  const sortedAll = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]);
+  let thead = `<tr><th>${labels.row}</th><th>총합</th>` + courses.map(c => `<th>${c.label}</th>`).join('') + '</tr>';
   let tbody = '';
-  for (const name of memberList) {
-    const total = memberTotals[name] || 0;
+  for (const [name, total] of sortedAll) {
     if (total === 0) continue;
-    let row = `<tr><td>${name}${allNames.has(name) && !members.find(m=>m.name===name) ? ' <span class="sub">(미등록)</span>' : ''}</td>`;
+    const isUnregistered = groupBy === 'member' && !members.find(m=>m.name===name);
+    let row = `<tr><td>${name}${isUnregistered ? ' <span class="sub">(미등록)</span>' : ''}</td>`;
     row += `<td><b>${total}</b></td>`;
     for (const c of courses) {
       const v = matrix[name]?.[c.id] || 0;
@@ -158,34 +259,97 @@ function render() {
   }
   document.getElementById('statsTable').innerHTML = thead + tbody;
 
-  // 차트 데이터
-  const sortedMembers = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]).slice(0, 20);
-  drawChart('memberChart', memberChart && (memberChart.destroy(), null), {
-    labels: sortedMembers.map(x => x[0]),
-    datasets: [{ label: '방역 횟수', data: sortedMembers.map(x => x[1]), backgroundColor: '#3498db' }]
-  }, (c => memberChart = c));
-
-  drawChart('courseChart', courseChart && (courseChart.destroy(), null), {
-    labels: courses.map(c => c.label),
-    datasets: [{ label: '방역 횟수', data: courses.map(c => courseTotals[c.id] || 0), backgroundColor: courses.map(c => c.color) }]
-  }, (c => courseChart = c));
-}
-
-function drawChart(canvasId, _, data, setRef) {
-  const ctx = document.getElementById(canvasId);
-  const chart = new Chart(ctx, {
+  // 회원별: 코스별 누적 막대 (각 코스 색깔, 총합 위에 표시)
+  // 0회는 memberTotals에 없으니 자동으로 제외됨, 횟수 많은 순
+  const sortedNames = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]).map(x => x[0]);
+  if (memberChart) memberChart.destroy();
+  memberChart = new Chart(document.getElementById('memberChart'), {
     type: 'bar',
-    data,
+    data: {
+      labels: sortedNames,
+      datasets: courses.map(c => ({
+        label: c.label,
+        data: sortedNames.map(name => matrix[name]?.[c.id] || 0),
+        backgroundColor: c.color
+      }))
+    },
     options: {
-      indexAxis: canvasId === 'memberChart' ? 'y' : 'x',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'bottom', labels: { font: { size: 10 } } },
+        tooltip: { mode: 'index', intersect: false }
+      },
+      scales: {
+        x: { stacked: true, ticks: { font: { size: 10 } } },
+        y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+      },
+      layout: { padding: { top: 24 } }  // 총합 라벨 공간
+    },
+    plugins: [stackTotalsPlugin]
+  });
+
+  // 코스별 (단일 막대)
+  if (courseChart) courseChart.destroy();
+  courseChart = new Chart(document.getElementById('courseChart'), {
+    type: 'bar',
+    data: {
+      labels: courses.map(c => c.label),
+      datasets: [{ label: '방역 횟수', data: courses.map(c => courseTotals[c.id] || 0), backgroundColor: courses.map(c => c.color) }]
+    },
+    options: {
+      indexAxis: 'x',
       responsive: true,
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
   });
-  setRef(chart);
 }
+
+// 누적 막대: 각 세그먼트 안에 코스별 개수 + 막대 위에 총합
+const stackTotalsPlugin = {
+  id: 'stackTotals',
+  afterDatasetsDraw(chart) {
+    const { ctx, data } = chart;
+    if (!data.datasets.length) return;
+
+    // 1) 각 세그먼트 안에 개수 표시 (흰색)
+    data.datasets.forEach((ds, dsIdx) => {
+      const meta = chart.getDatasetMeta(dsIdx);
+      meta.data.forEach((bar, i) => {
+        const v = ds.data[i] || 0;
+        if (v === 0) return;
+        const top = bar.y;
+        const bottom = bar.base;
+        const h = Math.abs(bottom - top);
+        if (h < 14) return; // 너무 좁으면 생략
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(v, bar.x, (top + bottom) / 2);
+        ctx.restore();
+      });
+    });
+
+    // 2) 막대 꼭대기 위에 총합 표시
+    const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
+    lastMeta.data.forEach((bar, i) => {
+      let total = 0;
+      data.datasets.forEach(ds => { total += (ds.data[i] || 0); });
+      if (total === 0) return;
+      ctx.save();
+      ctx.fillStyle = '#222';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(total, bar.x, bar.y - 4);
+      ctx.restore();
+    });
+  }
+};
 
 function exportStatsCSV() {
   const table = document.getElementById('statsTable');

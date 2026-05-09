@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260508b">
+  <link rel="stylesheet" href="style.css?v=20260509g">
 </head>
 <body>
 <header>
@@ -94,6 +94,26 @@
         <p class="muted" style="margin-top:6px;font-size:11px;">💡 업로드는 추가 모드 (기존 거점은 유지). 갈아끼우려면 "모두 삭제" 후 업로드</p>
       </div>
 
+      <!-- 민원 (행사별) -->
+      <div class="card" style="border-left:4px solid #e74c3c;">
+        <div class="flex-between">
+          <h2>📞 민원 <span id="clickModeIndicator" style="display:none;background:#e74c3c;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;">지도 클릭 대기</span></h2>
+          <div>
+            <button class="small gray" onclick="downloadComplaintTemplate()">📄 양식</button>
+            <button class="small" onclick="document.getElementById('complaintCsvUpload').click()">📤 업로드</button>
+          </div>
+        </div>
+        <input type="file" id="complaintCsvUpload" accept=".csv,.xlsx,.xls" style="display:none">
+        <label>대상 행사</label>
+        <select id="complaintEventSel" onchange="renderComplaints()"></select>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button class="small" style="flex:1;background:#e74c3c;" onclick="startAddComplaintByMap()">📍 지도 클릭으로 추가</button>
+          <button class="small" style="flex:1;background:#e74c3c;" onclick="startAddComplaintBySearch()">🔍 주소 검색으로 추가</button>
+        </div>
+        <div id="complaintList" style="margin-top:8px;"></div>
+        <p class="muted" style="margin-top:6px;font-size:11px;">💡 민원은 운영(today) 지도에 빨간 핀으로 표시되고 클릭하면 전화걸기 가능</p>
+      </div>
+
       <!-- 조 -->
       <div class="card">
         <div class="flex-between"><h2>조 (인원)</h2>
@@ -117,8 +137,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260508b"></script>
-<script src="common.js?v=20260508b"></script>
+<script src="firebase-config.js?v=20260509g"></script>
+<script src="common.js?v=20260509g"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -167,7 +187,17 @@ function initMap() {
   refreshAll();
 }
 
+// 클릭 모드: 'anchor' (기본) | 'complaint'
+let pendingClickMode = 'anchor';
+let pendingSearchMode = 'anchor';
+
 function handleMapClick(lat, lng) {
+  if (pendingClickMode === 'complaint') {
+    addComplaintAt(lat, lng);
+    pendingClickMode = 'anchor';
+    document.getElementById('clickModeIndicator').style.display = 'none';
+    return;
+  }
   const data = loadData();
   const courseId = document.getElementById('anchorCourseSel').value;
   if (!courseId) {
@@ -466,6 +496,15 @@ function pickSearchResult(r) {
   map.setCenter(pos);
   map.setLevel(3);
 
+  // 민원 모드면 민원 추가로 분기
+  if (pendingSearchMode === 'complaint') {
+    pendingSearchMode = 'anchor';
+    document.getElementById('clickModeIndicator').style.display = 'none';
+    addComplaintAt(r.lat, r.lng, r.name + ' / ' + (r.address || ''));
+    closeSearchResults();
+    return;
+  }
+
   const courseId = document.getElementById('anchorCourseSel').value;
   if (!courseId) {
     alert('먼저 "거점" 패널에서 대상 코스를 선택하세요\n위치만 보여드릴게요.');
@@ -496,9 +535,11 @@ function refreshAll() {
   renderEvents();
   renderEventSelect('viewSelect', true);
   renderEventSelect('courseEventSel');
+  renderEventSelect('complaintEventSel');
   renderCourses();
   renderAnchorCourseSelect();
   renderAnchors();
+  renderComplaints();
   renderTeams();
   renderSchedules();
   renderMap();
@@ -523,7 +564,8 @@ function renderRequests() {
         <div class="sub" style="margin:4px 0;">
           📍 ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}<br>
           ${r.memo ? '📝 ' + r.memo + '<br>' : ''}
-          요청자: ${r.requestedBy || '-'} · ${when}
+          요청자(운전): ${r.requestedBy || '-'}${r.requestedAssist ? ' · 보조: ' + r.requestedAssist : ''}<br>
+          ${when}
         </div>
         <div style="display:flex;gap:6px;">
           <button class="small success" onclick="approveRequest('${r.id}')" style="flex:1;">✅ 승인 (거점 추가)</button>
@@ -606,28 +648,17 @@ function renderEvents() {
   el.innerHTML = events.map(e => {
     const vis = isEventVisible(e.id);
     const courseCount = (e.courses || []).length;
-    const reqAtt = !!e.requireAttendance;
     return `
     <div class="list-item">
       <button class="small ${vis ? '' : 'gray'}" onclick="toggleEventVisible('${e.id}')" title="지도 표시 켜기/끄기">${vis ? '👁' : '🚫'}</button>
       <div class="info">
-        <div class="name">${e.name} ${reqAtt ? '<span class="tag" style="background:#e74c3c;font-size:10px;">출석필요</span>' : ''}</div>
+        <div class="name">${e.name}</div>
         <div class="sub">코스 ${courseCount}개</div>
       </div>
-      <button class="small ${reqAtt ? 'success' : 'gray'}" onclick="toggleRequireAttendance('${e.id}')" title="출석체크 필요 여부">👥</button>
       <button class="small" onclick="renameEvent('${e.id}')">수정</button>
       <button class="small danger" onclick="deleteEvent('${e.id}')">삭제</button>
     </div>
   `;}).join('');
-}
-
-function toggleRequireAttendance(id) {
-  const data = loadData();
-  const e = (data.events || []).find(x => x.id === id);
-  if (!e) return;
-  e.requireAttendance = !e.requireAttendance;
-  saveData(data);
-  refreshAll();
 }
 function addEvent() {
   const name = prompt('행사 이름 (예: 방역행사, 효도위안잔치)');
@@ -784,6 +815,210 @@ function deleteAnchor(id) {
   data.anchors = data.anchors.filter(a => a.id !== id);
   saveData(data); refreshAll();
 }
+
+// ────── 민원 ──────
+function startAddComplaintByMap() {
+  const eventId = document.getElementById('complaintEventSel').value;
+  if (!eventId) { alert('먼저 대상 행사를 선택하세요'); return; }
+  pendingClickMode = 'complaint';
+  const ind = document.getElementById('clickModeIndicator');
+  ind.textContent = '🗺 지도를 클릭하세요 (취소하려면 다시 누름)';
+  ind.style.display = 'inline-block';
+  ind.onclick = () => {
+    pendingClickMode = 'anchor';
+    ind.style.display = 'none';
+  };
+  ind.style.cursor = 'pointer';
+  document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function startAddComplaintBySearch() {
+  const eventId = document.getElementById('complaintEventSel').value;
+  if (!eventId) { alert('먼저 대상 행사를 선택하세요'); return; }
+  pendingSearchMode = 'complaint';
+  const ind = document.getElementById('clickModeIndicator');
+  ind.textContent = '🔍 위 검색창에서 주소 검색 후 결과 클릭';
+  ind.style.display = 'inline-block';
+  ind.onclick = () => {
+    pendingSearchMode = 'anchor';
+    ind.style.display = 'none';
+  };
+  ind.style.cursor = 'pointer';
+  document.getElementById('searchInput').focus();
+  document.getElementById('searchInput').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function addComplaintAt(lat, lng, areaHint = '') {
+  const eventId = document.getElementById('complaintEventSel').value;
+  if (!eventId) { alert('대상 행사 미선택'); return; }
+  const phone = prompt('민원인 연락처 (예: 010-1234-5678)', '');
+  if (phone === null) return;
+  const content = prompt('민원 내용', areaHint || '');
+  if (content === null) return;
+  const data = loadData();
+  if (!Array.isArray(data.complaints)) data.complaints = [];
+  data.complaints.push({
+    id: uid(),
+    eventId,
+    lat, lng,
+    phone: (phone || '').trim(),
+    content: (content || '').trim(),
+    area: areaHint || '',
+    status: 'pending',
+    createdAt: Date.now()
+  });
+  saveData(data);
+  refreshAll();
+}
+
+function renderComplaints() {
+  const data = loadData();
+  const el = document.getElementById('complaintList');
+  if (!el) return;
+  const eventId = document.getElementById('complaintEventSel').value;
+  const all = (data.complaints || []).filter(c => !eventId || c.eventId === eventId);
+  if (!all.length) {
+    el.innerHTML = '<div class="empty">민원 없음</div>';
+    return;
+  }
+  // 대기 → 처리완료 순
+  all.sort((a, b) => (a.status === 'resolved' ? 1 : 0) - (b.status === 'resolved' ? 1 : 0) || (b.createdAt||0) - (a.createdAt||0));
+  el.innerHTML = all.map(c => {
+    const resolved = c.status === 'resolved';
+    return `
+      <div class="list-item" style="flex-direction:column;align-items:stretch;border-left:3px solid ${resolved ? '#bbb' : '#e74c3c'};${resolved ? 'opacity:0.6;' : ''}">
+        <div class="flex-between">
+          <div><b>${c.phone || '(연락처 없음)'}</b> ${resolved ? '<span class="tag" style="background:#7f8c8d;">처리완료</span>' : '<span class="tag" style="background:#e74c3c;">대기</span>'}</div>
+          <div style="display:flex;gap:4px;">
+            <button class="small gray" onclick="centerOnComplaint('${c.id}')" title="지도에서 보기">📍</button>
+            <button class="small danger" onclick="deleteComplaint('${c.id}')">삭제</button>
+          </div>
+        </div>
+        <div class="sub" style="margin:4px 0;white-space:pre-wrap;">${c.content || ''}</div>
+        <div class="sub">위도 ${c.lat.toFixed(5)}, 경도 ${c.lng.toFixed(5)}</div>
+        ${c.reportedBy ? `<div class="sub">접수: 운전 ${c.reportedBy}${c.reportedAssist ? ' · 보조 ' + c.reportedAssist : ''}</div>` : ''}
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+          ${resolved
+            ? `<button class="small gray" onclick="toggleComplaintStatus('${c.id}')">↺ 다시 대기로</button>`
+            : `<button class="small success" onclick="toggleComplaintStatus('${c.id}')">✓ 처리완료</button>`}
+          <button class="small" style="background:#9b59b6;" onclick="convertComplaintToAnchor('${c.id}')">⬆ 거점으로 추가</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function centerOnComplaint(id) {
+  const data = loadData();
+  const c = (data.complaints || []).find(x => x.id === id);
+  if (!c || !map) return;
+  map.setCenter(new kakao.maps.LatLng(c.lat, c.lng));
+  map.setLevel(3);
+}
+
+function toggleComplaintStatus(id) {
+  const data = loadData();
+  const c = (data.complaints || []).find(x => x.id === id);
+  if (!c) return;
+  c.status = c.status === 'resolved' ? 'pending' : 'resolved';
+  saveData(data); refreshAll();
+}
+
+function deleteComplaint(id) {
+  if (!confirm('이 민원을 삭제할까요?')) return;
+  const data = loadData();
+  data.complaints = (data.complaints || []).filter(c => c.id !== id);
+  saveData(data); refreshAll();
+}
+
+function convertComplaintToAnchor(id) {
+  const data = loadData();
+  const c = (data.complaints || []).find(x => x.id === id);
+  if (!c) return;
+  // 같은 행사의 코스 목록
+  const event = getEvent(data, c.eventId);
+  if (!event || !event.courses?.length) { alert('이 행사에 코스가 없습니다'); return; }
+  const opts = event.courses.map((cs, i) => `${i+1}. ${cs.name}`).join('\n');
+  const pick = prompt(`어느 코스의 거점으로 추가할까요?\n\n${opts}\n\n번호 입력 (1~${event.courses.length})`, '1');
+  if (pick === null) return;
+  const idx = parseInt(pick, 10) - 1;
+  const course = event.courses[idx];
+  if (!course) { alert('잘못된 번호'); return; }
+  const name = prompt('거점 이름', c.area || c.content?.slice(0, 30) || '민원지');
+  if (!name) return;
+  if (!data.anchors) data.anchors = [];
+  const order = data.anchors.filter(a => a.courseId === course.id).length + 1;
+  data.anchors.push({
+    id: uid(), name, lat: c.lat, lng: c.lng,
+    memo: '민원 전환 (' + (c.phone || '연락처없음') + ')\n' + (c.content || ''),
+    eventId: c.eventId, courseId: course.id, order
+  });
+  // 민원은 처리완료로 마킹 (삭제 X)
+  c.status = 'resolved';
+  saveData(data); refreshAll();
+  alert(`✅ ${course.name}의 거점으로 추가됨`);
+}
+
+function downloadComplaintTemplate() {
+  const lines = ['﻿행사,연락처,내용,위도,경도'];
+  const data = loadData();
+  const evName = data.events?.[0]?.name || '행사명';
+  lines.push(`${evName},010-1234-5678,예시 민원내용,35.2812,126.5037`);
+  const csv = lines.join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '민원_업로드양식.csv';
+  a.click();
+}
+
+// CSV/엑셀 업로드 (민원)
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('complaintCsvUpload');
+  if (!input) return;
+  input.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    let rows;
+    try {
+      if (file.name.match(/\.(xlsx|xls)$/i)) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+      } else {
+        const text = await file.text();
+        rows = parseCSV(text);
+      }
+    } catch (err) {
+      alert('파일 읽기 실패: ' + err.message); return;
+    }
+    if (!rows || !rows.length) { alert('데이터가 없습니다'); return; }
+
+    const data = loadData();
+    if (!Array.isArray(data.complaints)) data.complaints = [];
+    let added = 0, skipped = 0;
+    for (const row of rows) {
+      const evName = (row['행사'] || row['event'] || '').toString().trim();
+      const phone = (row['연락처'] || row['phone'] || '').toString().trim();
+      const content = (row['내용'] || row['content'] || '').toString().trim();
+      const lat = parseFloat(row['위도'] || row['lat']);
+      const lng = parseFloat(row['경도'] || row['lng']);
+      if (!evName || isNaN(lat) || isNaN(lng)) { skipped++; continue; }
+      const ev = (data.events || []).find(x => x.name === evName);
+      if (!ev) { skipped++; continue; }
+      data.complaints.push({
+        id: uid(), eventId: ev.id, lat, lng,
+        phone, content, area: '',
+        status: 'pending', createdAt: Date.now()
+      });
+      added++;
+    }
+    saveData(data); refreshAll();
+    alert(`민원 ${added}건 추가됨${skipped ? ' (' + skipped + '건 건너뜀: 행사명 매칭 안됨/좌표 누락)' : ''}`);
+  });
+});
 
 // ────── 조 ──────
 function renderTeams() {
