@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인쇄용 - 방역코스</title>
-  <link rel="stylesheet" href="style.css?v=20260512x">
+  <link rel="stylesheet" href="style.css?v=20260513b">
   <style>
     body { background: #fff; }
     .print-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
@@ -78,34 +78,34 @@
     /* 가로(landscape) — 위 1호차 (전폭), 아래 좌(정보) 우(QR) */
     body.orient-landscape .hocha-page {
       width: 297mm; height: 210mm;
-      padding: 14mm 20mm;
+      padding: 6mm 10mm;
       flex-direction: column;
     }
     body.orient-landscape .hocha-top { width: 100%; text-align: center; }
     body.orient-landscape .hocha-bottom { display: flex; flex: 1; align-items: center; gap: 14mm; width: 100%; }
     body.orient-landscape .hocha-info { flex: 1; text-align: center; }
     body.orient-landscape .hocha-qr-wrap { flex: none; text-align: center; }
-    body.orient-landscape .hocha-num { font-size: 130pt; line-height: 0.9; margin: 0 0 4mm; }
-    body.orient-landscape .hocha-color { font-size: 44pt; margin-bottom: 4mm; }
-    body.orient-landscape .hocha-plate { font-size: 40pt; padding: 3mm 10mm; margin-bottom: 6mm; }
-    body.orient-landscape .hocha-crew-line { font-size: 26pt; }
-    body.orient-landscape .hocha-qr-img { width: 200px; height: 200px; }
+    body.orient-landscape .hocha-num { font-size: 200pt; line-height: 0.85; margin: 0 0 3mm; }
+    body.orient-landscape .hocha-color { font-size: 40pt; margin-bottom: 4mm; }
+    body.orient-landscape .hocha-plate { font-size: 36pt; padding: 3mm 10mm; margin-bottom: 6mm; }
+    body.orient-landscape .hocha-crew-line { font-size: 22pt; margin-top: 4mm; }
+    body.orient-landscape .hocha-qr-img { width: 140px; height: 140px; }
 
     /* 세로(portrait) — 위에서 아래 스택, QR 하단 */
     body.orient-portrait .hocha-page {
       width: 210mm; height: 297mm;
-      padding: 18mm 18mm 14mm;
+      padding: 8mm 8mm 8mm;
       flex-direction: column;
     }
     body.orient-portrait .hocha-top { width: 100%; text-align: center; }
     body.orient-portrait .hocha-bottom { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; }
     body.orient-portrait .hocha-info { text-align: center; margin-bottom: 10mm; }
     body.orient-portrait .hocha-qr-wrap { text-align: center; margin-top: auto; }
-    body.orient-portrait .hocha-num { font-size: 150pt; line-height: 0.9; margin: 0 0 8mm; }
-    body.orient-portrait .hocha-color { font-size: 52pt; margin-bottom: 5mm; }
-    body.orient-portrait .hocha-plate { font-size: 48pt; padding: 4mm 14mm; margin-bottom: 8mm; }
-    body.orient-portrait .hocha-crew-line { font-size: 32pt; }
-    body.orient-portrait .hocha-qr-img { width: 180px; height: 180px; }
+    body.orient-portrait .hocha-num { font-size: 160pt; line-height: 0.85; margin: 0 0 8mm; }
+    body.orient-portrait .hocha-color { font-size: 45pt; margin-bottom: 5mm; }
+    body.orient-portrait .hocha-plate { font-size: 42pt; padding: 4mm 12mm; margin-bottom: 8mm; }
+    body.orient-portrait .hocha-crew-line { font-size: 27pt; margin-top: 5mm; }
+    body.orient-portrait .hocha-qr-img { width: 130px; height: 130px; }
 
     /* 공통 */
     .hocha-num { font-weight: 900; color: #e67e22; white-space: nowrap; }
@@ -116,8 +116,21 @@
       display: inline-block; line-height: 1; white-space: nowrap;
       border-radius: 4mm; box-shadow: 0 2mm 4mm rgba(0,0,0,0.15);
     }
-    .hocha-crew-line { font-weight: 700; color: #2c3e50; line-height: 1.1; margin-top: 3mm; white-space: nowrap; }
-    .hocha-crew-line .phone { color: #666; font-family: monospace; font-size: 0.65em; margin-left: 4mm; letter-spacing: 0.5mm; }
+    .hocha-crew-line {
+      font-weight: 700; color: #2c3e50; line-height: 1.1;
+      margin-top: 4mm; white-space: nowrap;
+      display: flex; align-items: center; justify-content: center; gap: 4mm;
+    }
+    .hocha-crew-line .role-badge {
+      display: inline-block;
+      background: #3498db; color: #fff;
+      padding: 2mm 5mm; border-radius: 3mm;
+      font-size: 0.7em; font-weight: 800;
+      letter-spacing: 1mm;
+    }
+    .hocha-crew-line .role-badge.assist { background: #16a085; }
+    .hocha-crew-line .crew-name { color: #2c3e50; }
+    .hocha-crew-line .phone { color: #666; font-family: monospace; font-size: 0.65em; letter-spacing: 0.5mm; }
     .hocha-qr img { display: block; margin: 0 auto; }
     .hocha-qr-label { font-size: 12pt; font-weight: 600; color: #2c3e50; margin-top: 4mm; max-width: 240px; line-height: 1.4; text-align: left; }
     .hocha-qr-label .qr-step { display: flex; align-items: center; gap: 2mm; margin: 1.5mm 0; white-space: nowrap; }
@@ -181,8 +194,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512x"></script>
-<script src="common.js?v=20260512x"></script>
+<script src="firebase-config.js?v=20260513b"></script>
+<script src="common.js?v=20260513b"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(initEventFilter);
 window.onDataChanged = () => render();
@@ -251,8 +264,8 @@ function renderHocha() {
           <div class="hocha-info">
             ${v.color ? `<div class="hocha-color">${esc(v.color)}</div>` : ''}
             ${v.plate ? `<div class="hocha-plate">${esc(v.plate)}</div>` : ''}
-            ${drvName ? `<div class="hocha-crew-line">운전 ${esc(drvName)}${drvPhone ? `<span class="phone">${esc(drvPhone)}</span>` : ''}</div>` : ''}
-            ${astName ? `<div class="hocha-crew-line">보조 ${esc(astName)}${astPhone ? `<span class="phone">${esc(astPhone)}</span>` : ''}</div>` : ''}
+            ${drvName ? `<div class="hocha-crew-line"><span class="role-badge">운전</span><span class="crew-name">${esc(drvName)}</span>${drvPhone ? `<span class="phone">${esc(drvPhone)}</span>` : ''}</div>` : ''}
+            ${astName ? `<div class="hocha-crew-line"><span class="role-badge assist">보조</span><span class="crew-name">${esc(astName)}</span>${astPhone ? `<span class="phone">${esc(astPhone)}</span>` : ''}</div>` : ''}
           </div>
           <div class="hocha-qr-wrap">
             <img class="hocha-qr-img" src="${qrApi(todayUrl)}" alt="QR" style="display:block;margin:0 auto;">
