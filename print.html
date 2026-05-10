@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인쇄용 - 방역코스</title>
-  <link rel="stylesheet" href="style.css?v=20260513b">
+  <link rel="stylesheet" href="style.css?v=20260513d">
   <style>
     body { background: #fff; }
     .print-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
@@ -78,17 +78,17 @@
     /* 가로(landscape) — 위 1호차 (전폭), 아래 좌(정보) 우(QR) */
     body.orient-landscape .hocha-page {
       width: 297mm; height: 210mm;
-      padding: 6mm 10mm;
+      padding: 4mm 6mm;
       flex-direction: column;
     }
     body.orient-landscape .hocha-top { width: 100%; text-align: center; }
     body.orient-landscape .hocha-bottom { display: flex; flex: 1; align-items: center; gap: 14mm; width: 100%; }
     body.orient-landscape .hocha-info { flex: 1; text-align: center; }
     body.orient-landscape .hocha-qr-wrap { flex: none; text-align: center; }
-    body.orient-landscape .hocha-num { font-size: 200pt; line-height: 0.85; margin: 0 0 3mm; }
-    body.orient-landscape .hocha-color { font-size: 40pt; margin-bottom: 4mm; }
-    body.orient-landscape .hocha-plate { font-size: 36pt; padding: 3mm 10mm; margin-bottom: 6mm; }
-    body.orient-landscape .hocha-crew-line { font-size: 22pt; margin-top: 4mm; }
+    body.orient-landscape .hocha-num { font-size: 240pt; line-height: 0.85; margin: 0 0 3mm; }
+    body.orient-landscape .hocha-color { font-size: 60pt; margin-bottom: 5mm; }
+    body.orient-landscape .hocha-plate { font-size: 56pt; padding: 4mm 14mm; margin-bottom: 7mm; }
+    body.orient-landscape .hocha-crew-line { font-size: 36pt; margin-top: 5mm; }
     body.orient-landscape .hocha-qr-img { width: 140px; height: 140px; }
 
     /* 세로(portrait) — 위에서 아래 스택, QR 하단 */
@@ -101,10 +101,10 @@
     body.orient-portrait .hocha-bottom { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; }
     body.orient-portrait .hocha-info { text-align: center; margin-bottom: 10mm; }
     body.orient-portrait .hocha-qr-wrap { text-align: center; margin-top: auto; }
-    body.orient-portrait .hocha-num { font-size: 160pt; line-height: 0.85; margin: 0 0 8mm; }
-    body.orient-portrait .hocha-color { font-size: 45pt; margin-bottom: 5mm; }
-    body.orient-portrait .hocha-plate { font-size: 42pt; padding: 4mm 12mm; margin-bottom: 8mm; }
-    body.orient-portrait .hocha-crew-line { font-size: 27pt; margin-top: 5mm; }
+    body.orient-portrait .hocha-num { font-size: 175pt; line-height: 0.85; margin: 0 0 8mm; }
+    body.orient-portrait .hocha-color { font-size: 64pt; margin-bottom: 6mm; }
+    body.orient-portrait .hocha-plate { font-size: 58pt; padding: 5mm 16mm; margin-bottom: 9mm; }
+    body.orient-portrait .hocha-crew-line { font-size: 40pt; margin-top: 6mm; }
     body.orient-portrait .hocha-qr-img { width: 130px; height: 130px; }
 
     /* 공통 */
@@ -194,8 +194,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260513b"></script>
-<script src="common.js?v=20260513b"></script>
+<script src="firebase-config.js?v=20260513d"></script>
+<script src="common.js?v=20260513d"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(initEventFilter);
 window.onDataChanged = () => render();

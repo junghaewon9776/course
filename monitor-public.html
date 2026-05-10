@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>코스 차량 위치 (공개)</title>
-  <link rel="stylesheet" href="style.css?v=20260512v">
+  <link rel="stylesheet" href="style.css?v=20260513f">
   <style>
     body { margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f3f4f6; }
     .topbar {
@@ -80,8 +80,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260512v"></script>
+<script src="firebase-config.js?v=20260513f"></script>
+<script src="common.js?v=20260513f"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const tokenParam = params.get('t') || params.get('id') || '';
@@ -195,25 +195,39 @@ function initMap() {
   });
 }
 
-function vehicleMarkerImage(color, label) {
+function vehicleMarkerImage(color, label, heading) {
   const safe = (label || '?').slice(0, 1);
-  // 위에서 본 차량 (Top-down car)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40">
-    <ellipse cx="15" cy="38" rx="9" ry="1.8" fill="rgba(0,0,0,0.25)"/>
-    <rect x="2" y="10" width="2.3" height="6" rx="0.8" fill="#222"/>
-    <rect x="25.7" y="10" width="2.3" height="6" rx="0.8" fill="#222"/>
-    <rect x="2" y="23" width="2.3" height="6" rx="0.8" fill="#222"/>
-    <rect x="25.7" y="23" width="2.3" height="6" rx="0.8" fill="#222"/>
-    <rect x="4" y="4" width="22" height="30" rx="5.5" fill="${color}" stroke="white" stroke-width="1.6"/>
-    <rect x="6.5" y="6.5" width="17" height="7" rx="1.5" fill="rgba(255,255,255,0.85)"/>
-    <rect x="6.5" y="25" width="17" height="7" rx="1.5" fill="rgba(255,255,255,0.85)"/>
-    <text x="15" y="22.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="white">${safe}</text>
+  const angle = (typeof heading === 'number' && !isNaN(heading)) ? heading : 0;
+  const hasDir = (typeof heading === 'number' && !isNaN(heading));
+  // 위에서 본 차량 (Top-down car) + 진행방향 회전
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+    <g transform="rotate(${angle} 15 15)">
+      ${hasDir ? `<path d="M15 1 L19 7 L11 7 Z" fill="${color}" stroke="white" stroke-width="1"/>` : ''}
+      <ellipse cx="15" cy="26" rx="6" ry="1.2" fill="rgba(0,0,0,0.25)"/>
+      <rect x="5" y="11" width="1.5" height="3.5" rx="0.5" fill="#222"/>
+      <rect x="23.5" y="11" width="1.5" height="3.5" rx="0.5" fill="#222"/>
+      <rect x="5" y="18" width="1.5" height="3.5" rx="0.5" fill="#222"/>
+      <rect x="23.5" y="18" width="1.5" height="3.5" rx="0.5" fill="#222"/>
+      <rect x="6.5" y="7" width="17" height="18" rx="3.5" fill="${color}" stroke="white" stroke-width="1.2"/>
+      <rect x="8" y="8.5" width="13" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
+      <rect x="8" y="19.5" width="13" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
+      <text x="15" y="18.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="bold" fill="white" transform="rotate(${-angle} 15 15)">${safe}</text>
+    </g>
   </svg>`;
   return new kakao.maps.MarkerImage(
     'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-    new kakao.maps.Size(30, 40),
-    { offset: new kakao.maps.Point(15, 38) }
+    new kakao.maps.Size(30, 30),
+    { offset: new kakao.maps.Point(15, 15) }
   );
+}
+const prevPos = {};
+function calcBearing(lat1, lng1, lat2, lng2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const dLng = toRad(lng2 - lng1);
+  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
 const liveNameOverlays = {};
@@ -236,7 +250,14 @@ function renderLive(live) {
     const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
     let m = liveMarkers[key];
     const markerLabel = (sess.crew?.vehicleName || sess.crew?.vehicle || driver).replace(/\s/g,'').charAt(0) || '?';
-    const img = vehicleMarkerImage(color, markerLabel);
+    let heading = (typeof sess.heading === 'number' && !isNaN(sess.heading)) ? sess.heading : null;
+    const prev = prevPos[key];
+    if (heading === null && prev && (Math.abs(prev.lat - sess.lat) > 1e-6 || Math.abs(prev.lng - sess.lng) > 1e-6)) {
+      heading = calcBearing(prev.lat, prev.lng, sess.lat, sess.lng);
+    }
+    if (heading === null && prev && prev.heading != null) heading = prev.heading;
+    prevPos[key] = { lat: sess.lat, lng: sess.lng, heading: heading };
+    const img = vehicleMarkerImage(color, markerLabel, heading);
     if (!m) {
       m = new kakao.maps.Marker({ position: pos, map, image: img, title: driver, zIndex: 50 });
       const iw = new kakao.maps.InfoWindow({
@@ -275,20 +296,33 @@ function renderLive(live) {
         m.__iw.setContent(buildIwContent(sess, event, course));
       }
     }
-    // 라벨 (마커 위 떠 있는 알약) — 차량명(1호차) 우선
-    const labelText = sess.crew?.vehicleName || sess.crew?.vehicle || driver;
+    // 라벨 (지도 POI 스타일 — 차번호 텍스트만)
+    const platePart = sess.crew?.vehicle || '';
+    const hochaPart = sess.crew?.vehicleName || driver || '?';
+    const labelText = platePart || hochaPart;
     let nameOv = liveNameOverlays[key];
     if (!nameOv) {
       const div = document.createElement('div');
-      div.style.cssText = `background:${color};color:#fff;padding:1px 6px;border-radius:7px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,0.3);font-family:-apple-system,'Malgun Gothic',sans-serif;text-align:center;line-height:1.4;`;
+      div.style.cssText = `
+        color:#1a1a1a; font-weight:700; font-size:11px;
+        white-space:nowrap; font-family:-apple-system,'Malgun Gothic',sans-serif;
+        text-align:center; line-height:1; letter-spacing:0.3px;
+        text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff,
+                     0 -1px 0 #fff, 0 1px 0 #fff, -1px 0 0 #fff, 1px 0 0 #fff;
+        pointer-events:none;
+      `;
       div.textContent = labelText;
-      nameOv = new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.8, zIndex: 51 });
+      div.dataset.label = labelText;
+      nameOv = new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.6, zIndex: 51 });
       nameOv.setMap(map);
       liveNameOverlays[key] = nameOv;
     } else {
       nameOv.setPosition(pos);
       const cont = nameOv.getContent();
-      if (cont && cont.textContent !== labelText) cont.textContent = labelText;
+      if (cont && cont.dataset.label !== labelText) {
+        cont.textContent = labelText;
+        cont.dataset.label = labelText;
+      }
     }
     items.push({ key, sess, event, course, driver, color });
   }

@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260512v">
+  <link rel="stylesheet" href="style.css?v=20260513f">
 </head>
 <body>
 <header>
@@ -137,8 +137,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260512v"></script>
+<script src="firebase-config.js?v=20260513f"></script>
+<script src="common.js?v=20260513f"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
@@ -385,33 +385,63 @@ function subscribeLive() {
     renderLive(live);
   });
 }
-function vehicleMarkerSvg(color, label) {
+function vehicleMarkerSvg(color, label, heading) {
   const safe = (label || '?').slice(0, 1);
-  // 위에서 본 차량 (Top-down car)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="34" viewBox="0 0 26 34">
-    <ellipse cx="13" cy="32" rx="8" ry="1.5" fill="rgba(0,0,0,0.25)"/>
-    <rect x="1.5" y="9" width="2" height="5" rx="0.7" fill="#222"/>
-    <rect x="22.5" y="9" width="2" height="5" rx="0.7" fill="#222"/>
-    <rect x="1.5" y="20" width="2" height="5" rx="0.7" fill="#222"/>
-    <rect x="22.5" y="20" width="2" height="5" rx="0.7" fill="#222"/>
-    <rect x="3.5" y="3.5" width="19" height="26" rx="5" fill="${color}" stroke="white" stroke-width="1.5"/>
-    <rect x="5.5" y="5.5" width="15" height="6" rx="1.5" fill="rgba(255,255,255,0.85)"/>
-    <rect x="5.5" y="22" width="15" height="6" rx="1.5" fill="rgba(255,255,255,0.85)"/>
-    <text x="13" y="20" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="white">${safe}</text>
+  const angle = (typeof heading === 'number' && !isNaN(heading)) ? heading : 0;
+  const hasDir = (typeof heading === 'number' && !isNaN(heading));
+  // 위에서 본 차량 (Top-down car) — heading 방향으로 회전, 진행방향 표시 화살표
+  // viewBox 30x30, 차량 본체는 가운데 (13~17 중심), 회전축 (15,15)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+    <g transform="rotate(${angle} 15 15)">
+      ${hasDir ? `<path d="M15 1 L19 7 L11 7 Z" fill="${color}" stroke="white" stroke-width="1"/>` : ''}
+      <ellipse cx="15" cy="26" rx="6" ry="1.2" fill="rgba(0,0,0,0.25)"/>
+      <rect x="5" y="11" width="1.5" height="3.5" rx="0.5" fill="#222"/>
+      <rect x="23.5" y="11" width="1.5" height="3.5" rx="0.5" fill="#222"/>
+      <rect x="5" y="18" width="1.5" height="3.5" rx="0.5" fill="#222"/>
+      <rect x="23.5" y="18" width="1.5" height="3.5" rx="0.5" fill="#222"/>
+      <rect x="6.5" y="7" width="17" height="18" rx="3.5" fill="${color}" stroke="white" stroke-width="1.2"/>
+      <rect x="8" y="8.5" width="13" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
+      <rect x="8" y="19.5" width="13" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
+      <text x="15" y="18.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="bold" fill="white" transform="rotate(${-angle} 15 15)">${safe}</text>
+    </g>
   </svg>`;
   return new kakao.maps.MarkerImage(
     'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-    new kakao.maps.Size(26, 34),
-    { offset: new kakao.maps.Point(13, 32) }
+    new kakao.maps.Size(30, 30),
+    { offset: new kakao.maps.Point(15, 15) }
   );
 }
-// 이름 라벨 (마커 위쪽에 떠 있는 텍스트 박스) — kakao CustomOverlay 사용
+// 이전 위치 캐시 — heading 없을 때 폴백 계산용
+const prevPos = {};
+function calcBearing(lat1, lng1, lat2, lng2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const dLng = toRad(lng2 - lng1);
+  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+// 이름 라벨 (마커 위쪽에 떠 있는 텍스트) — 지도 POI 스타일, 차번호만
 const liveNameOverlays = {};
-function buildNameOverlay(pos, name, color) {
+function buildNameLabelHTML(plate, hocha) {
+  const esc = s => String(s||'').replace(/</g,'&lt;');
+  return esc(plate || hocha || '');
+}
+function buildNameOverlay(pos, plate, hocha, color) {
   const div = document.createElement('div');
-  div.style.cssText = `background:${color};color:#fff;padding:1px 6px;border-radius:7px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,0.3);font-family:-apple-system,'Malgun Gothic',sans-serif;text-align:center;line-height:1.4;`;
-  div.textContent = name;
-  return new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.8, zIndex: 51 });
+  // 지도 POI 같은 텍스트 — 박스 X, 흰 후광 X4 방향 그림자로 가독성
+  div.style.cssText = `
+    color:#1a1a1a; font-weight:700; font-size:11px;
+    white-space:nowrap; font-family:-apple-system,'Malgun Gothic',sans-serif;
+    text-align:center; line-height:1; letter-spacing:0.3px;
+    text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff,
+                 0 -1px 0 #fff, 0 1px 0 #fff, -1px 0 0 #fff, 1px 0 0 #fff;
+    pointer-events:none;
+  `;
+  div.textContent = buildNameLabelHTML(plate, hocha);
+  div.dataset.plate = plate || '';
+  div.dataset.hocha = hocha || '';
+  return new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.6, zIndex: 51 });
 }
 function buildVehicleInfoHtml(sess) {
   const driver = sess.crew?.driver || '운전자';
@@ -473,7 +503,15 @@ function renderLive(live) {
     const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
     // 마커 가운데 글자 — 차량명 첫글자 우선 (예: 1호차 → 1), 없으면 운전자 이니셜
     const markerLabel = (sess.crew?.vehicleName || sess.crew?.vehicle || driver).replace(/\s/g,'').charAt(0) || '?';
-    const img = vehicleMarkerSvg(color, markerLabel);
+    // 진행 방향 — sess.heading 우선, 없으면 prev→curr 위치차이로 계산
+    let heading = (typeof sess.heading === 'number' && !isNaN(sess.heading)) ? sess.heading : null;
+    const prev = prevPos[key];
+    if (heading === null && prev && (Math.abs(prev.lat - sess.lat) > 1e-6 || Math.abs(prev.lng - sess.lng) > 1e-6)) {
+      heading = calcBearing(prev.lat, prev.lng, sess.lat, sess.lng);
+    }
+    if (heading === null && prev && prev.heading != null) heading = prev.heading;  // 정지시 마지막 방향 유지
+    prevPos[key] = { lat: sess.lat, lng: sess.lng, heading: heading };
+    const img = vehicleMarkerSvg(color, markerLabel, heading);
     let m = liveMarkers[key];
     if (!m) {
       m = new kakao.maps.Marker({ position: pos, map, image: img, title: driver, zIndex: 50 });
@@ -510,17 +548,22 @@ function renderLive(live) {
       m.setImage(img);
       if (m.__iw && m.__iw.getMap && m.__iw.getMap()) m.__iw.setContent(buildVehicleInfoHtml(sess));
     }
-    // 라벨 (CustomOverlay) — 차량명(1호차) 우선, 없으면 차번호, 그것도 없으면 운전자
-    const labelText = sess.crew?.vehicleName || sess.crew?.vehicle || driver;
+    // 라벨 (CustomOverlay) — 위:차번호, 아래:호차 (호차 없으면 운전자)
+    const platePart = sess.crew?.vehicle || '';
+    const hochaPart = sess.crew?.vehicleName || driver || '?';
     let nameOv = liveNameOverlays[key];
     if (!nameOv) {
-      nameOv = buildNameOverlay(pos, labelText, color);
+      nameOv = buildNameOverlay(pos, platePart, hochaPart, color);
       nameOv.setMap(map);
       liveNameOverlays[key] = nameOv;
     } else {
       nameOv.setPosition(pos);
       const cont = nameOv.getContent();
-      if (cont && cont.textContent !== labelText) cont.textContent = labelText;
+      if (cont && (cont.dataset.plate !== platePart || cont.dataset.hocha !== hochaPart)) {
+        cont.textContent = buildNameLabelHTML(platePart, hochaPart);
+        cont.dataset.plate = platePart;
+        cont.dataset.hocha = hochaPart;
+      }
     }
     items.push({ key, sess, event, course, driver, color });
   }
