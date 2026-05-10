@@ -72,7 +72,8 @@ const defaultData = {
   noSprayZones: [],  // 방역불가: { id, lat, lng, name, reason, createdAt }
   telegram: { botToken: '', chatId: '', enabled: false },
   naverSms: { proxyUrl: '', serviceId: '', accessKey: '', secretKey: '', from: '', enabled: false },
-  publicMonitor: { enabled: false, token: '', updatedAt: 0 },
+  publicMonitor: { enabled: false, token: '', pin: '', updatedAt: 0 },
+  vehicles: [],   // [{ id, name, plate, color, defaultDriverId, defaultAssistId, memberIds: [] }]
   sheetSync: { enabled: false, webhookUrl: '', token: '' }  // Google Apps Script 웹앱으로 사진 동기화
 };
 
@@ -579,6 +580,9 @@ function getTeam(data, teamId) {
 }
 function getMember(data, memberId) {
   return (data.members || []).find(m => m.id === memberId);
+}
+function getVehicle(data, vehicleId) {
+  return ((data && data.vehicles) || []).find(v => v.id === vehicleId);
 }
 function getCourseAnchors(data, courseId) {
   return (data.anchors || [])

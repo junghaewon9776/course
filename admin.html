@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260511g">
+  <link rel="stylesheet" href="style.css?v=20260511l">
 </head>
 <body>
 <header>
@@ -248,10 +248,19 @@
             <input id="pubMonUrl" type="text" readonly style="flex:1;font-size:11px;background:#f8f9fa;">
             <button class="small" onclick="copyPubMonUrl()">📋 복사</button>
           </div>
+          <label style="margin-top:8px;">접속 PIN (4자리 숫자, 빈칸이면 PIN 없음)</label>
+          <div style="display:flex;gap:4px;">
+            <input id="pubMonPin" type="text" inputmode="numeric" maxlength="4" placeholder="예: 1234" style="flex:1;font-size:14px;letter-spacing:4px;">
+            <button class="small success" onclick="savePubMonPin()">저장</button>
+          </div>
           <p class="muted" style="font-size:11px;margin-top:4px;">
-            ⚠️ URL이 노출되면 누구나 위치를 볼 수 있어요. 운영 끝나면 끄거나 토큰 재발급.
+            URL + PIN 조합 → 받는 사람한테 둘 다 알려주세요.<br>
+            ⚠️ PIN 비워두면 URL만 알면 누구나 봅니다. 운영 끝나면 반드시 끄세요.
           </p>
-          <button class="small gray" style="margin-top:6px;" onclick="regeneratePubMonToken()">🔄 토큰 재발급 (이전 URL 무효화)</button>
+          <div style="display:flex;gap:6px;margin-top:6px;">
+            <button class="small gray" onclick="regeneratePubMonToken()">🔄 토큰 재발급</button>
+            <button class="small" onclick="copyPubMonShareText()">📋 URL+PIN 안내문 복사</button>
+          </div>
         </div>
       </div>
 
@@ -271,8 +280,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511g"></script>
-<script src="common.js?v=20260511g"></script>
+<script src="firebase-config.js?v=20260511l"></script>
+<script src="common.js?v=20260511l"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -938,6 +947,7 @@ function renderPublicMonitorConfig() {
   const cb = document.getElementById('pubMonEnabled');
   const box = document.getElementById('pubMonUrlBox');
   const urlInput = document.getElementById('pubMonUrl');
+  const pinInput = document.getElementById('pubMonPin');
   if (!cb || !box || !urlInput) return;
   cb.checked = !!pm.enabled;
   box.style.display = pm.enabled ? 'block' : 'none';
@@ -945,6 +955,29 @@ function renderPublicMonitorConfig() {
     const base = location.href.replace(/[^/]*$/, '');
     urlInput.value = `${base}monitor-public.html?t=${pm.token}`;
   }
+  if (pinInput) pinInput.value = pm.pin || '';
+}
+function savePubMonPin() {
+  const pin = (document.getElementById('pubMonPin').value || '').trim();
+  if (pin && !/^\d{4}$/.test(pin)) { alert('PIN은 4자리 숫자여야 합니다 (예: 1234) 또는 빈칸'); return; }
+  const data = loadData();
+  if (!data.publicMonitor) data.publicMonitor = { enabled: false, token: '', pin: '', updatedAt: 0 };
+  data.publicMonitor.pin = pin;
+  data.publicMonitor.updatedAt = Date.now();
+  saveData(data);
+  alert(pin ? `✅ PIN ${pin} 저장됨` : '✅ PIN 제거됨 (URL만으로 접속 가능)');
+}
+function copyPubMonShareText() {
+  const url = document.getElementById('pubMonUrl').value;
+  const data = loadData();
+  const pin = (data.publicMonitor || {}).pin || '';
+  const text = pin
+    ? `🚐 방역 차량 실시간 위치\n\n링크: ${url}\nPIN: ${pin}`
+    : `🚐 방역 차량 실시간 위치\n\n링크: ${url}`;
+  navigator.clipboard?.writeText(text).then(
+    () => alert('📋 안내문 복사됨\n\n' + text),
+    () => { alert('복사 실패. 수동 복사:\n\n' + text); }
+  );
 }
 
 function togglePublicMonitor() {

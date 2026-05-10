@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>방역 차량 위치 (공개)</title>
-  <link rel="stylesheet" href="style.css?v=20260511g">
+  <link rel="stylesheet" href="style.css?v=20260511l">
   <style>
     body { margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f3f4f6; }
     .topbar {
@@ -71,8 +71,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511g"></script>
-<script src="common.js?v=20260511g"></script>
+<script src="firebase-config.js?v=20260511l"></script>
+<script src="common.js?v=20260511l"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const tokenParam = params.get('t') || params.get('id') || '';
@@ -112,10 +112,54 @@ function hideGate() { document.getElementById('gate').style.display = 'none'; }
       showGate('🔒 접근 불가', '잘못되었거나 만료된 링크입니다.');
       return;
     }
-    hideGate();
-    loadKakaoSDK(initMap);
+    // PIN 검증
+    if (pm.pin) {
+      const cached = sessionStorage.getItem('pubmonPin_' + pm.token);
+      if (cached === pm.pin) {
+        hideGate();
+        loadKakaoSDK(initMap);
+      } else {
+        showPinGate(pm.pin, () => {
+          sessionStorage.setItem('pubmonPin_' + pm.token, pm.pin);
+          hideGate();
+          loadKakaoSDK(initMap);
+        });
+      }
+    } else {
+      hideGate();
+      loadKakaoSDK(initMap);
+    }
   });
 })();
+
+function showPinGate(correctPin, onSuccess) {
+  const gate = document.getElementById('gate');
+  gate.style.display = 'flex';
+  const card = gate.querySelector('.gate-card');
+  card.innerHTML = `
+    <h2>🔐 PIN 입력</h2>
+    <p style="color:#666;font-size:13px;line-height:1.6;margin-bottom:14px;">관리자가 알려준 4자리 PIN을 입력하세요.</p>
+    <input id="pinInput" type="text" inputmode="numeric" maxlength="4" placeholder="●●●●"
+      style="width:100%;padding:14px;font-size:24px;text-align:center;letter-spacing:12px;border:2px solid #3498db;border-radius:8px;box-sizing:border-box;">
+    <div id="pinErr" style="color:#e74c3c;font-size:12px;margin-top:6px;min-height:14px;"></div>
+    <button id="pinSubmit" style="width:100%;margin-top:10px;padding:12px;background:#3498db;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;">확인</button>
+  `;
+  const input = document.getElementById('pinInput');
+  const err = document.getElementById('pinErr');
+  const submit = () => {
+    if (input.value === correctPin) {
+      onSuccess();
+    } else {
+      err.textContent = 'PIN이 맞지 않습니다';
+      input.value = '';
+      input.focus();
+    }
+  };
+  document.getElementById('pinSubmit').onclick = submit;
+  input.onkeydown = e => { if (e.key === 'Enter') submit(); };
+  input.oninput = () => { err.textContent = ''; if (input.value.length === 4) submit(); };
+  setTimeout(() => input.focus(), 100);
+}
 
 function loadKakaoSDK(cb) {
   if (window.kakao && window.kakao.maps) { cb(); return; }
@@ -143,19 +187,27 @@ function initMap() {
 }
 
 function vehicleMarkerImage(color, label) {
-  const safe = (label || '?').slice(0, 2);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
-    <path d="M22 2 C12 2 4 10 4 20 C4 30 22 54 22 54 C22 54 40 30 40 20 C40 10 32 2 22 2 Z" fill="${color}" stroke="white" stroke-width="2"/>
-    <circle cx="22" cy="20" r="11" fill="white"/>
-    <text x="22" y="24" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${safe}</text>
+  const safe = (label || '?').slice(0, 1);
+  // 위에서 본 차량 (Top-down car)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="64" viewBox="0 0 48 64">
+    <ellipse cx="24" cy="60" rx="15" ry="3" fill="rgba(0,0,0,0.25)"/>
+    <rect x="3" y="16" width="4" height="9" rx="1" fill="#222"/>
+    <rect x="41" y="16" width="4" height="9" rx="1" fill="#222"/>
+    <rect x="3" y="36" width="4" height="9" rx="1" fill="#222"/>
+    <rect x="41" y="36" width="4" height="9" rx="1" fill="#222"/>
+    <rect x="7" y="6" width="34" height="48" rx="8" fill="${color}" stroke="white" stroke-width="2"/>
+    <rect x="10" y="10" width="28" height="11" rx="3" fill="rgba(255,255,255,0.85)"/>
+    <rect x="10" y="40" width="28" height="11" rx="3" fill="rgba(255,255,255,0.85)"/>
+    <text x="24" y="35" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="white">${safe}</text>
   </svg>`;
   return new kakao.maps.MarkerImage(
     'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-    new kakao.maps.Size(44, 56),
-    { offset: new kakao.maps.Point(22, 54) }
+    new kakao.maps.Size(48, 64),
+    { offset: new kakao.maps.Point(24, 60) }
   );
 }
 
+const liveNameOverlays = {};
 function renderLive(live) {
   const data = loadData();
   const STALE_MS = 5 * 60 * 1000;  // 5분 이상 무업데이트면 표시 안 함
@@ -173,7 +225,8 @@ function renderLive(live) {
     const driver = sess.crew?.driver || '운전자';
     const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
     let m = liveMarkers[key];
-    const img = vehicleMarkerImage(color, driver);
+    const markerLabel = (sess.crew?.vehicleName || sess.crew?.vehicle || driver).replace(/\s/g,'').charAt(0) || '?';
+    const img = vehicleMarkerImage(color, markerLabel);
     if (!m) {
       m = new kakao.maps.Marker({ position: pos, map, image: img, title: driver });
       const iw = new kakao.maps.InfoWindow({
@@ -195,6 +248,21 @@ function renderLive(live) {
         m.__iw.setContent(buildIwContent(sess, event, course));
       }
     }
+    // 라벨 (마커 위 떠 있는 알약) — 차번호 우선
+    const labelText = sess.crew?.vehicle || sess.crew?.vehicleName || driver;
+    let nameOv = liveNameOverlays[key];
+    if (!nameOv) {
+      const div = document.createElement('div');
+      div.style.cssText = `transform:translate(-50%,-100%);background:${color};color:#fff;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.35);margin-top:-66px;font-family:-apple-system,'Malgun Gothic',sans-serif;`;
+      div.textContent = labelText;
+      nameOv = new kakao.maps.CustomOverlay({ position: pos, content: div, yAnchor: 1, zIndex: 51 });
+      nameOv.setMap(map);
+      liveNameOverlays[key] = nameOv;
+    } else {
+      nameOv.setPosition(pos);
+      const cont = nameOv.getContent();
+      if (cont && cont.textContent !== labelText) cont.textContent = labelText;
+    }
     items.push({ key, sess, event, course, driver, color });
   }
   // 사라진 세션 마커 제거
@@ -202,6 +270,12 @@ function renderLive(live) {
     if (!activeKeys.has(key)) {
       try { liveMarkers[key].setMap(null); } catch (e) {}
       delete liveMarkers[key];
+    }
+  }
+  for (const key of Object.keys(liveNameOverlays)) {
+    if (!activeKeys.has(key)) {
+      try { liveNameOverlays[key].setMap(null); } catch (e) {}
+      delete liveNameOverlays[key];
     }
   }
   // 상태/리스트 갱신
@@ -236,13 +310,20 @@ function renderLive(live) {
 function buildIwContent(sess, event, course) {
   const driver = sess.crew?.driver || '운전자';
   const assist = sess.crew?.assist || '';
+  const driverPhone = sess.crew?.driverPhone || '';
+  const assistPhone = sess.crew?.assistPhone || '';
   const veh = [sess.crew?.vehicle, sess.crew?.vehicleColor].filter(Boolean).join(' / ');
   const elapsed = Math.round((Date.now() - sess.startedAt) / 60000);
   const progress = (sess.totalCount > 0) ? `${sess.completedCount}/${sess.totalCount} 거점` : '진행 중';
-  return `<div style="padding:10px 12px;font-size:12px;min-width:180px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
+  const callBtn = (name, ph) => ph
+    ? `<a href="tel:${ph.replace(/[^0-9+]/g,'')}" style="display:inline-block;margin-top:4px;background:#27ae60;color:#fff;padding:6px 10px;border-radius:5px;text-decoration:none;font-weight:700;font-size:12px;">📞 ${escapeHtml(name)} (${escapeHtml(ph)})</a>`
+    : '';
+  return `<div style="padding:10px 12px;font-size:12px;min-width:200px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
     <div style="font-weight:700;color:#2c3e50;margin-bottom:4px;">${escapeHtml(event?.name || '?')} · ${escapeHtml(course?.name || '?')}</div>
-    <div>🧑‍✈️ ${escapeHtml(driver)}${assist ? ' / ' + escapeHtml(assist) : ''}</div>
-    ${veh ? `<div>🚐 ${escapeHtml(veh)}</div>` : ''}
+    <div>🧑‍✈️ <b>${escapeHtml(driver)}</b>${assist ? ' / ' + escapeHtml(assist) : ''}</div>
+    ${callBtn(driver, driverPhone)}
+    ${assist && assistPhone ? '<br>' + callBtn(assist, assistPhone) : ''}
+    ${veh ? `<div style="margin-top:6px;">🚐 ${escapeHtml(veh)}</div>` : ''}
     <div style="color:#666;margin-top:4px;">${progress} · ${elapsed}분 진행</div>
   </div>`;
 }

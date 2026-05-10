@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260511g">
+  <link rel="stylesheet" href="style.css?v=20260511l">
   <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
@@ -74,6 +74,18 @@
         <p class="muted" style="font-size:12px;">팀 구성을 저장해두고 나중에 불러올 수 있습니다 (이전 구성 비교/복원용)</p>
         <div id="savedTeamsList"></div>
       </div>
+
+      <!-- 차량 등록 -->
+      <div class="card" style="border-left:4px solid #e67e22;">
+        <div class="flex-between">
+          <h2>🚐 차량 등록</h2>
+          <div class="admin-only">
+            <button class="small success" onclick="addVehicle()">+ 차량 추가</button>
+          </div>
+        </div>
+        <p class="muted" style="font-size:12px;">차량별 운전자/보조 등록. today.html 에서 차량 선택하면 자동으로 운전자가 채워집니다.</p>
+        <div id="vehicleList"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -82,8 +94,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511g"></script>
-<script src="common.js?v=20260511g"></script>
+<script src="firebase-config.js?v=20260511l"></script>
+<script src="common.js?v=20260511l"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -97,6 +109,99 @@ function refreshAll() {
   renderMembers();
   renderTeams();
   renderSavedTeams();
+  renderVehicles();
+}
+
+// ────── 차량 등록 ──────
+function renderVehicles() {
+  const data = loadData();
+  const vehicles = data.vehicles || [];
+  const el = document.getElementById('vehicleList');
+  if (!el) return;
+  if (!vehicles.length) {
+    el.innerHTML = '<div class="empty">등록된 차량이 없습니다. <b>+ 차량 추가</b> 클릭</div>';
+    return;
+  }
+  const memberOptions = (data.members || [])
+    .map(m => `<option value="${m.id}">${(m.name||'')}${m.position ? ' · '+m.position : ''}${m.phone ? ' ('+m.phone+')' : ''}</option>`).join('');
+  el.innerHTML = vehicles.map(v => {
+    const driver = getMember(data, v.defaultDriverId);
+    const assist = getMember(data, v.defaultAssistId);
+    return `
+      <div class="list-item" style="flex-direction:column;align-items:stretch;gap:6px;border:1px solid #f0d4b3;border-radius:6px;padding:8px;margin-bottom:8px;">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="background:${v.color||'#e67e22'};color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px;">${(v.name||'차량').replace(/</g,'&lt;')}</span>
+          <span class="muted" style="font-size:12px;">${v.plate ? '· '+v.plate.replace(/</g,'&lt;') : ''}${v.color ? ' · '+v.color : ''}</span>
+          <span style="flex:1;"></span>
+          <button class="small" onclick="renameVehicle('${v.id}')">수정</button>
+          <button class="small danger" onclick="deleteVehicle('${v.id}')">삭제</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:12px;color:#555;">기본 운전자</label>
+          <select onchange="setVehicleDriver('${v.id}', this.value)" style="flex:1;min-width:140px;">
+            <option value="">- 미지정 -</option>
+            ${memberOptions.replace(`value="${v.defaultDriverId||''}"`, `value="${v.defaultDriverId||''}" selected`)}
+          </select>
+          <label style="font-size:12px;color:#555;">보조</label>
+          <select onchange="setVehicleAssist('${v.id}', this.value)" style="flex:1;min-width:140px;">
+            <option value="">- 미지정 -</option>
+            ${memberOptions.replace(`value="${v.defaultAssistId||''}"`, `value="${v.defaultAssistId||''}" selected`)}
+          </select>
+        </div>
+        <div class="muted" style="font-size:11px;">
+          ${driver ? `🚐 ${driver.name}${driver.phone ? ' · '+driver.phone : ''}` : '운전자 미지정'}
+          ${assist ? ` / 보조 ${assist.name}${assist.phone ? ' · '+assist.phone : ''}` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+function addVehicle() {
+  const name = prompt('차량 이름 (예: 1호차)');
+  if (!name) return;
+  const plate = prompt('차량번호 (선택, 예: 12가 3456)', '') || '';
+  const color = prompt('색상 (선택, 예: 흰색)', '') || '';
+  const data = loadData();
+  if (!data.vehicles) data.vehicles = [];
+  data.vehicles.push({
+    id: uid(), name: name.trim(), plate: plate.trim(), color: color.trim(),
+    defaultDriverId: '', defaultAssistId: '', memberIds: []
+  });
+  saveData(data);
+  refreshAll();
+}
+function renameVehicle(id) {
+  const data = loadData();
+  const v = (data.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  const name = prompt('차량 이름', v.name || '');
+  if (name === null) return;
+  const plate = prompt('차량번호', v.plate || '');
+  if (plate === null) return;
+  const color = prompt('색상', v.color || '');
+  if (color === null) return;
+  v.name = name.trim(); v.plate = plate.trim(); v.color = color.trim();
+  saveData(data); refreshAll();
+}
+function deleteVehicle(id) {
+  if (!confirm('차량을 삭제할까요?')) return;
+  const data = loadData();
+  data.vehicles = (data.vehicles || []).filter(v => v.id !== id);
+  saveData(data); refreshAll();
+}
+function setVehicleDriver(id, memberId) {
+  const data = loadData();
+  const v = (data.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  v.defaultDriverId = memberId || '';
+  saveData(data); refreshAll();
+}
+function setVehicleAssist(id, memberId) {
+  const data = loadData();
+  const v = (data.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  v.defaultAssistId = memberId || '';
+  saveData(data); refreshAll();
 }
 
 // ────── 회원 ──────
