@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260512n">
+  <link rel="stylesheet" href="style.css?v=20260512p">
   <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
@@ -80,6 +80,8 @@
         <div class="flex-between">
           <h2>🚐 차량 등록</h2>
           <div class="admin-only" style="display:flex;gap:4px;flex-wrap:wrap;">
+            <button class="small success" onclick="setAllVehiclesActive(true)" title="차량 모두 활성화 → 오늘운영에서 차량 버튼만 표시 (조 입력 비활성화)">🚐 차량 활성화 <span style="opacity:0.85;font-weight:400;">(조 입력 OFF)</span></button>
+            <button class="small gray" onclick="setAllVehiclesActive(false)" title="차량 모두 비활성화 → 오늘운영에서 조 입력 폼 표시 (차량 버튼 비활성화)">🧑 차량 비활성화 <span style="opacity:0.85;font-weight:400;">(조 입력 ON)</span></button>
             <button class="small" onclick="printAllVehicles()">🖨 전체 호차 인쇄</button>
             <button class="small success" onclick="addVehicle()">+ 차량 추가</button>
           </div>
@@ -95,8 +97,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512n"></script>
-<script src="common.js?v=20260512n"></script>
+<script src="firebase-config.js?v=20260512p"></script>
+<script src="common.js?v=20260512p"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -161,9 +163,9 @@ function renderVehicles() {
           <span style="background:${v.active === false ? '#bdc3c7' : '#e67e22'};color:#fff;padding:6px 14px;border-radius:6px;font-weight:700;font-size:16px;">🚐 ${displayName}</span>
           <span style="flex:1;"></span>
           <button onclick="toggleVehicleActive('${v.id}')"
-                  title="${v.active === false ? '꺼짐 — 클릭하면 켬 (오늘운영에 표시)' : '켜짐 — 클릭하면 끔 (오늘운영에서 숨김)'}"
+                  title="${v.active === false ? '비활성화 — 클릭하면 활성화 (오늘운영에 표시)' : '활성화 — 클릭하면 비활성화 (오늘운영에서 숨김)'}"
                   style="background:${v.active === false ? '#95a5a6' : '#27ae60'};color:#fff;border:none;padding:6px 12px;border-radius:5px;font-weight:700;font-size:12px;cursor:pointer;">
-            ${v.active === false ? '🚫 꺼짐' : '✅ 켜짐'}
+            ${v.active === false ? '🚫 비활성' : '✅ 활성'}
           </button>
           <button class="small" onclick="printOneVehicle('${v.id}')" title="이 차량 호차 A4 인쇄">🖨</button>
           <button class="small" onclick="editVehicle('${v.id}')">✎ 수정</button>
@@ -334,6 +336,20 @@ function toggleVehicleActive(id) {
   // 기본은 활성 (true 또는 undefined). 한 번 누르면 false, 다시 누르면 true
   v.active = (v.active === false);
   saveData(data); refreshAll();
+}
+function setAllVehiclesActive(active) {
+  const data = loadData();
+  const vehicles = data.vehicles || [];
+  if (!vehicles.length) { alert('등록된 차량이 없습니다'); return; }
+  const msg = active
+    ? `차량 ${vehicles.length}대를 모두 활성화할까요?\n\n→ 오늘운영에서 차량 버튼만 표시됨\n→ 조 입력 폼은 비활성화 (안 보임)`
+    : `차량 ${vehicles.length}대를 모두 비활성화할까요?\n\n→ 오늘운영에서 차량 버튼 비활성화 (안 보임)\n→ 조 입력 폼이 다시 활성화됨`;
+  if (!confirm(msg)) return;
+  vehicles.forEach(v => { v.active = !!active; });
+  saveData(data); refreshAll();
+  alert(active
+    ? `🚐 차량 ${vehicles.length}대 모두 활성화 완료\n오늘운영 = 차량 버튼 모드`
+    : `🧑 차량 ${vehicles.length}대 모두 비활성화 완료\n오늘운영 = 조 입력 모드`);
 }
 function deleteVehicle(id) {
   if (!confirm('차량을 삭제할까요?')) return;
