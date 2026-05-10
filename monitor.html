@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260511d">
+  <link rel="stylesheet" href="style.css?v=20260511g">
 </head>
 <body>
 <header>
@@ -101,8 +101,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511d"></script>
-<script src="common.js?v=20260511d"></script>
+<script src="firebase-config.js?v=20260511g"></script>
+<script src="common.js?v=20260511g"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
@@ -153,27 +153,30 @@ function renderCourseQuickList() {
   const data = loadData();
   const el = document.getElementById('courseQuickList');
   if (!el) return;
+  // admin에서 👁→🚫 처리한 행사/코스는 숨김 (visibility[id] === false)
+  const evVis = (data.visibility || {}).events || {};
+  const csVis = (data.visibility || {}).courses || {};
   const buttons = [];
   for (const ev of (data.events || [])) {
+    if (evVis[ev.id] === false) continue;  // 행사 숨김
     for (const c of (ev.courses || [])) {
+      if (csVis[c.id] === false) continue;  // 코스 숨김
       const courseAnchors = (data.anchors || [])
         .filter(a => a.courseId === c.id)
         .sort((a, b) => (a.order || 0) - (b.order || 0));
       const count = courseAnchors.length;
       if (!count) continue;
-      const dist = totalAnchorDistance(courseAnchors);
-      const etaMin = estimateMinutes(dist, count);
       buttons.push(`
         <button onclick="showCourseOnMap('${c.id}')" style="background:${c.color};color:#fff;border:none;padding:8px 12px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">
           ${escapeHtml(ev.name)} · ${escapeHtml(c.name)}
-          <span style="opacity:0.85;font-weight:400;">(${count}거점 · 약 ${formatEtaMin(etaMin)})</span>
+          <span style="opacity:0.85;font-weight:400;">(${count}거점)</span>
         </button>
       `);
     }
   }
   el.innerHTML = buttons.length
     ? buttons.join('')
-    : '<span class="muted" style="font-size:12px;">등록된 거점이 없습니다</span>';
+    : '<span class="muted" style="font-size:12px;">표시할 코스가 없습니다 (admin에서 숨김 처리되었거나 거점이 없음)</span>';
 }
 function showCourseOnMap(courseId) {
   const data = loadData();
@@ -222,12 +225,10 @@ function showCourseOnMap(courseId) {
   // 따라가기 모드 끔
   stopFollow('show-course');
   const totalDist = totalAnchorDistance(anchors);
-  const etaMin = estimateMinutes(totalDist, anchors.length);
   const distKm = (totalDist * ETA_ROAD_FACTOR / 1000).toFixed(1);
   document.getElementById('logInfo').innerHTML = `
     <div style="background:#eaf3fb;border-left:4px solid ${course.color};padding:8px 10px;border-radius:4px;">
-      <b>🗺 ${escapeHtml(course.name)}</b> (${anchors.length}개 거점 · 약 ${distKm}km · 예상 ${formatEtaMin(etaMin)})<br>
-      <span class="muted" style="font-size:11px;">거점 ${anchors.length}개 × 정차 ${ETA_STOP_MIN_PER_ANCHOR}분 + 이동 평균 ${ETA_AVG_SPEED_KMH}km/h 가정</span><br>
+      <b>🗺 ${escapeHtml(course.name)}</b> (${anchors.length}개 거점 · 약 ${distKm}km)<br>
       <span class="muted" style="font-size:12px;">거점 순서: ${anchors.map((a, i) => `${i+1}.${escapeHtml(a.name)}`).join(' → ')}</span>
     </div>
   `;
@@ -312,17 +313,18 @@ function renderLive(live) {
       const progress = (it.sess.totalCount > 0)
         ? `${it.sess.completedCount}/${it.sess.totalCount}`
         : '-';
-      // 남은 예상 시간 — 현재 위치에서 미완료 거점들까지 직선거리
+      // 다음 거점 도착예상 + 코스 전체 남은 예상
       const courseAnchors = (data.anchors || [])
         .filter(a => a.courseId === it.sess.courseId)
         .sort((a, b) => (a.order || 0) - (b.order || 0));
-      const completedSet = new Set();  // sess에는 completion id 없음 → completedCount 만 사용
       const remainAnchors = courseAnchors.slice(it.sess.completedCount || 0);
-      let remainEta = '';
-      if (remainAnchors.length && it.sess.lat && remainAnchors[0].lat) {
-        let d = distance(it.sess.lat, it.sess.lng, remainAnchors[0].lat, remainAnchors[0].lng);
-        d += totalAnchorDistance(remainAnchors);
-        remainEta = ' · 남은 약 ' + formatEtaMin(estimateMinutes(d, remainAnchors.length));
+      let nextEta = '';      // 현재 위치 → 다음 거점
+      let remainEta = '';    // 코스 끝까지
+      if (remainAnchors.length && typeof it.sess.lat === 'number' && typeof remainAnchors[0].lat === 'number') {
+        const dToNext = distance(it.sess.lat, it.sess.lng, remainAnchors[0].lat, remainAnchors[0].lng);
+        nextEta = ` · 다음 <b>${escapeHtml(remainAnchors[0].name||'')}</b>까지 약 ${formatEtaMin(estimateMinutes(dToNext, 0))}`;
+        const dTotal = dToNext + totalAnchorDistance(remainAnchors);
+        remainEta = ' · 끝까지 약 ' + formatEtaMin(estimateMinutes(dTotal, remainAnchors.length));
       }
       const veh = [it.sess.crew?.vehicle, it.sess.crew?.vehicleColor].filter(Boolean).join(' / ');
       const safeKey = it.key.replace(/'/g,"\\'");
@@ -334,7 +336,7 @@ function renderLive(live) {
           <div class="num" style="background:${it.color};color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">${(it.driver||'?').slice(0,1)}</div>
           <div style="flex:1;min-width:0;">
             <div class="name" style="font-weight:600;color:#2c3e50;">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')} · ${escapeHtml(it.driver)}</div>
-            <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분 진행${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}</div>
+            <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분 진행${nextEta}${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex:none;">
             <button onclick="toggleFollowDriver('${safeKey}')" style="background:${followBg};color:#fff;border:none;padding:6px 10px;border-radius:5px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">${followLabel}</button>

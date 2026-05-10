@@ -3,7 +3,7 @@
 ## 다음 세션에서 시작 시 읽을 것
 
 ### 현재 상태
-- 캐시 버전: `20260510o` (모든 HTML에 동일)
+- 캐시 버전: `20260510s` (모든 HTML에 동일, monitor-public.html 신규)
 - 신규 기능: 민원, 방역불가 핀, 거점 InfoWindow 수정/순번/삭제, 텔레그램, 네이버 SMS 설정 UI
 - 효도위안잔치: 거점에 이장님 배정, 차량정보, 탑승완료 알림 진행 중
 
@@ -32,30 +32,34 @@
 
 ## ⏳ 미처리 - 다음 세션 우선순위
 
-1. **방역금지 핀 수정 / 거점 InfoWindow 수정 탭**
-   - 민원은 4번에서 처리됨. 방역금지(noSprayZone)도 InfoWindow ✎ 버튼 필요
+1. ~~**방역금지 핀 수정**~~ ✅ 처리됨 (r 라운드)
+   - admin.html `editNoSprayZone(id)` — 이름/사유/반경 prompt 편집
+   - InfoWindow에 ✎ 수정 / 🗑 삭제 버튼 + 반경 표시
 
 2. ~~**민원/방역금지 핀 드래그로 위치 이동**~~ ✅ 처리됨
    - 민원: draggable + dragend confirm → complaints[id].lat/lng 업데이트
    - 방역불가: draggable + drag(원 따라감) + dragend confirm → noSprayZones[id].lat/lng 업데이트
 
-3. **방역금지 주변 GPS 알림**
+3. ~~**방역금지 주변 GPS 알림**~~ ✅ 처리됨 (r 라운드)
    - today.html onGpsUpdate에서 noSprayZones 순회
-   - 각 zone radius + 50m 이내 진입 시 alert + vibrate
-   - 한 번 알림 후 한동안 재알림 방지 (timer)
+   - radius+50m 이내 진입 → 빨간 토스트 (8초, 펄스 애니메이션) + vibrate(500ms 패턴)
+   - 같은 zone 10분 쿨다운 (`window.__noSprayLastAlert[id]`)
 
-5. **거점 번호 0/빈칸 입력 허용**
-   - moveAnchorTo: 빈칸 = 취소(에러X), 0 = 무시
-   - 또는 "미정" 핀 컨셉 도입 (order=null)
+5. ~~**거점 번호 0/빈칸 입력 허용**~~ ✅ 처리됨 (r 라운드)
+   - moveAnchorTo: trim 후 빈칸/0 → 조용히 종료, 잘못된 번호만 alert
 
 ---
 
 ## 더 큰 작업 (Phase 2/3)
 
-### Phase 2: 공개 모니터링 페이지
-- `monitor-public.html?id=xxx` 임시 링크
-- 로그인 없이 누구나 접근, 차량 위치 실시간 (배달앱처럼)
-- admin/super 권한이 수동 켜고 끄기
+### ~~Phase 2: 공개 모니터링 페이지~~ ✅ 처리됨 (s 라운드)
+- `monitor-public.html?t=<token>` — 새 파일, 익명 auth + token 검증 + enabled 검증
+- `today.html` GPS 업데이트 시 `/live/{sessionKey}` 에 10초마다 publish (전체 set('/') 안 건드림)
+- 종료 시 `/live/{sessionKey}` remove
+- `admin.html` "🌐 공개 모니터링" 카드: 토글 / 토큰 재발급 / URL 복사
+- 5분 무업데이트 = stale 처리, 우측 라이브 차량 리스트 + 지도 마커
+- `data.publicMonitor = { enabled, token, updatedAt }` 추가
+- ⚠️ Firebase rules 미수정 — 토큰은 soft gate. 진짜 보안 원하면 rules 업데이트 필요
 
 ### Phase 3: 픽업 요청 (카카오택시 스타일)
 - `request.html` 페이지 — 링크 가진 사람 누구나 픽업 요청
