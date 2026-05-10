@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510u">
+  <link rel="stylesheet" href="style.css?v=20260511d">
 </head>
 <body>
 <header>
@@ -210,6 +210,27 @@
         </p>
       </div>
 
+      <!-- 구글 스프레드시트 동기화 -->
+      <div class="card" style="border-left:4px solid #34a853;">
+        <h2>📊 구글 스프레드시트 동기화</h2>
+        <p class="muted" style="font-size:11px;margin-bottom:6px;">
+          현장사진/영수증을 본인 구글 시트로도 자동 보내기. Apps Script 웹앱 URL 필요.
+          <a href="#" onclick="showGasHelp();return false;" style="color:#3498db;">📖 셋업 가이드</a>
+        </p>
+        <label>웹앱 URL <span class="muted" style="font-size:10px;">(Apps Script 배포 → 웹앱 URL)</span></label>
+        <input id="sheetUrl" type="text" placeholder="https://script.google.com/macros/s/.../exec">
+        <label>비밀 토큰 (선택, 무단 호출 방지)</label>
+        <input id="sheetToken" type="password" placeholder="아무 문자열 — Apps Script에서 같은 값 검증">
+        <label style="display:flex;align-items:center;margin-top:8px;cursor:pointer;">
+          <input id="sheetEnabled" type="checkbox" style="width:18px;height:18px;margin-right:6px;">
+          <span><b>구글시트 동기화 켜기</b></span>
+        </label>
+        <div style="display:flex;gap:6px;margin-top:8px;">
+          <button class="small success" style="flex:1;" onclick="saveSheetConfig()">저장</button>
+          <button class="small" onclick="testSheetSync()">📨 테스트</button>
+        </div>
+      </div>
+
       <!-- 공개 모니터링 링크 -->
       <div class="card" style="border-left:4px solid #9b59b6;">
         <h2>🌐 공개 모니터링 링크</h2>
@@ -250,8 +271,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510u"></script>
-<script src="common.js?v=20260510u"></script>
+<script src="firebase-config.js?v=20260511d"></script>
+<script src="common.js?v=20260511d"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -797,6 +818,118 @@ function renderTelegramConfig() {
   if (document.getElementById('smsEnabled')) document.getElementById('smsEnabled').checked = !!sms.enabled;
   // 공개 모니터링
   renderPublicMonitorConfig();
+  // 구글시트 동기화
+  renderSheetConfig();
+}
+
+function renderSheetConfig() {
+  const data = loadData();
+  const cfg = data.sheetSync || {};
+  if (document.getElementById('sheetUrl')) document.getElementById('sheetUrl').value = cfg.webhookUrl || '';
+  if (document.getElementById('sheetToken')) document.getElementById('sheetToken').value = cfg.token || '';
+  if (document.getElementById('sheetEnabled')) document.getElementById('sheetEnabled').checked = !!cfg.enabled;
+}
+function saveSheetConfig() {
+  const data = loadData();
+  data.sheetSync = {
+    webhookUrl: document.getElementById('sheetUrl').value.trim(),
+    token: document.getElementById('sheetToken').value.trim(),
+    enabled: document.getElementById('sheetEnabled').checked
+  };
+  saveData(data);
+  alert('✅ 저장됨');
+}
+async function testSheetSync() {
+  const data = loadData();
+  const cfg = data.sheetSync || {};
+  if (!cfg.webhookUrl) { alert('웹앱 URL을 먼저 입력하세요'); return; }
+  // 1x1 흰 픽셀 PNG (테스트용)
+  const tinyDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  try {
+    await fetch(cfg.webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        type: 'test',
+        photoId: 'test_' + Date.now(),
+        dataUrl: tinyDataUrl,
+        takenAt: Date.now(),
+        note: '관리자 테스트',
+        token: cfg.token || ''
+      })
+    });
+    alert('📨 테스트 전송됨\n\n구글시트에 새 행이 생겼는지 확인하세요.\n(no-cors 모드라 실패해도 여기선 모릅니다)');
+  } catch (e) {
+    alert('❌ 오류: ' + e.message);
+  }
+}
+function showGasHelp() {
+  const code = `function doPost(e) {
+  const TOKEN = ''; // admin과 같은 토큰 (비워두면 검증 안 함)
+  const FOLDER_NAME = '방역코스 사진';
+
+  let p;
+  try { p = JSON.parse(e.postData.contents); }
+  catch(err) { return _ok({error:'JSON 파싱 실패'}); }
+
+  if (TOKEN && p.token !== TOKEN) return _ok({error:'토큰 불일치'});
+
+  // 사진 폴더 (없으면 생성)
+  const folders = DriveApp.getFoldersByName(FOLDER_NAME);
+  const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(FOLDER_NAME);
+
+  // base64 → Blob → Drive 업로드
+  const m = (p.dataUrl||'').match(/^data:(image\\/[^;]+);base64,(.+)$/);
+  let fileUrl = '';
+  if (m) {
+    const blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1],
+      (p.type||'photo') + '_' + new Date(p.takenAt||Date.now()).toISOString().replace(/[:.]/g,'-') + '.jpg');
+    const file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    fileUrl = file.getUrl();
+  }
+
+  // 시트에 행 추가
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['시각','구분','파일링크','코스','위도','경도','메모','photoId']);
+  }
+  sheet.appendRow([
+    new Date(p.takenAt||Date.now()),
+    p.type === 'receipt' ? '영수증' : (p.type === 'test' ? '테스트' : '현장사진'),
+    fileUrl,
+    p.courseId || '',
+    p.lat || '',
+    p.lng || '',
+    p.note || '',
+    p.photoId || ''
+  ]);
+  return _ok({ok:true, fileUrl});
+}
+function _ok(o){return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);}`;
+  const win = window.open('', '_blank', 'width=720,height=620');
+  win.document.write(`<!doctype html><meta charset=utf-8><title>구글시트 셋업</title>
+    <style>body{font-family:-apple-system,Malgun Gothic,sans-serif;padding:20px;line-height:1.6;}
+    h2{color:#2c3e50;}h3{color:#34495e;margin-top:18px;}code{background:#f0f0f0;padding:2px 5px;border-radius:3px;}
+    pre{background:#1e1e1e;color:#e8e8e8;padding:12px;border-radius:6px;overflow:auto;font-size:11px;line-height:1.4;}
+    button{padding:6px 12px;cursor:pointer;}</style>
+    <h2>📊 구글 스프레드시트 동기화 셋업</h2>
+    <h3>1. 새 구글 시트 만들기</h3>
+    <p>sheets.google.com 접속 → 새 빈 시트 생성</p>
+    <h3>2. Apps Script 열기</h3>
+    <p>시트에서 메뉴 <b>확장 프로그램 → Apps Script</b></p>
+    <h3>3. 코드 붙여넣기 (아래 전체 복사)</h3>
+    <pre id="gasCode"></pre>
+    <button onclick="navigator.clipboard.writeText(document.getElementById('gasCode').textContent);alert('복사됨')">📋 코드 복사</button>
+    <h3>4. 배포</h3>
+    <p>저장(💾) → 우측 상단 <b>배포 → 새 배포</b> → 유형 <b>웹앱</b><br>
+       실행 사용자: <b>본인</b> / 액세스 권한: <b>모든 사용자</b><br>
+       권한 승인 → 웹앱 URL 복사 → admin 페이지에 붙여넣기</p>
+    <h3>5. 토큰 (선택)</h3>
+    <p>코드 위쪽 <code>const TOKEN = '';</code> 에 비밀 문자열 넣고 admin에도 같은 값 입력하면 무단 호출 방지됨</p>
+    <p style="color:#888;font-size:12px;">⚠️ Apps Script 배포 시 권한 승인 단계에서 "고급 → 안전하지 않은 페이지로 이동" 눌러야 진행됨 (구글 정책상 정상)</p>`);
+  win.document.getElementById('gasCode').textContent = code;
 }
 
 function renderPublicMonitorConfig() {

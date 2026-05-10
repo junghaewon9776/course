@@ -72,7 +72,8 @@ const defaultData = {
   noSprayZones: [],  // 방역불가: { id, lat, lng, name, reason, createdAt }
   telegram: { botToken: '', chatId: '', enabled: false },
   naverSms: { proxyUrl: '', serviceId: '', accessKey: '', secretKey: '', from: '', enabled: false },
-  publicMonitor: { enabled: false, token: '', updatedAt: 0 }
+  publicMonitor: { enabled: false, token: '', updatedAt: 0 },
+  sheetSync: { enabled: false, webhookUrl: '', token: '' }  // Google Apps Script 웹앱으로 사진 동기화
 };
 
 // ───────── 라이브 세션 publish (today.html → /live/{key}) ─────────
@@ -93,6 +94,58 @@ function generatePublicToken() {
   let s = '';
   for (let i = 0; i < 16; i++) s += chars[Math.floor(Math.random() * chars.length)];
   return s;
+}
+
+// ───────── 현장사진 업로드 (today.html → /photos/{id}) ─────────
+// 클라이언트에서 리사이즈 + JPEG 압축해서 base64로 RTDB에 저장
+// /photos는 saveData가 안 건드리는 별도 노드 (live와 동일 패턴)
+async function compressImage(file, maxDim = 1024, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
+        else { width = Math.round(width * maxDim / height); height = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => reject(new Error('이미지 로드 실패'));
+    const reader = new FileReader();
+    reader.onload = () => { img.src = reader.result; };
+    reader.onerror = () => reject(new Error('파일 읽기 실패'));
+    reader.readAsDataURL(file);
+  });
+}
+async function uploadFieldPhoto(file, meta) {
+  if (typeof fbDb === 'undefined') throw new Error('Firebase 미초기화');
+  const dataUrl = await compressImage(file);
+  const photoId = uid();
+  const payload = {
+    dataUrl,
+    type: meta?.type || 'field',  // 'field' | 'receipt'
+    takenAt: Date.now(),
+    sessionKey: meta?.sessionKey || '',
+    eventId: meta?.eventId || '',
+    courseId: meta?.courseId || '',
+    teamId: meta?.teamId || '',
+    lat: meta?.lat ?? null,
+    lng: meta?.lng ?? null,
+    note: meta?.note || ''
+  };
+  await fbDb.ref('/photos/' + photoId).set(payload);
+  return { photoId, ...payload };
+}
+function loadPhoto(photoId) {
+  if (typeof fbDb === 'undefined') return Promise.resolve(null);
+  return fbDb.ref('/photos/' + photoId).once('value').then(s => s.val());
+}
+function deletePhoto(photoId) {
+  if (typeof fbDb === 'undefined') return Promise.resolve();
+  return fbDb.ref('/photos/' + photoId).remove();
 }
 
 // ───────── 네이버 SENS SMS (프록시 서버 경유) ─────────
@@ -244,7 +297,12 @@ function saveData(data, force) {
   }
   _cache = data;
   if (typeof fbDb !== 'undefined') {
-    fbDb.ref('/').set(data).catch(err => {
+    // /live, /photos 같은 형제 노드는 보존하기 위해 set('/') 대신 update('/') 사용
+    // — set은 루트를 통째로 갈아치워서 driver의 라이브 위치/사진까지 날아가던 버그 수정
+    const payload = { ...data };
+    delete payload.live;    // driver 가 직접 ref('/live/...').set 으로 관리
+    delete payload.photos;  // 현장사진은 별도 노드, saveData가 안 건드림
+    fbDb.ref('/').update(payload).catch(err => {
       console.error('저장 실패:', err);
       alert('저장 실패: ' + err.message);
     });
@@ -543,6 +601,37 @@ function distance(lat1, lng1, lat2, lng2) {
   const dLng = toRad(lng2 - lng1);
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ───────── 예상 시간 계산 ─────────
+// 직선거리 × 도로보정(1.3) → 평균속도(25km/h)로 나눔 + 거점당 정차시간
+const ETA_AVG_SPEED_KMH = 25;     // 방역 운영 평균 (저속 + 정차)
+const ETA_ROAD_FACTOR  = 1.3;     // 직선 → 도로
+const ETA_STOP_MIN_PER_ANCHOR = 3; // 거점당 방역 정차 시간
+
+function estimateMinutes(meters, anchorStops) {
+  const km = (meters * ETA_ROAD_FACTOR) / 1000;
+  const driveMin = (km / ETA_AVG_SPEED_KMH) * 60;
+  const stopMin = (anchorStops || 0) * ETA_STOP_MIN_PER_ANCHOR;
+  return Math.max(1, Math.round(driveMin + stopMin));
+}
+
+// 거점 배열 → 직선 누적거리(미터)
+function totalAnchorDistance(anchors) {
+  let d = 0;
+  for (let i = 1; i < anchors.length; i++) {
+    const a = anchors[i-1], b = anchors[i];
+    if (typeof a.lat !== 'number' || typeof b.lat !== 'number') continue;
+    d += distance(a.lat, a.lng, b.lat, b.lng);
+  }
+  return d;
+}
+
+function formatEtaMin(min) {
+  if (min < 60) return `${min}분`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? `${h}시간 ${m}분` : `${h}시간`;
 }
 
 // ───────── 마커/화살표 ─────────

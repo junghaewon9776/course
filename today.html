@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>오늘의 운영</title>
-  <link rel="stylesheet" href="style.css?v=20260510u">
+  <link rel="stylesheet" href="style.css?v=20260511d">
 </head>
 <body>
 <header>
@@ -77,14 +77,29 @@
         <button class="gray" onclick="resetCourse()">진행 초기화</button>
       </div>
     </div>
+
+    <!-- 사진 자료 (현장사진 + 영수증) -->
+    <div class="card" id="photoCard">
+      <div class="flex-between">
+        <h2>📷 사진 자료 <span id="photoCount" class="muted" style="font-size:12px;font-weight:400;"></span></h2>
+        <div style="display:flex;gap:4px;">
+          <input id="photoInput" type="file" accept="image/*" capture="environment" style="display:none;" onchange="onPhotoSelected(event, 'field')">
+          <input id="receiptInput" type="file" accept="image/*" capture="environment" style="display:none;" onchange="onPhotoSelected(event, 'receipt')">
+          <button class="success" onclick="document.getElementById('photoInput').click()">📷 현장사진</button>
+          <button style="background:#e67e22;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;" onclick="document.getElementById('receiptInput').click()">🧾 영수증</button>
+        </div>
+      </div>
+      <p class="muted" style="font-size:11px;margin-top:4px;">자동 압축(1024px). 본부에서 운행기록과 함께 보입니다. 영수증은 별도 태그 + 구글시트 동기화(설정 시).</p>
+      <div id="photoStrip" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+    </div>
   </div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510u"></script>
-<script src="common.js?v=20260510u"></script>
+<script src="firebase-config.js?v=20260511d"></script>
+<script src="common.js?v=20260511d"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
 <div id="errBar"></div>
@@ -552,7 +567,7 @@ function startSession(eventId, courseId, teamId, crew) {
   currentSession = {
     date, eventId, courseId, teamId,
     crew: crew || {}, // {driver, assist, vehicle}
-    completions: [], track: [], startedAt: Date.now(), finishedAt: null,
+    completions: [], track: [], photos: [], startedAt: Date.now(), finishedAt: null,
     key
   };
 
@@ -572,6 +587,7 @@ function startSession(eventId, courseId, teamId, crew) {
 
   renderAnchorRows();
   renderMapForSession();
+  renderPhotoStrip();
 
   // 텔레그램: 코스 시작 알림
   const vehInfo = [crew?.vehicle, crew?.vehicleColor].filter(Boolean).join(' / ');
@@ -590,6 +606,132 @@ function saveSession() {
 }
 
 // 라이브 위치 publish — GPS 업데이트 시 10초마다 한 번
+// ─── 현장사진/영수증 업로드 ───
+async function onPhotoSelected(e, type) {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (!currentSession) {
+    alert('먼저 운영을 시작해주세요');
+    return;
+  }
+  const typeLabel = type === 'receipt' ? '🧾 영수증' : '📷 사진';
+  try {
+    document.getElementById('gpsStatus').textContent = `${typeLabel} 업로드 중...`;
+    const meta = {
+      type: type || 'field',
+      sessionKey: currentSession.key,
+      eventId: currentSession.eventId,
+      courseId: currentSession.courseId,
+      teamId: currentSession.teamId,
+      lat: currentPos?.lat ?? null,
+      lng: currentPos?.lng ?? null,
+      note: currentSession.crew?.driver || ''
+    };
+    const result = await uploadFieldPhoto(file, meta);
+    if (!currentSession.photos) currentSession.photos = [];
+    currentSession.photos.push(result.photoId);
+    saveSession();
+    renderPhotoStrip();
+    document.getElementById('gpsStatus').textContent = `✅ ${typeLabel} 업로드 완료`;
+    if (navigator.vibrate) navigator.vibrate(80);
+    // 구글시트 동기화 (설정되어 있으면 백그라운드)
+    syncPhotoToSheet(result).catch(e => console.warn('시트 동기화 실패:', e));
+  } catch (err) {
+    console.error('사진 업로드 실패:', err);
+    alert('❌ 업로드 실패: ' + err.message);
+  }
+}
+// 구글 Apps Script 웹앱으로 사진 메타+이미지 전송 (admin 설정에서 URL 입력 시 동작)
+async function syncPhotoToSheet(photo) {
+  const data = loadData();
+  const cfg = data.sheetSync || {};
+  if (!cfg.enabled || !cfg.webhookUrl) return;
+  try {
+    await fetch(cfg.webhookUrl, {
+      method: 'POST',
+      mode: 'no-cors',  // Apps Script CORS 회피
+      headers: { 'Content-Type': 'text/plain' }, // CORS preflight 회피
+      body: JSON.stringify({
+        type: photo.type || 'field',
+        photoId: photo.photoId,
+        dataUrl: photo.dataUrl,
+        takenAt: photo.takenAt,
+        sessionKey: photo.sessionKey,
+        eventId: photo.eventId,
+        courseId: photo.courseId,
+        teamId: photo.teamId,
+        lat: photo.lat,
+        lng: photo.lng,
+        note: photo.note,
+        token: cfg.token || ''
+      })
+    });
+  } catch (e) {
+    console.warn('시트 webhook 실패:', e);
+  }
+}
+function renderPhotoStrip() {
+  const ids = (currentSession?.photos || []);
+  const strip = document.getElementById('photoStrip');
+  const cnt = document.getElementById('photoCount');
+  if (cnt) cnt.textContent = ids.length ? `(${ids.length}장)` : '';
+  if (!strip) return;
+  if (!ids.length) { strip.innerHTML = '<span class="muted" style="font-size:12px;">아직 등록된 사진 없음</span>'; return; }
+  strip.innerHTML = ids.map(id => `
+    <div id="phWrap-${id}" style="position:relative;width:80px;height:80px;border-radius:6px;overflow:hidden;border:2px solid #ddd;background:#f3f4f6;cursor:pointer;" onclick="viewPhoto('${id}')">
+      <img id="ph-${id}" alt="" style="width:100%;height:100%;object-fit:cover;display:none;">
+      <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:10px;">로딩...</span>
+      <span id="phBadge-${id}" style="display:none;position:absolute;left:2px;bottom:2px;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;"></span>
+      <button onclick="event.stopPropagation();removePhoto('${id}')" style="position:absolute;top:2px;right:2px;background:rgba(231,76,60,0.9);color:#fff;border:none;width:20px;height:20px;border-radius:10px;cursor:pointer;font-size:12px;line-height:1;">×</button>
+    </div>
+  `).join('');
+  // 비동기 로드
+  ids.forEach(id => {
+    loadPhoto(id).then(p => {
+      if (!p) return;
+      const img = document.getElementById('ph-' + id);
+      const wrap = document.getElementById('phWrap-' + id);
+      const badge = document.getElementById('phBadge-' + id);
+      if (img) {
+        img.src = p.dataUrl;
+        img.style.display = 'block';
+        wrap.querySelectorAll('span').forEach(s => { if (s.id !== 'phBadge-'+id) s.style.display='none'; });
+        if (p.type === 'receipt') {
+          wrap.style.borderColor = '#e67e22';
+          if (badge) { badge.textContent = '🧾'; badge.style.display = 'block'; badge.style.background = 'rgba(230,126,34,0.95)'; }
+        } else if (badge) {
+          badge.textContent = '📷'; badge.style.display = 'block';
+        }
+      }
+    }).catch(() => {});
+  });
+}
+async function viewPhoto(id) {
+  const p = await loadPhoto(id);
+  if (!p) { alert('사진을 불러올 수 없습니다'); return; }
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;cursor:pointer;';
+  const ts = new Date(p.takenAt).toLocaleString('ko-KR');
+  overlay.innerHTML = `
+    <div style="position:relative;max-width:100%;max-height:100%;text-align:center;">
+      <img src="${p.dataUrl}" style="max-width:100%;max-height:85vh;border-radius:8px;">
+      <div style="color:#fff;margin-top:8px;font-size:13px;">${ts}${p.lat ? ` · 📍 ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : ''}</div>
+    </div>
+  `;
+  overlay.onclick = () => overlay.remove();
+  document.body.appendChild(overlay);
+}
+async function removePhoto(id) {
+  if (!confirm('이 사진을 삭제할까요?')) return;
+  try { await deletePhoto(id); } catch (e) {}
+  if (currentSession) {
+    currentSession.photos = (currentSession.photos || []).filter(x => x !== id);
+    saveSession();
+    renderPhotoStrip();
+  }
+}
+
 let __lastLivePublish = 0;
 function publishCurrentLive() {
   if (!currentSession || currentSession.finishedAt) return;
@@ -658,6 +800,7 @@ function resumeSession(s) {
   document.getElementById('opSubtitle').textContent = subtitleParts.join(' · ');
   renderAnchorRows();
   renderMapForSession();
+  renderPhotoStrip();
   // GPS 자동 ON
   if (watchId === null) setTimeout(() => toggleGPS(), 500);
 }

@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>방역 차량 위치 (공개)</title>
-  <link rel="stylesheet" href="style.css?v=20260510u">
+  <link rel="stylesheet" href="style.css?v=20260511d">
   <style>
     body { margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f3f4f6; }
     .topbar {
@@ -71,8 +71,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510u"></script>
-<script src="common.js?v=20260510u"></script>
+<script src="firebase-config.js?v=20260511d"></script>
+<script src="common.js?v=20260511d"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const tokenParam = params.get('t') || params.get('id') || '';
@@ -216,10 +216,16 @@ function renderLive(live) {
       const progress = (it.sess.totalCount > 0)
         ? `${it.sess.completedCount}/${it.sess.totalCount}`
         : '-';
-      return `<div class="live-item" onclick="focusLive('${it.key.replace(/'/g,"\\'")}')">
-        <div class="name" style="color:${it.color};">${escapeHtml(it.driver)}</div>
-        <div class="sub">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')}</div>
-        <div class="sub">진행 ${progress} · ${elapsed}분 전 출발</div>
+      const safeKey = it.key.replace(/'/g,"\\'");
+      return `<div class="live-item" onclick="focusLive('${safeKey}')">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <div style="flex:1;min-width:0;">
+            <div class="name" style="color:${it.color};">${escapeHtml(it.driver)}</div>
+            <div class="sub">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')}</div>
+            <div class="sub">진행 ${progress} · ${elapsed}분 전 출발</div>
+          </div>
+          <button onclick="event.stopPropagation();focusLive('${safeKey}')" style="background:${it.color};color:#fff;border:none;padding:6px 8px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">📍 위치</button>
+        </div>
       </div>`;
     }).join('');
     document.getElementById('liveListBody').innerHTML = listBody;
