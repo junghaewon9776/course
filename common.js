@@ -71,8 +71,29 @@ const defaultData = {
   complaints: [],  // 민원: { id, eventId, lat, lng, phone, content, status:'pending'|'resolved', createdAt }
   noSprayZones: [],  // 방역불가: { id, lat, lng, name, reason, createdAt }
   telegram: { botToken: '', chatId: '', enabled: false },
-  naverSms: { proxyUrl: '', serviceId: '', accessKey: '', secretKey: '', from: '', enabled: false }
+  naverSms: { proxyUrl: '', serviceId: '', accessKey: '', secretKey: '', from: '', enabled: false },
+  publicMonitor: { enabled: false, token: '', updatedAt: 0 }
 };
+
+// ───────── 라이브 세션 publish (today.html → /live/{key}) ─────────
+// /live 노드를 따로 사용해서 saveData(set('/'))와 충돌 방지
+function publishLiveSession(sessionKey, payload) {
+  if (typeof fbDb === 'undefined' || !sessionKey) return;
+  fbDb.ref('/live/' + sessionKey).set({ ...payload, lastUpdate: Date.now() })
+    .catch(e => console.warn('live publish 실패:', e.message));
+}
+function unpublishLiveSession(sessionKey) {
+  if (typeof fbDb === 'undefined' || !sessionKey) return;
+  fbDb.ref('/live/' + sessionKey).remove()
+    .catch(e => console.warn('live unpublish 실패:', e.message));
+}
+// 공개 모니터링 토큰 생성 (16자 랜덤)
+function generatePublicToken() {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let s = '';
+  for (let i = 0; i < 16; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
 
 // ───────── 네이버 SENS SMS (프록시 서버 경유) ─────────
 async function sendSms(toPhone, content) {

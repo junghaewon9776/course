@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>오늘의 운영</title>
-  <link rel="stylesheet" href="style.css?v=20260510p">
+  <link rel="stylesheet" href="style.css?v=20260510s">
 </head>
 <body>
 <header>
@@ -83,8 +83,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510p"></script>
-<script src="common.js?v=20260510p"></script>
+<script src="firebase-config.js?v=20260510s"></script>
+<script src="common.js?v=20260510s"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
 <div id="errBar"></div>
@@ -587,6 +587,30 @@ function saveSession() {
   if (!currentSession) return;
   localStorage.setItem(currentSession.key, JSON.stringify(currentSession));
   localStorage.setItem('lastActiveSession', JSON.stringify(currentSession));
+}
+
+// 라이브 위치 publish — GPS 업데이트 시 10초마다 한 번
+let __lastLivePublish = 0;
+function publishCurrentLive() {
+  if (!currentSession || currentSession.finishedAt) return;
+  if (!currentPos) return;
+  const now = Date.now();
+  if (now - __lastLivePublish < 10000) return;
+  __lastLivePublish = now;
+  const data = loadData();
+  const totalAnchors = (data.anchors || []).filter(a => a.courseId === currentSession.courseId).length;
+  publishLiveSession(currentSession.key, {
+    lat: currentPos.lat,
+    lng: currentPos.lng,
+    heading: currentPos.heading,
+    eventId: currentSession.eventId,
+    courseId: currentSession.courseId,
+    teamId: currentSession.teamId,
+    crew: currentSession.crew || {},
+    completedCount: (currentSession.completions || []).length,
+    totalCount: totalAnchors,
+    startedAt: currentSession.startedAt
+  });
 }
 
 function clearLastActiveSession() {
@@ -1135,6 +1159,30 @@ function onGpsUpdate(pos) {
       saveSession();
       renderMapForSession();
     }
+    // 라이브 publish (10초 throttle 내장)
+    publishCurrentLive();
+  }
+
+  // 방역금지 구역 진입 경고 (radius+50m 이내) — 같은 zone 10분당 1회만
+  {
+    const data = loadData();
+    const zones = data.noSprayZones || [];
+    if (!window.__noSprayLastAlert) window.__noSprayLastAlert = {};
+    const now = Date.now();
+    const COOLDOWN_MS = 10 * 60 * 1000;
+    for (const z of zones) {
+      const r = (z.radius || 50) + 50;
+      const d = distance(lat, lng, z.lat, z.lng);
+      if (d <= r) {
+        const last = window.__noSprayLastAlert[z.id] || 0;
+        if (now - last >= COOLDOWN_MS) {
+          window.__noSprayLastAlert[z.id] = now;
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+          // 비차단 토스트 (alert 차단 방지)
+          showNoSprayWarning(z, Math.round(d));
+        }
+      }
+    }
   }
 
   // 거점 30초 머물면 자동 체크
@@ -1167,6 +1215,24 @@ function onGpsUpdate(pos) {
 }
 function onGpsError(err) {
   document.getElementById('gpsStatus').textContent = 'GPS 오류: ' + err.message;
+}
+
+// 방역금지 진입 시 화면 상단에 빨간 토스트 (8초)
+function showNoSprayWarning(z, dist) {
+  let toast = document.getElementById('noSprayToast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'noSprayToast';
+    toast.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);background:#e74c3c;color:#fff;padding:14px 18px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,0.3);font-size:15px;font-weight:700;z-index:9999;max-width:90vw;text-align:center;animation:noSprayPulse 0.6s ease infinite alternate;';
+    const style = document.createElement('style');
+    style.textContent = '@keyframes noSprayPulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.05); } }';
+    document.head.appendChild(style);
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = `⛔ 방역금지 구역 ${dist}m<br><span style="font-size:13px;font-weight:400;">${(z.name||'').replace(/</g,'&lt;')}${z.reason ? ' · '+z.reason.replace(/</g,'&lt;') : ''}</span>`;
+  toast.style.display = 'block';
+  clearTimeout(window.__noSprayHideTimer);
+  window.__noSprayHideTimer = setTimeout(() => { toast.style.display = 'none'; }, 8000);
 }
 
 function updateNextInfo() {
@@ -1231,6 +1297,7 @@ function finishCourse() {
   alert('✅ 코스 완료 보고됨');
   if (watchId !== null) toggleGPS();
   releaseWakeLock();
+  unpublishLiveSession(currentSession.key);
   clearLastActiveSession();
   currentSession = null;
   // 마커/라인 정리 (메모리 누수 방지)

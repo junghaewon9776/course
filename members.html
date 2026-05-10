@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510p">
+  <link rel="stylesheet" href="style.css?v=20260510s">
   <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
@@ -82,8 +82,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510p"></script>
-<script src="common.js?v=20260510p"></script>
+<script src="firebase-config.js?v=20260510s"></script>
+<script src="common.js?v=20260510s"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -100,10 +100,19 @@ function refreshAll() {
 }
 
 // ────── 회원 ──────
-// 직책 정렬 순서
-const POSITION_ORDER = ['회장','부회장','감사','사무국장','사무차장','재무국장','홍보국장','기획국장','일반회원',''];
+// 직책 정렬 순서 (사용자 요청: 회장→부회장→감사→사무국장→재무국장→재무차장→...→회원)
+const POSITION_ORDER = [
+  '회장','부회장','감사',
+  '사무국장','사무차장',
+  '재무국장','재무차장',
+  '홍보국장','홍보차장',
+  '기획국장','기획차장',
+  '총무','이장',
+  '전임회장',
+  '회원','일반회원',''
+];
 function positionRank(p) {
-  const i = POSITION_ORDER.indexOf(p || '');
+  const i = POSITION_ORDER.indexOf((p || '').trim());
   return i === -1 ? POSITION_ORDER.length : i;
 }
 
@@ -127,7 +136,12 @@ function renderMembers() {
   const members = allMembers
     .filter(m => !q || (m.name||'').toLowerCase().includes(q))
     .filter(m => !posFilter || (m.position||'') === posFilter)
-    .sort((a, b) => positionRank(a.position) - positionRank(b.position) || (a.name||'').localeCompare(b.name||''));
+    .sort((a, b) =>
+      positionRank(a.position) - positionRank(b.position) ||
+      // rank가 같으면 직책 문자열로 한 번 더 묶기 (전임회장이 회원 사이에 끼어들지 않게)
+      (a.position || '').localeCompare(b.position || '') ||
+      (a.name || '').localeCompare(b.name || '')
+    );
 
   document.getElementById('memberCount').textContent = `(${allMembers.length}명)`;
 

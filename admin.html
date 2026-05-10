@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510p">
+  <link rel="stylesheet" href="style.css?v=20260510s">
 </head>
 <body>
 <header>
@@ -210,6 +210,30 @@
         </p>
       </div>
 
+      <!-- 공개 모니터링 링크 -->
+      <div class="card" style="border-left:4px solid #9b59b6;">
+        <h2>🌐 공개 모니터링 링크</h2>
+        <p class="muted" style="font-size:11px;margin-bottom:6px;">
+          로그인 없이 누구나 차량 위치를 실시간으로 볼 수 있는 링크 (배달앱처럼).
+          <b>운영 끝나면 반드시 끄세요.</b>
+        </p>
+        <label style="display:flex;align-items:center;cursor:pointer;">
+          <input id="pubMonEnabled" type="checkbox" style="width:18px;height:18px;margin-right:6px;" onchange="togglePublicMonitor()">
+          <span><b>공개 모니터링 켜기</b></span>
+        </label>
+        <div id="pubMonUrlBox" style="display:none;margin-top:10px;">
+          <label>공유 URL</label>
+          <div style="display:flex;gap:4px;">
+            <input id="pubMonUrl" type="text" readonly style="flex:1;font-size:11px;background:#f8f9fa;">
+            <button class="small" onclick="copyPubMonUrl()">📋 복사</button>
+          </div>
+          <p class="muted" style="font-size:11px;margin-top:4px;">
+            ⚠️ URL이 노출되면 누구나 위치를 볼 수 있어요. 운영 끝나면 끄거나 토큰 재발급.
+          </p>
+          <button class="small gray" style="margin-top:6px;" onclick="regeneratePubMonToken()">🔄 토큰 재발급 (이전 URL 무효화)</button>
+        </div>
+      </div>
+
       <!-- 스케줄 -->
       <div class="card">
         <div class="flex-between"><h2>운영 스케줄</h2>
@@ -226,8 +250,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510p"></script>
-<script src="common.js?v=20260510p"></script>
+<script src="firebase-config.js?v=20260510s"></script>
+<script src="common.js?v=20260510s"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -349,6 +373,23 @@ function deleteNoSprayZone(id) {
   if (!confirm('이 방역불가 지역을 삭제할까요?')) return;
   const data = loadData();
   data.noSprayZones = (data.noSprayZones || []).filter(z => z.id !== id);
+  saveData(data); refreshAll();
+}
+
+function editNoSprayZone(id) {
+  const data = loadData();
+  const z = (data.noSprayZones || []).find(x => x.id === id);
+  if (!z) return;
+  const name = prompt('이름', z.name || '');
+  if (name === null) return;
+  const reason = prompt('사유 (선택)', z.reason || '');
+  if (reason === null) return;
+  const radiusStr = prompt('반경 (m, 숫자)', String(z.radius || 50));
+  if (radiusStr === null) return;
+  const radius = parseInt(radiusStr, 10);
+  z.name = name.trim();
+  z.reason = reason.trim();
+  if (!isNaN(radius) && radius > 0) z.radius = radius;
   saveData(data); refreshAll();
 }
 
@@ -754,6 +795,59 @@ function renderTelegramConfig() {
   if (document.getElementById('smsSecretKey')) document.getElementById('smsSecretKey').value = sms.secretKey || '';
   if (document.getElementById('smsFrom')) document.getElementById('smsFrom').value = sms.from || '';
   if (document.getElementById('smsEnabled')) document.getElementById('smsEnabled').checked = !!sms.enabled;
+  // 공개 모니터링
+  renderPublicMonitorConfig();
+}
+
+function renderPublicMonitorConfig() {
+  const data = loadData();
+  const pm = data.publicMonitor || {};
+  const cb = document.getElementById('pubMonEnabled');
+  const box = document.getElementById('pubMonUrlBox');
+  const urlInput = document.getElementById('pubMonUrl');
+  if (!cb || !box || !urlInput) return;
+  cb.checked = !!pm.enabled;
+  box.style.display = pm.enabled ? 'block' : 'none';
+  if (pm.enabled && pm.token) {
+    const base = location.href.replace(/[^/]*$/, '');
+    urlInput.value = `${base}monitor-public.html?t=${pm.token}`;
+  }
+}
+
+function togglePublicMonitor() {
+  const enabled = document.getElementById('pubMonEnabled').checked;
+  const data = loadData();
+  if (!data.publicMonitor) data.publicMonitor = { enabled: false, token: '', updatedAt: 0 };
+  data.publicMonitor.enabled = enabled;
+  if (enabled && !data.publicMonitor.token) {
+    data.publicMonitor.token = generatePublicToken();
+  }
+  data.publicMonitor.updatedAt = Date.now();
+  saveData(data);
+  renderPublicMonitorConfig();
+  if (enabled) sendTelegram(`🌐 <b>공개 모니터링 켜짐</b>\n링크가 활성화됐습니다`);
+  else sendTelegram(`🔒 <b>공개 모니터링 꺼짐</b>`);
+}
+
+function regeneratePubMonToken() {
+  if (!confirm('새 토큰을 만들면 이전 URL은 즉시 무효화됩니다. 계속할까요?')) return;
+  const data = loadData();
+  if (!data.publicMonitor) data.publicMonitor = { enabled: true, token: '', updatedAt: 0 };
+  data.publicMonitor.token = generatePublicToken();
+  data.publicMonitor.updatedAt = Date.now();
+  saveData(data);
+  renderPublicMonitorConfig();
+  alert('✅ 새 URL이 생성됐어요. 다시 공유해주세요.');
+}
+
+function copyPubMonUrl() {
+  const inp = document.getElementById('pubMonUrl');
+  if (!inp || !inp.value) return;
+  inp.select();
+  navigator.clipboard?.writeText(inp.value).then(
+    () => alert('📋 복사됨'),
+    () => { document.execCommand('copy'); alert('📋 복사됨'); }
+  );
 }
 
 function saveSmsConfig() {
@@ -1156,10 +1250,13 @@ function moveAnchorTo(id, total) {
   if (!anchor) return;
   const list = getCourseAnchors(data, anchor.courseId);
   const curIdx = list.indexOf(anchor);
-  const input = prompt(`현재 ${curIdx + 1}번\n\n어느 번호로 옮길까요? (1 ~ ${total})\n예: 3 입력 → 3번 자리로 이동, 나머지 자동 정렬`, String(curIdx + 1));
-  if (input === null) return;
-  const newIdx = parseInt(input, 10) - 1;
-  if (isNaN(newIdx) || newIdx < 0 || newIdx >= total) { alert('잘못된 번호'); return; }
+  const input = prompt(`현재 ${curIdx + 1}번\n\n어느 번호로 옮길까요? (1 ~ ${total})\n빈칸 = 취소, 0 = 무시`, String(curIdx + 1));
+  if (input === null) return;          // 취소(X 또는 ESC)
+  const trimmed = String(input).trim();
+  if (trimmed === '') return;           // 빈칸 입력 → 조용히 종료
+  if (trimmed === '0') return;          // 0 입력 → 무시
+  const newIdx = parseInt(trimmed, 10) - 1;
+  if (isNaN(newIdx) || newIdx < 0 || newIdx >= total) { alert(`잘못된 번호 (1~${total} 사이로 입력)`); return; }
   if (newIdx === curIdx) return;
   // 배열에서 빼서 새 위치에 삽입 → order 재할당
   const reordered = [...list];
@@ -1667,11 +1764,14 @@ function renderMap() {
       refreshAll();
     });
     const iw = new kakao.maps.InfoWindow({
-      content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
-        <div style="font-weight:700;color:#7f8c8d;margin-bottom:4px;">⛔ 방역불가</div>
+      content: `<div style="padding:8px 10px;font-size:12px;max-width:240px;">
+        <div style="font-weight:700;color:#7f8c8d;margin-bottom:4px;">⛔ 방역불가 <span style="color:#aaa;font-weight:400;">· 반경 ${z.radius || 50}m</span></div>
         <div><b>${(z.name || '').replace(/</g,'&lt;')}</b></div>
         ${z.reason ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;">${z.reason.replace(/</g,'&lt;')}</div>` : ''}
-        <div style="margin-top:6px;"><a href="#" onclick="deleteNoSprayZone('${z.id}');return false;" style="color:#e74c3c;font-size:11px;">삭제</a></div>
+        <div style="display:flex;gap:4px;margin-top:8px;">
+          <button onclick="editNoSprayZone('${z.id}')" style="flex:1;padding:6px 4px;background:#3498db;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">✎ 수정</button>
+          <button onclick="deleteNoSprayZone('${z.id}')" style="flex:1;padding:6px 4px;background:#e74c3c;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">🗑 삭제</button>
+        </div>
       </div>`
     });
     kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));

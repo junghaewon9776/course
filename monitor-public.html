@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>방역 차량 위치 (공개)</title>
+  <link rel="stylesheet" href="style.css?v=20260510s">
+  <style>
+    body { margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f3f4f6; }
+    .topbar {
+      background: #2c3e50; color: #fff; padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    }
+    .topbar h1 { font-size: 16px; margin: 0; font-weight: 700; }
+    .topbar .status { font-size: 12px; opacity: 0.85; }
+    #pubMap {
+      width: 100%; height: calc(100vh - 90px - 56px);
+      min-height: 400px; background: #ddd;
+    }
+    .footer {
+      background: #fff; padding: 8px 16px; font-size: 12px; color: #666;
+      border-top: 1px solid #e5e7eb; text-align: center;
+    }
+    .live-list {
+      position: fixed; top: 60px; right: 12px; max-width: 240px;
+      background: rgba(255,255,255,0.95); border-radius: 8px; padding: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 12px; z-index: 5;
+    }
+    .live-list h3 { margin: 0 0 6px; font-size: 13px; color: #2c3e50; }
+    .live-item {
+      padding: 6px 0; border-bottom: 1px solid #eee; cursor: pointer;
+    }
+    .live-item:last-child { border-bottom: 0; }
+    .live-item .name { font-weight: 700; color: #2c3e50; }
+    .live-item .sub { color: #888; font-size: 11px; }
+    .gate {
+      position: fixed; inset: 0; background: rgba(44,62,80,0.95); z-index: 999;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .gate-card {
+      background: #fff; border-radius: 12px; padding: 28px; max-width: 360px; text-align: center;
+    }
+    .gate-card h2 { margin: 0 0 8px; color: #2c3e50; }
+    .gate-card p { color: #666; font-size: 13px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <h1>🚐 방역 차량 위치</h1>
+  <span class="status" id="liveStatus">접속 중...</span>
+</div>
+<div id="pubMap"></div>
+<div class="live-list" id="liveList" style="display:none;">
+  <h3 id="liveTitle">운영 중인 차량</h3>
+  <div id="liveListBody"></div>
+</div>
+<div class="footer" id="footer">
+  실시간 위치는 GPS·통신 상태에 따라 지연될 수 있습니다.
+</div>
+
+<div id="gate" class="gate" style="display:none;">
+  <div class="gate-card">
+    <h2 id="gateTitle">⏳ 확인 중</h2>
+    <p id="gateMsg">잠시만 기다려주세요…</p>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js?v=20260510s"></script>
+<script src="common.js?v=20260510s"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const tokenParam = params.get('t') || params.get('id') || '';
+
+let map = null;
+let liveMarkers = {};   // key → marker
+let __selectedKey = null;
+
+function showGate(title, msg) {
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('gateTitle').textContent = title;
+  document.getElementById('gateMsg').textContent = msg;
+}
+function hideGate() { document.getElementById('gate').style.display = 'none'; }
+
+(async function start() {
+  if (!tokenParam) {
+    showGate('🔒 접근 불가', '잘못된 링크입니다 (토큰 없음)');
+    return;
+  }
+  showGate('⏳ 확인 중', '인증 및 권한 확인 중...');
+  try {
+    await ensureAnonAuth();
+  } catch (e) {
+    showGate('❌ 연결 실패', '네트워크 오류: ' + e.message);
+    return;
+  }
+  initFirebaseSync();
+  onDataReady(() => {
+    const data = loadData();
+    const pm = data.publicMonitor || {};
+    if (!pm.enabled) {
+      showGate('🔒 비활성화됨', '관리자가 공개 모니터링을 꺼두었습니다.');
+      return;
+    }
+    if (!pm.token || pm.token !== tokenParam) {
+      showGate('🔒 접근 불가', '잘못되었거나 만료된 링크입니다.');
+      return;
+    }
+    hideGate();
+    loadKakaoSDK(initMap);
+  });
+})();
+
+function loadKakaoSDK(cb) {
+  if (window.kakao && window.kakao.maps) { cb(); return; }
+  const script = document.createElement('script');
+  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
+  script.onload = () => kakao.maps.load(cb);
+  document.head.appendChild(script);
+}
+
+function initMap() {
+  const data = loadData();
+  map = new kakao.maps.Map(document.getElementById('pubMap'), {
+    center: new kakao.maps.LatLng(data.mapDefault?.lat || 35.3475, data.mapDefault?.lng || 126.418),
+    level: data.mapDefault?.level || 6
+  });
+  map.relayout();
+  // /live 노드 실시간 구독
+  fbDb.ref('/live').on('value', snap => {
+    const live = snap.val() || {};
+    renderLive(live);
+  }, err => {
+    console.warn('live 구독 실패:', err);
+    document.getElementById('liveStatus').textContent = '연결 오류';
+  });
+}
+
+function vehicleMarkerImage(color, label) {
+  const safe = (label || '?').slice(0, 2);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="56" viewBox="0 0 44 56">
+    <path d="M22 2 C12 2 4 10 4 20 C4 30 22 54 22 54 C22 54 40 30 40 20 C40 10 32 2 22 2 Z" fill="${color}" stroke="white" stroke-width="2"/>
+    <circle cx="22" cy="20" r="11" fill="white"/>
+    <text x="22" y="24" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color}" text-anchor="middle">${safe}</text>
+  </svg>`;
+  return new kakao.maps.MarkerImage(
+    'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+    new kakao.maps.Size(44, 56),
+    { offset: new kakao.maps.Point(22, 54) }
+  );
+}
+
+function renderLive(live) {
+  const data = loadData();
+  const STALE_MS = 5 * 60 * 1000;  // 5분 이상 무업데이트면 표시 안 함
+  const now = Date.now();
+  const activeKeys = new Set();
+  const items = [];
+
+  for (const [key, sess] of Object.entries(live)) {
+    if (!sess || typeof sess.lat !== 'number' || typeof sess.lng !== 'number') continue;
+    if (!sess.lastUpdate || now - sess.lastUpdate > STALE_MS) continue;
+    activeKeys.add(key);
+    const course = getCourse(data, sess.courseId);
+    const event = getEvent(data, sess.eventId);
+    const color = course?.color || '#9b59b6';
+    const driver = sess.crew?.driver || '운전자';
+    const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
+    let m = liveMarkers[key];
+    const img = vehicleMarkerImage(color, driver);
+    if (!m) {
+      m = new kakao.maps.Marker({ position: pos, map, image: img, title: driver });
+      const iw = new kakao.maps.InfoWindow({
+        content: buildIwContent(sess, event, course),
+        removable: true
+      });
+      kakao.maps.event.addListener(m, 'click', () => {
+        if (window.__pubIw) { try { window.__pubIw.close(); } catch (e) {} }
+        iw.setContent(buildIwContent(sess, event, course));
+        iw.open(map, m);
+        window.__pubIw = iw;
+      });
+      m.__iw = iw;
+      liveMarkers[key] = m;
+    } else {
+      m.setPosition(pos);
+      m.setImage(img);
+      if (m.__iw && m.__iw.getMap && m.__iw.getMap()) {
+        m.__iw.setContent(buildIwContent(sess, event, course));
+      }
+    }
+    items.push({ key, sess, event, course, driver, color });
+  }
+  // 사라진 세션 마커 제거
+  for (const key of Object.keys(liveMarkers)) {
+    if (!activeKeys.has(key)) {
+      try { liveMarkers[key].setMap(null); } catch (e) {}
+      delete liveMarkers[key];
+    }
+  }
+  // 상태/리스트 갱신
+  const status = document.getElementById('liveStatus');
+  if (items.length === 0) {
+    status.textContent = '운영 중인 차량 없음';
+    document.getElementById('liveList').style.display = 'none';
+  } else {
+    status.textContent = `🟢 ${items.length}대 운영 중`;
+    const listBody = items.map(it => {
+      const elapsed = Math.round((Date.now() - it.sess.startedAt) / 60000);
+      const progress = (it.sess.totalCount > 0)
+        ? `${it.sess.completedCount}/${it.sess.totalCount}`
+        : '-';
+      return `<div class="live-item" onclick="focusLive('${it.key.replace(/'/g,"\\'")}')">
+        <div class="name" style="color:${it.color};">${escapeHtml(it.driver)}</div>
+        <div class="sub">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')}</div>
+        <div class="sub">진행 ${progress} · ${elapsed}분 전 출발</div>
+      </div>`;
+    }).join('');
+    document.getElementById('liveListBody').innerHTML = listBody;
+    document.getElementById('liveList').style.display = 'block';
+  }
+}
+
+function buildIwContent(sess, event, course) {
+  const driver = sess.crew?.driver || '운전자';
+  const assist = sess.crew?.assist || '';
+  const veh = [sess.crew?.vehicle, sess.crew?.vehicleColor].filter(Boolean).join(' / ');
+  const elapsed = Math.round((Date.now() - sess.startedAt) / 60000);
+  const progress = (sess.totalCount > 0) ? `${sess.completedCount}/${sess.totalCount} 거점` : '진행 중';
+  return `<div style="padding:10px 12px;font-size:12px;min-width:180px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
+    <div style="font-weight:700;color:#2c3e50;margin-bottom:4px;">${escapeHtml(event?.name || '?')} · ${escapeHtml(course?.name || '?')}</div>
+    <div>🧑‍✈️ ${escapeHtml(driver)}${assist ? ' / ' + escapeHtml(assist) : ''}</div>
+    ${veh ? `<div>🚐 ${escapeHtml(veh)}</div>` : ''}
+    <div style="color:#666;margin-top:4px;">${progress} · ${elapsed}분 진행</div>
+  </div>`;
+}
+
+function focusLive(key) {
+  const m = liveMarkers[key];
+  if (m && map) {
+    map.setCenter(m.getPosition());
+    map.setLevel(Math.min(map.getLevel(), 4));
+    if (m.__iw) {
+      if (window.__pubIw) { try { window.__pubIw.close(); } catch (e) {} }
+      m.__iw.open(map, m);
+      window.__pubIw = m.__iw;
+    }
+  }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>
