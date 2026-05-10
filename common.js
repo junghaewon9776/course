@@ -179,17 +179,50 @@ async function sendSms(toPhone, content) {
 // ───────── 카카오 InfoWindow 토글 ─────────
 // 같은 마커 다시 누르면 닫히고, 다른 마커 누르면 이전 거 닫고 새 거 열기
 window.__openIw = null;
+// InfoWindow가 다른 마커(GPS ping 등)에 가려지지 않게 — 열릴 때 위에 있는 마커 잠시 내림
+function _lowerCoveringMarkers() {
+  // myMarker(GPS ping) 등 zIndex 큰 것들 원래 값 백업하고 1로
+  if (typeof myMarker !== 'undefined' && myMarker && myMarker.getZIndex) {
+    if (window.__zIdxBackup_my == null) window.__zIdxBackup_my = myMarker.getZIndex();
+    try { myMarker.setZIndex(1); } catch (e) {}
+  }
+}
+function _restoreCoveringMarkers() {
+  if (typeof myMarker !== 'undefined' && myMarker && window.__zIdxBackup_my != null) {
+    try { myMarker.setZIndex(window.__zIdxBackup_my); } catch (e) {}
+    window.__zIdxBackup_my = null;
+  }
+}
 function toggleInfoWindow(iw, marker, mapRef) {
   // getMap()으로 실제 열림 여부 확인 (re-render 후에도 안전)
   if (iw.getMap && iw.getMap()) {
     iw.close();
     if (window.__openIw === iw) window.__openIw = null;
+    _restoreCoveringMarkers();
   } else {
     if (window.__openIw && window.__openIw !== iw) {
       try { window.__openIw.close(); } catch (e) {}
     }
+    _lowerCoveringMarkers();
     iw.open(mapRef, marker);
     window.__openIw = iw;
+    // 마커 위치로 살짝 패닝 — InfoWindow가 화면 가장자리에서 잘리지 않게 위쪽에 공간 확보
+    try {
+      if (mapRef && marker.getPosition) {
+        setTimeout(() => {
+          mapRef.panTo(marker.getPosition());
+          setTimeout(() => mapRef.panBy(0, -100), 200);
+        }, 50);
+      }
+    } catch (e) {}
+    // 닫기 버튼(X) 클릭 등으로 외부에서 닫혀도 복원되게 한 번 더 체크
+    setTimeout(function checkClosed() {
+      if (!iw.getMap || !iw.getMap()) {
+        _restoreCoveringMarkers();
+        return;
+      }
+      setTimeout(checkClosed, 500);
+    }, 500);
   }
 }
 

@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260513p">
+  <link rel="stylesheet" href="style.css?v=20260513s">
 </head>
 <body>
 <header>
@@ -103,30 +103,21 @@
     </div>
   </div>
 
-  <!-- 코스 전체 보기 (항상 표시) -->
+  <!-- 코스 전체 보기 -->
   <div class="card" style="border-left:4px solid #3498db;">
     <div class="flex-between" style="flex-wrap:wrap;gap:8px;">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <h2 style="margin:0;">🗺 코스 전체 보기</h2>
-        <button id="btnAllCourses" onclick="showAllCoursesOnMap()" style="background:linear-gradient(135deg,#2c3e50,#34495e);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:800;cursor:pointer;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+        <button id="btnAllCourses" onclick="toggleShowAllCourses()" style="border:none;padding:8px 14px;border-radius:6px;font-weight:800;cursor:pointer;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,0.2);transition:all 0.15s;">
           🌐 전체 코스
         </button>
-        <button onclick="clearCoursePreview()" style="background:#ecf0f1;color:#7f8c8d;border:1px solid #bdc3c7;padding:6px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;">
-          ✕ 미리보기 끄기
-        </button>
       </div>
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#555;">
-          <input type="checkbox" id="anchorsAlwaysOn" onchange="toggleAllAnchors()" checked>
-          <span>전체 핑</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#555;">
-          <input type="checkbox" id="cnsAlwaysOn" onchange="toggleComplaintNoSpray()" checked>
-          <span>📞 민원 ⛔ 방역금지</span>
-        </label>
-      </div>
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#555;">
+        <input type="checkbox" id="cnsAlwaysOn" onchange="toggleComplaintNoSpray()" checked>
+        <span>📞 민원 ⛔ 방역금지</span>
+      </label>
     </div>
-    <p class="muted" style="font-size:11px;margin:6px 0 6px;">전체 핑이 항상 지도에 떠 있어요. 특정 코스 강조하려면 아래 버튼 클릭.</p>
+    <p class="muted" style="font-size:11px;margin:6px 0 6px;">전체 코스 버튼으로 핀 켜고 끄세요. 특정 코스 누르면 그 코스만 보입니다.</p>
     <div id="courseQuickList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
   </div>
 
@@ -157,8 +148,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260513p"></script>
-<script src="common.js?v=20260513p"></script>
+<script src="firebase-config.js?v=20260513s"></script>
+<script src="common.js?v=20260513s"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
@@ -207,9 +198,8 @@ function initMonitorMap() {
   renderPubMonConfig();
   renderAllAnchorsAlwaysOn();  // 전체 코스 핑 영구 표시
   renderComplaintsAndNoSpray();  // 민원 + 방역금지 (관제 전용)
-  // 체크박스 상태 sync
-  const cb = document.getElementById('anchorsAlwaysOn');
-  if (cb) cb.checked = localStorage.getItem('hideAllAnchors') !== '1';
+  // 버튼/체크박스 상태 sync
+  updateAllCoursesBtn();
   const cb2 = document.getElementById('cnsAlwaysOn');
   if (cb2) cb2.checked = localStorage.getItem('hideComplaintNoSpray') !== '1';
   // 사용자가 지도 직접 만지면 따라가기 자동 해제
@@ -258,6 +248,7 @@ function renderAllAnchorsAlwaysOn() {
   if (!map) return;
   clearAlwaysOnAnchors();
   if (localStorage.getItem('hideAllAnchors') === '1') return;  // 토글 OFF
+  if (window.__focusedMode) return;  // 특정 코스 집중 보기 중 → 전체핑 잠시 숨김
   const data = loadData();
   const evVis = (data.visibility || {}).events || {};
   const csVis = (data.visibility || {}).courses || {};
@@ -310,9 +301,46 @@ function renderAllAnchorsAlwaysOn() {
 }
 function toggleAllAnchors() {
   const cur = localStorage.getItem('hideAllAnchors') === '1';
-  localStorage.setItem('hideAllAnchors', cur ? '0' : '1');
+  const willHide = !cur;
+  localStorage.setItem('hideAllAnchors', willHide ? '1' : '0');
   renderAllAnchorsAlwaysOn();
+  if (willHide) clearCoursePreview();
   renderCourseQuickList();
+}
+
+// 전체 코스 ON/OFF 토글 (단일 버튼) — 집중 모드 중이면 풀고 ON으로 복귀
+function toggleShowAllCourses() {
+  if (window.__focusedMode) {
+    // 단일/전체 코스 미리보기 중 → 끄고 영구 핀 ON으로
+    clearCoursePreview();
+    localStorage.setItem('hideAllAnchors', '0');
+    renderAllAnchorsAlwaysOn();
+  } else {
+    // 일반 토글 (영구 핀 ON ↔ OFF)
+    const cur = localStorage.getItem('hideAllAnchors') === '1';
+    localStorage.setItem('hideAllAnchors', cur ? '0' : '1');
+    renderAllAnchorsAlwaysOn();
+  }
+  updateAllCoursesBtn();
+}
+
+function updateAllCoursesBtn() {
+  const btn = document.getElementById('btnAllCourses');
+  if (!btn) return;
+  const isOn = localStorage.getItem('hideAllAnchors') !== '1' && !window.__focusedMode;
+  if (isOn) {
+    btn.style.background = 'linear-gradient(135deg,#27ae60,#16a085)';
+    btn.style.color = '#fff';
+    btn.textContent = '🌐 전체 코스 (켜짐)';
+  } else if (window.__focusedMode) {
+    btn.style.background = 'linear-gradient(135deg,#e67e22,#d35400)';
+    btn.style.color = '#fff';
+    btn.textContent = '🌐 전체 코스로 돌아가기';
+  } else {
+    btn.style.background = '#ecf0f1';
+    btn.style.color = '#7f8c8d';
+    btn.textContent = '🌐 전체 코스 (꺼짐)';
+  }
 }
 
 // ─── 민원 + 방역금지 핀 (관제 전용 — 공개페이지엔 안 보임) ───
@@ -553,6 +581,9 @@ function showAllCoursesOnMap() {
   }
   if (typeof logTrack !== 'undefined' && logTrack) { logTrack.setMap(null); logTrack = null; }
   selectedLogIdx = null;
+  // 집중 모드 ON → 영구 핀 잠시 숨김
+  window.__focusedMode = true;
+  renderAllAnchorsAlwaysOn();
 
   window.__allCourseLines = [];
   const bounds = new kakao.maps.LatLngBounds();
@@ -616,6 +647,7 @@ function showAllCoursesOnMap() {
   map.setBounds(bounds);
   const info = document.getElementById('logInfo');
   if (info) info.innerHTML = `<b>🌐 전체 코스 미리보기</b> · ${totalCourses}개 코스 · ${totalAnchors}개 거점`;
+  updateAllCoursesBtn();
 }
 
 function clearCoursePreview() {
@@ -629,6 +661,10 @@ function clearCoursePreview() {
   if (window.__crsIw) { try { window.__crsIw.close(); } catch (e) {} }
   const info = document.getElementById('logInfo');
   if (info) info.textContent = '';
+  // 집중 모드 OFF → 영구 핀 다시 살림 (체크박스가 ON일 때)
+  window.__focusedMode = false;
+  renderAllAnchorsAlwaysOn();
+  updateAllCoursesBtn();
 }
 function showCourseOnMap(courseId) {
   const data = loadData();
@@ -642,9 +678,16 @@ function showCourseOnMap(courseId) {
   __courseQuickMarkers.forEach(m => m.setMap(null));
   __courseQuickMarkers = [];
   if (__courseQuickLine) { __courseQuickLine.setMap(null); __courseQuickLine = null; }
+  if (window.__allCourseLines) {
+    window.__allCourseLines.forEach(l => l.setMap(null));
+    window.__allCourseLines = [];
+  }
   // logTrack 같은 기존 운행 궤적도 끔
   if (typeof logTrack !== 'undefined' && logTrack) { logTrack.setMap(null); logTrack = null; }
   selectedLogIdx = null;
+  // 집중 모드 ON → 영구 핀 잠시 숨김
+  window.__focusedMode = true;
+  renderAllAnchorsAlwaysOn();
 
   const bounds = new kakao.maps.LatLngBounds();
   const path = [];
@@ -693,6 +736,7 @@ function showCourseOnMap(courseId) {
       <span class="muted" style="font-size:12px;">거점 순서: ${anchors.map((a, i) => `${i+1}.${escapeHtml(a.name)}`).join(' → ')}</span>
     </div>
   `;
+  updateAllCoursesBtn();
 }
 
 // ─── 따라가기 모드 (특정 차량을 자동 추적) ───
@@ -1018,12 +1062,13 @@ function fitDriverCourse(key) {
   const data = loadData();
   const anchors = (data.anchors || []).filter(a => a.courseId === sess.courseId);
   if (!anchors.length) { alert('이 코스에 거점이 없습니다'); return; }
-  // 차량 위치 + 모든 거점이 다 보이게 bounds
+  // 그 차량의 코스만 강조 표시 — 다른 코스 핑은 잠시 숨김
+  showCourseOnMap(sess.courseId);
+  // 차량 위치도 bounds에 포함
   const bounds = new kakao.maps.LatLngBounds();
   anchors.forEach(a => bounds.extend(new kakao.maps.LatLng(a.lat, a.lng)));
   bounds.extend(new kakao.maps.LatLng(sess.lat, sess.lng));
   map.setBounds(bounds);
-  // fit하면 따라가기 끔
   stopFollow('fit-course');
 }
 // 라이브 카드 접기/펼치기 (차량 많을 때 지도 위로 끌어올리기)
