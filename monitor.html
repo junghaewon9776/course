@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260513f">
+  <link rel="stylesheet" href="style.css?v=20260513i">
 </head>
 <body>
 <header>
@@ -137,8 +137,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260513f"></script>
-<script src="common.js?v=20260513f"></script>
+<script src="firebase-config.js?v=20260513i"></script>
+<script src="common.js?v=20260513i"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
@@ -385,12 +385,19 @@ function subscribeLive() {
     renderLive(live);
   });
 }
+function extractHochaNum(name) {
+  if (!name) return null;
+  const m = String(name).match(/(\d+)\s*호\s*차/);
+  return m ? m[1] : null;
+}
 function vehicleMarkerSvg(color, label, heading) {
-  const safe = (label || '?').slice(0, 1);
+  // label은 "1호차"/"10호차" 형식 우선 — 숫자만 추출, 없으면 첫 2글자
+  const num = extractHochaNum(label);
+  const safe = num || (String(label || '?').replace(/\s/g,'').slice(0, 2));
+  const fontSize = safe.length >= 2 ? 6 : 8;
   const angle = (typeof heading === 'number' && !isNaN(heading)) ? heading : 0;
   const hasDir = (typeof heading === 'number' && !isNaN(heading));
   // 위에서 본 차량 (Top-down car) — heading 방향으로 회전, 진행방향 표시 화살표
-  // viewBox 30x30, 차량 본체는 가운데 (13~17 중심), 회전축 (15,15)
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
     <g transform="rotate(${angle} 15 15)">
       ${hasDir ? `<path d="M15 1 L19 7 L11 7 Z" fill="${color}" stroke="white" stroke-width="1"/>` : ''}
@@ -402,7 +409,7 @@ function vehicleMarkerSvg(color, label, heading) {
       <rect x="6.5" y="7" width="17" height="18" rx="3.5" fill="${color}" stroke="white" stroke-width="1.2"/>
       <rect x="8" y="8.5" width="13" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
       <rect x="8" y="19.5" width="13" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
-      <text x="15" y="18.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="bold" fill="white" transform="rotate(${-angle} 15 15)">${safe}</text>
+      <text x="15" y="${safe.length >= 2 ? 18 : 18.5}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="bold" fill="white" transform="rotate(${-angle} 15 15)">${safe}</text>
     </g>
   </svg>`;
   return new kakao.maps.MarkerImage(
@@ -501,8 +508,8 @@ function renderLive(live) {
     const color = course?.color || '#9b59b6';
     const driver = sess.crew?.driver || '운전자';
     const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
-    // 마커 가운데 글자 — 차량명 첫글자 우선 (예: 1호차 → 1), 없으면 운전자 이니셜
-    const markerLabel = (sess.crew?.vehicleName || sess.crew?.vehicle || driver).replace(/\s/g,'').charAt(0) || '?';
+    // 마커 가운데 글자 — 차량명("1호차" "10호차")에서 숫자 추출, 없으면 첫글자
+    const markerLabel = sess.crew?.vehicleName || sess.crew?.vehicle || driver || '?';
     // 진행 방향 — sess.heading 우선, 없으면 prev→curr 위치차이로 계산
     let heading = (typeof sess.heading === 'number' && !isNaN(sess.heading)) ? sess.heading : null;
     const prev = prevPos[key];
@@ -617,9 +624,14 @@ function renderLive(live) {
       const isFollowing = __followKey === it.key;
       const followLabel = isFollowing ? '🎯 따라가는 중' : '📍 따라가기';
       const followBg = isFollowing ? '#27ae60' : it.color;
+      const hochaName = it.sess.crew?.vehicleName || '';
+      // 좌측 호차 배지 — 호차 있으면 큼직, 없으면 운전자 이니셜 동그라미 (폴백)
+      const leftBadge = hochaName
+        ? `<div style="background:${it.color};color:#fff;padding:8px 12px;border-radius:8px;font-weight:800;font-size:16px;flex:none;min-width:62px;text-align:center;line-height:1.1;box-shadow:0 1px 3px rgba(0,0,0,0.15);">${escapeHtml(hochaName)}</div>`
+        : `<div style="background:${it.color};color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">${(it.driver||'?').slice(0,1)}</div>`;
       return `
-        <div style="display:flex;align-items:center;gap:8px;padding:10px 8px;border-bottom:1px solid #eee;${isFollowing ? 'background:#e8f8f5;' : ''}">
-          <div class="num" style="background:${it.color};color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">${(it.driver||'?').slice(0,1)}</div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid #eee;${isFollowing ? 'background:#e8f8f5;' : ''}">
+          ${leftBadge}
           <div style="flex:1;min-width:0;">
             <div class="name" style="font-weight:600;color:#2c3e50;">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')} · ${escapeHtml(it.driver)}</div>
             <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}</div>

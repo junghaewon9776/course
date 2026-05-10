@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>코스 차량 위치 (공개)</title>
-  <link rel="stylesheet" href="style.css?v=20260513f">
+  <link rel="stylesheet" href="style.css?v=20260513i">
   <style>
     body { margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f3f4f6; }
     .topbar {
@@ -80,8 +80,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260513f"></script>
-<script src="common.js?v=20260513f"></script>
+<script src="firebase-config.js?v=20260513i"></script>
+<script src="common.js?v=20260513i"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const tokenParam = params.get('t') || params.get('id') || '';
@@ -195,11 +195,17 @@ function initMap() {
   });
 }
 
+function extractHochaNum(name) {
+  if (!name) return null;
+  const m = String(name).match(/(\d+)\s*호\s*차/);
+  return m ? m[1] : null;
+}
 function vehicleMarkerImage(color, label, heading) {
-  const safe = (label || '?').slice(0, 1);
+  const num = extractHochaNum(label);
+  const safe = num || (String(label || '?').replace(/\s/g,'').slice(0, 2));
+  const fontSize = safe.length >= 2 ? 6 : 8;
   const angle = (typeof heading === 'number' && !isNaN(heading)) ? heading : 0;
   const hasDir = (typeof heading === 'number' && !isNaN(heading));
-  // 위에서 본 차량 (Top-down car) + 진행방향 회전
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
     <g transform="rotate(${angle} 15 15)">
       ${hasDir ? `<path d="M15 1 L19 7 L11 7 Z" fill="${color}" stroke="white" stroke-width="1"/>` : ''}
@@ -211,7 +217,7 @@ function vehicleMarkerImage(color, label, heading) {
       <rect x="6.5" y="7" width="17" height="18" rx="3.5" fill="${color}" stroke="white" stroke-width="1.2"/>
       <rect x="8" y="8.5" width="13" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
       <rect x="8" y="19.5" width="13" height="4" rx="1" fill="rgba(255,255,255,0.85)"/>
-      <text x="15" y="18.5" text-anchor="middle" font-family="Arial,sans-serif" font-size="7" font-weight="bold" fill="white" transform="rotate(${-angle} 15 15)">${safe}</text>
+      <text x="15" y="${safe.length >= 2 ? 18 : 18.5}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="bold" fill="white" transform="rotate(${-angle} 15 15)">${safe}</text>
     </g>
   </svg>`;
   return new kakao.maps.MarkerImage(
@@ -249,7 +255,7 @@ function renderLive(live) {
     const driver = sess.crew?.driver || '운전자';
     const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
     let m = liveMarkers[key];
-    const markerLabel = (sess.crew?.vehicleName || sess.crew?.vehicle || driver).replace(/\s/g,'').charAt(0) || '?';
+    const markerLabel = sess.crew?.vehicleName || sess.crew?.vehicle || driver || '?';
     let heading = (typeof sess.heading === 'number' && !isNaN(sess.heading)) ? sess.heading : null;
     const prev = prevPos[key];
     if (heading === null && prev && (Math.abs(prev.lat - sess.lat) > 1e-6 || Math.abs(prev.lng - sess.lng) > 1e-6)) {
@@ -361,14 +367,14 @@ function renderLive(live) {
       const callBtn = drvPhone
         ? `<a href="tel:${phoneTel}" onclick="event.stopPropagation()" class="pubBtn" style="background:#27ae60;text-decoration:none;display:inline-block;">📞 ${escapeHtml(drvPhone)}</a>`
         : '';
+      const leftBadge = vehName
+        ? `<div style="background:${it.color};color:#fff;padding:8px 12px;border-radius:8px;font-weight:800;font-size:16px;flex:none;min-width:62px;text-align:center;line-height:1.1;box-shadow:0 1px 3px rgba(0,0,0,0.15);">${escapeHtml(vehName)}</div>`
+        : `<div style="background:${it.color};color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">${escapeHtml((it.driver||'?').slice(0,1))}</div>`;
       return `<div class="live-item">
-        <div style="display:flex;gap:8px;align-items:flex-start;">
+        <div style="display:flex;gap:10px;align-items:center;">
+          ${leftBadge}
           <div style="flex:1;min-width:0;">
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
-              ${vehName ? `<span style="background:${it.color};color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px;">🚐 ${escapeHtml(vehName)}</span>` : ''}
-              ${plate ? `<span style="font-family:monospace;font-size:11px;color:#666;">${escapeHtml(plate)}</span>` : ''}
-            </div>
-            <div class="name" style="color:#2c3e50;">${escapeHtml(it.driver)} ${callBtn}</div>
+            <div class="name" style="color:#2c3e50;">${escapeHtml(it.driver)}${plate ? ` <span style="font-family:monospace;font-size:11px;color:#666;">· ${escapeHtml(plate)}</span>` : ''} ${callBtn}</div>
             <div class="sub">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')} · 진행 ${progress} · ${elapsed}분</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex:none;">
