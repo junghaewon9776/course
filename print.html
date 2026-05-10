@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인쇄용 - 방역코스</title>
-  <link rel="stylesheet" href="style.css?v=20260512p">
+  <link rel="stylesheet" href="style.css?v=20260512r">
   <style>
     body { background: #fff; }
     .print-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
@@ -65,37 +65,41 @@
       .course-item { page-break-inside: avoid; }
     }
 
-    /* 호차 인쇄 모드 */
-    body.mode-hocha .print-wrap { padding: 0; max-width: none; }
+    /* 호차 인쇄 모드 — 차 한 대당 A4 한 페이지, 호차 번호 초대형 */
+    @page { size: A4; margin: 0; }
+    body.mode-hocha .print-wrap { padding: 0; max-width: none; margin: 0; }
+    body.mode-hocha .print-toolbar { padding: 12px; }
     .hocha-page {
-      width: 100%; min-height: 95vh; box-sizing: border-box;
-      padding: 30px 20px; display: flex; flex-direction: column;
-      align-items: center; text-align: center;
-      page-break-after: always; border: 1px dashed #ccc; margin-bottom: 16px;
+      width: 210mm; height: 297mm; box-sizing: border-box;
+      padding: 18mm 18mm 14mm; margin: 0 auto 8mm;
+      display: flex; flex-direction: column; align-items: center;
+      text-align: center; page-break-after: always;
+      border: 1px dashed #ccc; background: #fff; overflow: hidden;
     }
     .hocha-page:last-child { page-break-after: auto; }
     .hocha-num {
-      font-size: 240pt; font-weight: 900; color: #e67e22; line-height: 0.9;
-      margin-bottom: 18mm;
+      font-size: 220pt; font-weight: 900; color: #e67e22; line-height: 0.9;
+      margin: 0 0 12mm;
     }
-    .hocha-color { font-size: 50pt; font-weight: 700; color: #34495e; margin-bottom: 8mm; }
+    .hocha-color { font-size: 42pt; font-weight: 700; color: #34495e; margin-bottom: 8mm; }
     .hocha-plate {
-      font-size: 60pt; font-weight: 800; color: #fff;
-      background: #2c3e50; padding: 8mm 16mm; border-radius: 6mm;
-      font-family: monospace; letter-spacing: 3mm; margin-bottom: 12mm;
+      font-size: 50pt; font-weight: 800; color: #fff;
+      background: #2c3e50; padding: 6mm 14mm; border-radius: 5mm;
+      font-family: monospace; letter-spacing: 2.5mm; margin-bottom: 10mm;
     }
-    .hocha-crew { font-size: 22pt; margin-bottom: 12mm; }
-    .hocha-crew-row { margin: 3mm 0; }
-    .hocha-role {
-      background: #34495e; color: #fff; padding: 2mm 6mm; border-radius: 3mm;
-      font-size: 16pt; font-weight: 700; margin-right: 4mm;
-    }
+    .hocha-crew { font-size: 18pt; margin-bottom: 6mm; }
+    .hocha-crew-row { margin: 2mm 0; display: flex; justify-content: center; align-items: center; gap: 4mm; flex-wrap: wrap; }
+    .hocha-role { background: #34495e; color: #fff; padding: 1mm 4mm; border-radius: 2mm; font-size: 13pt; font-weight: 700; }
     .hocha-name { font-weight: 700; color: #2c3e50; }
-    .hocha-phone { color: #666; font-family: monospace; font-size: 18pt; margin-left: 4mm; }
+    .hocha-phone { color: #666; font-family: monospace; font-size: 14pt; }
     .hocha-qr { margin-top: auto; }
-    .hocha-qr-label { font-size: 11pt; color: #555; margin-top: 4mm; }
+    .hocha-qr img { width: 140px; height: 140px; display: block; margin: 0 auto; }
+    .hocha-qr-label { font-size: 10pt; color: #555; margin-top: 2mm; }
+
     @media print {
-      .hocha-page { border: none; margin: 0; min-height: 100vh; padding: 25mm 20mm; }
+      body.mode-hocha .print-wrap { padding: 0; }
+      .hocha-page { border: none; margin: 0; padding: 18mm 18mm 14mm; }
+      .print-toolbar { display: none; }
     }
   </style>
 </head>
@@ -137,8 +141,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512p"></script>
-<script src="common.js?v=20260512p"></script>
+<script src="firebase-config.js?v=20260512r"></script>
+<script src="common.js?v=20260512r"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(initEventFilter);
 window.onDataChanged = () => render();
@@ -208,8 +212,8 @@ function renderHocha() {
           ${astName ? `<div class="hocha-crew-row"><span class="hocha-role">보조</span><span class="hocha-name">${esc(astName)}</span>${astPhone ? `<span class="hocha-phone">${esc(astPhone)}</span>` : ''}</div>` : ''}
         </div>
         <div class="hocha-qr">
-          <img src="${qrApi(todayUrl)}" alt="QR" width="180" height="180">
-          <div class="hocha-qr-label">📱 QR 스캔 → 오늘운영 → 본인 호차 누르고 시작</div>
+          <img src="${qrApi(todayUrl)}" alt="QR">
+          <div class="hocha-qr-label">📱 QR 스캔 → 오늘운영</div>
         </div>
       </div>
     `;
