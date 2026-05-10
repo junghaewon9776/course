@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인쇄용 - 방역코스</title>
-  <link rel="stylesheet" href="style.css?v=20260512r">
+  <link rel="stylesheet" href="style.css?v=20260512u">
   <style>
     body { background: #fff; }
     .print-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
@@ -65,40 +65,57 @@
       .course-item { page-break-inside: avoid; }
     }
 
-    /* 호차 인쇄 모드 — 차 한 대당 A4 한 페이지, 호차 번호 초대형 */
-    @page { size: A4; margin: 0; }
+    /* 호차 인쇄 모드 — A4, 차 한 대당 한 페이지. @page는 JS로 동적 주입 */
     body.mode-hocha .print-wrap { padding: 0; max-width: none; margin: 0; }
     body.mode-hocha .print-toolbar { padding: 12px; }
     .hocha-page {
-      width: 210mm; height: 297mm; box-sizing: border-box;
-      padding: 18mm 18mm 14mm; margin: 0 auto 8mm;
-      display: flex; flex-direction: column; align-items: center;
-      text-align: center; page-break-after: always;
+      box-sizing: border-box; margin: 0 auto 8mm;
+      display: flex; page-break-after: always;
       border: 1px dashed #ccc; background: #fff; overflow: hidden;
     }
     .hocha-page:last-child { page-break-after: auto; }
-    .hocha-num {
-      font-size: 220pt; font-weight: 900; color: #e67e22; line-height: 0.9;
-      margin: 0 0 12mm;
+
+    /* 가로(landscape) — 좌측 텍스트 스택, 우측 QR */
+    body.orient-landscape .hocha-page {
+      width: 297mm; height: 210mm;
+      padding: 14mm 20mm;
+      align-items: center; gap: 16mm; flex-direction: row;
     }
-    .hocha-color { font-size: 42pt; font-weight: 700; color: #34495e; margin-bottom: 8mm; }
-    .hocha-plate {
-      font-size: 50pt; font-weight: 800; color: #fff;
-      background: #2c3e50; padding: 6mm 14mm; border-radius: 5mm;
-      font-family: monospace; letter-spacing: 2.5mm; margin-bottom: 10mm;
+    body.orient-landscape .hocha-num { font-size: 280pt; line-height: 0.85; margin: 0 0 8mm; }
+    body.orient-landscape .hocha-color { font-size: 56pt; margin-bottom: 4mm; }
+    body.orient-landscape .hocha-plate { font-size: 56pt; margin-bottom: 4mm; }
+    body.orient-landscape .hocha-crew-line { font-size: 40pt; }
+    body.orient-landscape .hocha-qr img { width: 220px; height: 220px; }
+
+    /* 세로(portrait) — 위에서 아래 스택, QR 하단 */
+    body.orient-portrait .hocha-page {
+      width: 210mm; height: 297mm;
+      padding: 18mm 18mm 14mm;
+      flex-direction: column; align-items: center; gap: 0;
     }
-    .hocha-crew { font-size: 18pt; margin-bottom: 6mm; }
-    .hocha-crew-row { margin: 2mm 0; display: flex; justify-content: center; align-items: center; gap: 4mm; flex-wrap: wrap; }
-    .hocha-role { background: #34495e; color: #fff; padding: 1mm 4mm; border-radius: 2mm; font-size: 13pt; font-weight: 700; }
-    .hocha-name { font-weight: 700; color: #2c3e50; }
-    .hocha-phone { color: #666; font-family: monospace; font-size: 14pt; }
-    .hocha-qr { margin-top: auto; }
-    .hocha-qr img { width: 140px; height: 140px; display: block; margin: 0 auto; }
-    .hocha-qr-label { font-size: 10pt; color: #555; margin-top: 2mm; }
+    body.orient-portrait .hocha-left { flex: 1; text-align: center; width: 100%; display: flex; flex-direction: column; justify-content: center; }
+    body.orient-portrait .hocha-right { flex: none; margin-top: auto; }
+    body.orient-portrait .hocha-num { font-size: 240pt; line-height: 0.9; margin: 0 0 8mm; }
+    body.orient-portrait .hocha-color { font-size: 60pt; margin-bottom: 4mm; }
+    body.orient-portrait .hocha-plate { font-size: 60pt; margin-bottom: 4mm; }
+    body.orient-portrait .hocha-crew-line { font-size: 44pt; }
+    body.orient-portrait .hocha-qr img { width: 160px; height: 160px; }
+
+    /* 공통 */
+    .hocha-left { text-align: center; }
+    .hocha-right { text-align: center; }
+    body.orient-landscape .hocha-left { flex: 1; }
+    .hocha-num { font-weight: 900; color: #e67e22; }
+    .hocha-color { font-weight: 700; color: #34495e; line-height: 1; }
+    .hocha-plate { font-weight: 800; color: #2c3e50; font-family: monospace; letter-spacing: 1mm; line-height: 1; }
+    .hocha-crew-line { font-weight: 700; color: #2c3e50; line-height: 1.1; margin-top: 2mm; }
+    .hocha-crew-line .phone { color: #666; font-family: monospace; font-size: 0.7em; margin-left: 6mm; }
+    .hocha-qr img { display: block; margin: 0 auto; }
+    .hocha-qr-label { font-size: 11pt; color: #555; margin-top: 3mm; max-width: 220px; line-height: 1.3; }
 
     @media print {
       body.mode-hocha .print-wrap { padding: 0; }
-      .hocha-page { border: none; margin: 0; padding: 18mm 18mm 14mm; }
+      .hocha-page { border: none; margin: 0; }
       .print-toolbar { display: none; }
     }
   </style>
@@ -122,6 +139,13 @@
       <option value="course">코스 / 조 인쇄</option>
       <option value="hocha">🚐 호차 인쇄</option>
     </select>
+    <span class="modeOptHocha" style="display:none;">
+      <label>방향:</label>
+      <select id="hochaOrient" onchange="render()" style="width:auto;display:inline-block;">
+        <option value="landscape" selected>가로 (Landscape)</option>
+        <option value="portrait">세로 (Portrait)</option>
+      </select>
+    </span>
     <label class="modeOptCourse" style="display:flex;align-items:center;gap:4px;cursor:pointer;">
       <input id="onlyFeaturedCourse" type="checkbox" checked onchange="render()">
       <span>⭐ 대표 코스만</span>
@@ -141,8 +165,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512r"></script>
-<script src="common.js?v=20260512r"></script>
+<script src="firebase-config.js?v=20260512u"></script>
+<script src="common.js?v=20260512u"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(initEventFilter);
 window.onDataChanged = () => render();
@@ -188,7 +212,7 @@ function renderHocha() {
   let vehicles = (data.vehicles || []).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
   if (onlyId) vehicles = vehicles.filter(v => v.id === onlyId);
   const todayUrl = location.origin + location.pathname.replace(/print\.html$/, '') + 'today.html';
-  const qrApi = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}`;
+  const qrApi = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`;
   const esc = s => String(s||'').replace(/</g,'&lt;');
   if (!vehicles.length) {
     document.getElementById('printContent').innerHTML = '<div class="empty" style="padding:40px;text-align:center;">등록된 차량이 없습니다.<br>인원관리에서 차량을 먼저 추가하세요.</div>';
@@ -204,16 +228,16 @@ function renderHocha() {
     const orderNum = v.order || (idx + 1);
     return `
       <div class="hocha-page">
-        <div class="hocha-num">${orderNum}호차</div>
-        ${v.color ? `<div class="hocha-color">${esc(v.color)}</div>` : ''}
-        ${v.plate ? `<div class="hocha-plate">${esc(v.plate)}</div>` : ''}
-        <div class="hocha-crew">
-          ${drvName ? `<div class="hocha-crew-row"><span class="hocha-role">운전</span><span class="hocha-name">${esc(drvName)}</span>${drvPhone ? `<span class="hocha-phone">${esc(drvPhone)}</span>` : ''}</div>` : ''}
-          ${astName ? `<div class="hocha-crew-row"><span class="hocha-role">보조</span><span class="hocha-name">${esc(astName)}</span>${astPhone ? `<span class="hocha-phone">${esc(astPhone)}</span>` : ''}</div>` : ''}
+        <div class="hocha-left">
+          <div class="hocha-num">${orderNum}호차</div>
+          ${v.color ? `<div class="hocha-color">${esc(v.color)}</div>` : ''}
+          ${v.plate ? `<div class="hocha-plate">${esc(v.plate)}</div>` : ''}
+          ${drvName ? `<div class="hocha-crew-line">운전 ${esc(drvName)}${drvPhone ? `<span class="phone">${esc(drvPhone)}</span>` : ''}</div>` : ''}
+          ${astName ? `<div class="hocha-crew-line">보조 ${esc(astName)}${astPhone ? `<span class="phone">${esc(astPhone)}</span>` : ''}</div>` : ''}
         </div>
-        <div class="hocha-qr">
+        <div class="hocha-right">
           <img src="${qrApi(todayUrl)}" alt="QR">
-          <div class="hocha-qr-label">📱 QR 스캔 → 오늘운영</div>
+          <div class="hocha-qr-label">📱 QR → 오늘운영</div>
         </div>
       </div>
     `;
@@ -224,11 +248,31 @@ function renderHocha() {
 function render() {
   const mode = document.getElementById('printMode')?.value || 'course';
   document.body.classList.toggle('mode-hocha', mode === 'hocha');
-  // 코스 모드 옵션 토글 (대표코스/거점/공지편집)
   document.querySelectorAll('.modeOptCourse').forEach(el => {
     el.style.display = mode === 'course' ? '' : 'none';
   });
-  if (mode === 'hocha') return renderHocha();
+  document.querySelectorAll('.modeOptHocha').forEach(el => {
+    el.style.display = mode === 'hocha' ? 'inline-flex' : 'none';
+  });
+  // 호차 모드 방향 (가로/세로) — @page와 body 클래스 동적 주입
+  if (mode === 'hocha') {
+    const orient = document.getElementById('hochaOrient')?.value || 'landscape';
+    document.body.classList.remove('orient-landscape', 'orient-portrait');
+    document.body.classList.add('orient-' + orient);
+    let pageStyle = document.getElementById('dynamicPageStyle');
+    if (!pageStyle) {
+      pageStyle = document.createElement('style');
+      pageStyle.id = 'dynamicPageStyle';
+      document.head.appendChild(pageStyle);
+    }
+    pageStyle.textContent = `@page { size: A4 ${orient}; margin: 0; }`;
+    return renderHocha();
+  } else {
+    // 코스 모드는 기본 (세로) — 동적 스타일 제거
+    const ps = document.getElementById('dynamicPageStyle');
+    if (ps) ps.remove();
+    document.body.classList.remove('orient-landscape', 'orient-portrait');
+  }
   const data = loadData();
   const eventFilter = document.getElementById('eventFilter').value;
 
