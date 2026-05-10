@@ -3,7 +3,7 @@
 ## 다음 세션에서 시작 시 읽을 것
 
 ### 현재 상태
-- 캐시 버전: `20260510l` (모든 HTML에 동일)
+- 캐시 버전: `20260510o` (모든 HTML에 동일)
 - 신규 기능: 민원, 방역불가 핀, 거점 InfoWindow 수정/순번/삭제, 텔레그램, 네이버 SMS 설정 UI
 - 효도위안잔치: 거점에 이장님 배정, 차량정보, 탑승완료 알림 진행 중
 
@@ -20,6 +20,9 @@
   - members.html `소속`, `직위`, `담당` 키워드 추가 (기존 인원관리_*.xlsx 첫 행: No/소속/이름/생년월일/주소/우편번호/연락처)
   - `parseCSVMembers` 따옴표/콤마 안전 파싱으로 교체 (주소 안에 `,` 있어도 OK)
   - **데이터 유실 방지**: `_cacheReady === false` 일 때 saveData 차단 + 업로드 핸들러 차단 (이게 "데이터가 싹 사라지는" 진짜 원인이었음 — 동기화 전에 빈 캐시로 set('/') 부르면 전체 DB 덮어씀)
+  - **EUC-KR 자동 폴백** (한글 엑셀 "CSV로 저장" 기본 인코딩)
+  - **TAB/콤마 자동 감지** (탭이 더 많으면 TSV로 처리 — 사용자 파일이 탭 구분이었음)
+  - **헤더 라벨 뒤바뀜 자동 보정**: name 추출값이 KNOWN_POSITIONS(회장/감사/이장 등)면 position과 swap. alert에 "🔄 N명 자동 보정" 표시
 - [x] **7번** 로그인 유지
   - `ensureAnonAuth` 가 첫 onAuthStateChanged 이벤트 기다리도록 변경
   - 이전: index 진입 시 `fbAuth.currentUser` 가 hydration 전이라 null → 익명 sign-in → admin 세션 덮음

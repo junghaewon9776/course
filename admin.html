@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510m">
+  <link rel="stylesheet" href="style.css?v=20260510p">
 </head>
 <body>
 <header>
@@ -226,8 +226,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510m"></script>
-<script src="common.js?v=20260510m"></script>
+<script src="firebase-config.js?v=20260510p"></script>
+<script src="common.js?v=20260510p"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -517,17 +517,18 @@ function deleteCourseAnchors() {
 
 // ────── 엑셀/CSV 일괄 업로드 ──────
 function downloadCSVTemplate() {
-  const csv = '﻿행사,코스,거점명,주소,위도,경도,메모\n' +
-              '방역행사,1코스,영광읍사무소,영광읍 중앙로 100,,,주차 후문\n' +
-              '방역행사,1코스,행복어린이집,,35.2772,126.5121,정문 옆\n' +
-              '효도위안잔치,1코스,법성면사무소,법성면 진내리,,,\n';
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = '거점등록양식.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  // XLSX — 한글 Excel에서도 한 셀로 안 합쳐짐
+  const rows = [
+    ['행사', '코스', '거점명', '주소', '위도', '경도', '메모'],
+    ['방역행사', '1코스', '영광읍사무소', '영광읍 중앙로 100', '', '', '주차 후문'],
+    ['방역행사', '1코스', '행복어린이집', '', 35.2772, 126.5121, '정문 옆'],
+    ['효도위안잔치', '1코스', '법성면사무소', '법성면 진내리', '', '', '']
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:14},{wch:8},{wch:18},{wch:30},{wch:10},{wch:10},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '거점');
+  XLSX.writeFile(wb, '거점등록양식.xlsx');
   setTimeout(() => alert('양식 다운로드 완료\n\n컬럼: 행사, 코스, 거점명, 주소, 위도, 경도, 메모\n• 주소 또는 (위도+경도) 둘 중 하나 입력\n• 행사·코스는 미리 만들어둔 이름과 정확히 일치'), 200);
 }
 
@@ -544,7 +545,15 @@ document.getElementById('csvUpload').addEventListener('change', async (e) => {
       const ws = wb.Sheets[wb.SheetNames[0]];
       rows = XLSX.utils.sheet_to_json(ws, {defval:''});
     } else {
-      const text = await file.text();
+      // CSV: UTF-8 우선, 깨지면 EUC-KR 폴백 (한글 엑셀 기본 인코딩)
+      const buf = await file.arrayBuffer();
+      let text;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+      } catch (err2) {
+        try { text = new TextDecoder('euc-kr').decode(buf); }
+        catch (err3) { text = new TextDecoder('utf-8').decode(buf); }
+      }
       rows = parseCSV(text);
     }
   } catch (err) {
@@ -558,9 +567,13 @@ document.getElementById('csvUpload').addEventListener('change', async (e) => {
 function parseCSV(text) {
   const lines = text.replace(/^﻿/, '').split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(s => s.trim());
+  // 자동 구분자 감지 — 탭이 더 많으면 TSV
+  const tabCount = (lines[0].match(/\t/g) || []).length;
+  const commaCount = (lines[0].match(/,/g) || []).length;
+  const sep = (tabCount > commaCount) ? '\t' : ',';
+  const headers = lines[0].split(sep).map(s => s.trim());
   return lines.slice(1).map(line => {
-    const cells = line.split(',').map(s => s.trim());
+    const cells = line.split(sep).map(s => s.trim());
     const row = {};
     headers.forEach((h, i) => { row[h] = cells[i] || ''; });
     return row;

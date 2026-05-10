@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260510m">
+  <link rel="stylesheet" href="style.css?v=20260510p">
   <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
@@ -82,8 +82,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260510m"></script>
-<script src="common.js?v=20260510m"></script>
+<script src="firebase-config.js?v=20260510p"></script>
+<script src="common.js?v=20260510p"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -239,8 +239,18 @@ async function resetMemberPin(memberId) {
 
 // ────── 양식 / 엑셀 다운로드/업로드 ──────
 function downloadMemberTemplate() {
-  const csv = '﻿이름,직책,연락처,생년월일,주소,메모\n홍길동,회장,010-1234-5678,1970-05-12,영광읍 영광로 123,\n김철수,재무차장,010-2222-3333,,,\n박영희,일반회원,010-3333-4444,,,비고메모\n';
-  downloadCSVFile(csv, '회원등록양식.csv');
+  // XLSX 형식 — 한글 Excel에서도 한 셀로 안 합쳐짐
+  const rows = [
+    ['이름', '직책', '연락처', '생년월일', '주소', '메모'],
+    ['홍길동', '회장', '010-1234-5678', '1970-05-12', '영광읍 영광로 123', ''],
+    ['김철수', '재무차장', '010-2222-3333', '', '', ''],
+    ['박영희', '일반회원', '010-3333-4444', '', '', '비고메모']
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:10},{wch:10},{wch:14},{wch:12},{wch:30},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '회원');
+  XLSX.writeFile(wb, '회원등록양식.xlsx');
   setTimeout(() => alert('양식 다운로드 완료\n\n컬럼: 이름, 직책, 연락처, 생년월일, 주소, 메모\n• 이름은 필수, 나머지는 선택\n• 직책 예시: 회장, 부회장, 사무국장, 재무차장, 감사, 이장, 일반회원 등\n• 엑셀에서 편집 후 업로드'), 200);
 }
 
@@ -248,18 +258,15 @@ function exportMembersCSV() {
   const data = loadData();
   const members = data.members || [];
   if (!members.length) { alert('회원이 없습니다'); return; }
-  const lines = ['﻿이름,직책,연락처,생년월일,주소,메모'];
+  const rows = [['이름', '직책', '연락처', '생년월일', '주소', '메모']];
   for (const m of members) {
-    lines.push([
-      csvEscape(m.name),
-      csvEscape(m.position),
-      csvEscape(m.phone),
-      csvEscape(m.birthday),
-      csvEscape(m.address),
-      csvEscape(m.note)
-    ].join(','));
+    rows.push([m.name||'', m.position||'', m.phone||'', m.birthday||'', m.address||'', m.note||'']);
   }
-  downloadCSVFile(lines.join('\n'), `회원목록-${todayStr()}.csv`);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:10},{wch:10},{wch:14},{wch:12},{wch:30},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '회원');
+  XLSX.writeFile(wb, `회원목록-${todayStr()}.xlsx`);
   setTimeout(() => alert(`다운로드 완료 (${members.length}명)`), 200);
 }
 
@@ -363,9 +370,21 @@ document.getElementById('memUpload').addEventListener('change', async (e) => {
   const sampleAdded = [];
   // 첫 행 헤더 디버그용
   const firstHeaders = rows.length ? Object.keys(rows[0]).join(', ') : '(없음)';
+  // 직책으로 알려진 단어 — 헤더 라벨이 잘못된 파일 자동 보정용
+  const KNOWN_POSITIONS = new Set([
+    '회장','부회장','감사','사무국장','사무차장','재무국장','재무차장',
+    '홍보국장','홍보차장','기획국장','기획차장','총무','이장','부녀회장',
+    '청년회장','일반회원','회원','조장','부조장','새마을','노인회장'
+  ]);
+  let swapCount = 0;
   for (const row of rows) {
-    const name = String(pick(row, '이름', '성명', '회원', 'name')).trim();
-    const position = String(pick(row, '직책', '직급', '직위', '소속', '담당', 'position', 'role')).trim();
+    let name = String(pick(row, '이름', '성명', '회원', 'name')).trim();
+    let position = String(pick(row, '직책', '직급', '직위', '소속', '담당', 'position', 'role')).trim();
+    // 헤더 라벨이 뒤바뀐 파일 자동 보정 — name이 직책 단어면 swap
+    if (name && KNOWN_POSITIONS.has(name) && position && !KNOWN_POSITIONS.has(position)) {
+      [name, position] = [position, name];
+      swapCount++;
+    }
     const phone = normalizePhone(pick(row, '연락처', '연락', '전화', '핸드폰', '휴대폰', '번호', 'phone', 'tel', 'mobile'));
     const birthday = normalizeDate(pick(row, '생년월일', '생일', '나이', 'birth'));
     const address = String(pick(row, '주소', '거주지', 'address', 'addr')).trim();
@@ -380,6 +399,7 @@ document.getElementById('memUpload').addEventListener('change', async (e) => {
   }
   saveData(data);
   let msg = `✅ ${added}명 추가\n⏭ ${skipped}명 건너뜀 (이름없음 또는 중복)`;
+  if (swapCount > 0) msg += `\n🔄 이름/직책 컬럼이 뒤바뀌어 있어서 자동 보정 (${swapCount}명)`;
   if (added > 0) msg += `\n\n샘플:\n${sampleAdded.join('\n')}`;
   if (added === 0) {
     msg += `\n\n⚠️ 한 명도 등록 안됨. 파일 첫 행 컬럼명 확인:\n[${firstHeaders}]\n\n→ "이름" 비슷한 컬럼이 있어야 함\n→ 양식 다운로드해서 컬럼 맞추거나, 알려주시면 코드에 그 이름 추가`;
@@ -387,9 +407,14 @@ document.getElementById('memUpload').addEventListener('change', async (e) => {
   alert(msg);
 });
 
-// 따옴표/콤마 들어간 필드(예: 주소) 안전 파싱 + 줄 안 따옴표 안에 줄바꿈 허용
+// 따옴표/콤마/탭 들어간 필드 안전 파싱 + 자동 구분자 감지 (콤마 vs 탭)
 function parseCSVMembers(text) {
   text = text.replace(/^﻿/, '');
+  // 첫 줄에서 구분자 감지 — 탭이 더 많으면 TSV로 간주
+  const firstLine = text.split(/\r?\n/, 1)[0] || '';
+  const tabCount = (firstLine.match(/\t/g) || []).length;
+  const commaCount = (firstLine.match(/,/g) || []).length;
+  const sep = (tabCount > commaCount) ? '\t' : ',';
   const rows = [];
   let cur = [], cell = '', inQ = false;
   for (let i = 0; i < text.length; i++) {
@@ -401,7 +426,7 @@ function parseCSVMembers(text) {
       } else cell += ch;
     } else {
       if (ch === '"') inQ = true;
-      else if (ch === ',') { cur.push(cell); cell = ''; }
+      else if (ch === sep) { cur.push(cell); cell = ''; }
       else if (ch === '\r') {/* skip */}
       else if (ch === '\n') { cur.push(cell); rows.push(cur); cur = []; cell = ''; }
       else cell += ch;
