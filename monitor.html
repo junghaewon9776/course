@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260511z">
+  <link rel="stylesheet" href="style.css?v=20260512e">
 </head>
 <body>
 <header>
@@ -137,8 +137,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511z"></script>
-<script src="common.js?v=20260511z"></script>
+<script src="firebase-config.js?v=20260512e"></script>
+<script src="common.js?v=20260512e"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
@@ -253,8 +253,8 @@ function copyPubMonShareText() {
   const url = document.getElementById('pubMonUrl').value;
   const pin = ((loadData().publicMonitor || {}).pin) || '';
   const text = pin
-    ? `🚐 방역 차량 실시간 위치\n\n링크: ${url}\nPIN: ${pin}`
-    : `🚐 방역 차량 실시간 위치\n\n링크: ${url}`;
+    ? `🚐 코스 차량 실시간 위치\n\n링크: ${url}\nPIN: ${pin}`
+    : `🚐 코스 차량 실시간 위치\n\n링크: ${url}`;
   navigator.clipboard?.writeText(text).then(
     () => alert('📋 안내문 복사됨\n\n' + text),
     () => alert('복사 실패. 수동 복사:\n\n' + text)
@@ -392,11 +392,9 @@ function vehicleMarkerSvg(color, label) {
 const liveNameOverlays = {};
 function buildNameOverlay(pos, name, color) {
   const div = document.createElement('div');
-  div.style.cssText = `background:${color};color:#fff;padding:3px 9px;border-radius:9px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);font-family:-apple-system,'Malgun Gothic',sans-serif;text-align:center;`;
+  div.style.cssText = `background:${color};color:#fff;padding:1px 6px;border-radius:7px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,0.3);font-family:-apple-system,'Malgun Gothic',sans-serif;text-align:center;line-height:1.4;`;
   div.textContent = name;
-  // xAnchor 0.5 = 가로 중앙, yAnchor 1 = 라벨 바닥이 position에 위치
-  // → 마커(34px 높이) 위쪽에 라벨이 뜨게 position을 그대로 두고 yAnchor만 사용
-  return new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.5, zIndex: 51 });
+  return new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.8, zIndex: 51 });
 }
 function buildVehicleInfoHtml(sess) {
   const driver = sess.crew?.driver || '운전자';
@@ -421,11 +419,12 @@ function buildVehicleInfoHtml(sess) {
     ? `<a href="tel:${ph.replace(/[^0-9+]/g,'')}" style="display:block;background:#27ae60;color:#fff;padding:8px 10px;border-radius:5px;text-decoration:none;font-weight:700;font-size:13px;text-align:center;">📞 ${label}</a>`
     : '';
   const veh = sess.crew?.vehicle || '';
-  const vColor = sess.crew?.vehicleColor || sess.crew?.vehicleName || '';
-  const vehLine = [vColor, veh].filter(Boolean).join(' · ');
+  const vColor = sess.crew?.vehicleColor || '';
+  const vName = sess.crew?.vehicleName || '';
   return `
     <div style="padding:8px 10px;font-size:12px;width:240px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
-      ${vehLine ? `<div style="background:#f8f9fa;padding:4px 7px;border-radius:4px;margin-bottom:6px;font-size:11px;color:#34495e;text-align:center;">🚐 ${vehLine.replace(/</g,'&lt;')}</div>` : ''}
+      ${vName ? `<div style="font-weight:700;color:#fff;background:#e67e22;padding:5px 10px;border-radius:5px;margin-bottom:6px;text-align:center;font-size:14px;">🚐 ${vName.replace(/</g,'&lt;')}</div>` : ''}
+      ${(veh || vColor) ? `<div style="font-size:11px;color:#666;text-align:center;margin-bottom:6px;">${[vColor, veh].filter(Boolean).join(' · ').replace(/</g,'&lt;')}</div>` : ''}
       <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:7px;">
         ${phoneBtn(`전화걸기`, driverPhone)}
         ${assist && assistPhone ? phoneBtn(`보조 전화걸기`, assistPhone) : ''}

@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260511z">
+  <link rel="stylesheet" href="style.css?v=20260512e">
   <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
@@ -94,8 +94,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511z"></script>
-<script src="common.js?v=20260511z"></script>
+<script src="firebase-config.js?v=20260512e"></script>
+<script src="common.js?v=20260512e"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -153,11 +153,12 @@ function renderVehicles() {
       ? `<a href="tel:${ph.replace(/[^0-9+]/g,'')}" style="color:#3498db;text-decoration:none;font-family:monospace;" onclick="event.stopPropagation()">📞 ${ph.replace(/</g,'&lt;')}</a>`
       : '';
     return `
-      <div class="vehicle-card" style="border:1px solid #f0d4b3;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fffaf3;">
+      <div class="vehicle-card" style="border:1px solid ${v.active === false ? '#ddd' : '#f0d4b3'};border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${v.active === false ? '#f5f5f5' : '#fffaf3'};${v.active === false ? 'opacity:0.7;' : ''}">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <button class="small gray" onclick="moveVehicle('${v.id}', -1)" style="padding:2px 7px;font-size:13px;">▲</button>
           <button class="small gray" onclick="moveVehicle('${v.id}', 1)" style="padding:2px 7px;font-size:13px;">▼</button>
-          <span style="background:#e67e22;color:#fff;padding:6px 14px;border-radius:6px;font-weight:700;font-size:16px;">🚐 ${displayName}</span>
+          <button class="small ${v.active === false ? 'gray' : 'success'}" onclick="toggleVehicleActive('${v.id}')" title="${v.active === false ? '비활성 (오늘운영에서 숨김) — 클릭하면 켬' : '활성 — 클릭하면 끔'}" style="padding:2px 7px;font-size:13px;">${v.active === false ? '🚫' : '👁'}</button>
+          <span style="background:${v.active === false ? '#bdc3c7' : '#e67e22'};color:#fff;padding:6px 14px;border-radius:6px;font-weight:700;font-size:16px;">🚐 ${displayName}</span>
           <span style="flex:1;"></span>
           <button class="small" onclick="editVehicle('${v.id}')">✎ 수정</button>
           <button class="small danger" onclick="deleteVehicle('${v.id}')">🗑</button>
@@ -203,7 +204,7 @@ function openVehicleModal(editId) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(44,62,80,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `
     <div style="background:#fff;border-radius:10px;padding:20px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto;">
-      <h2 style="margin:0 0 14px;color:#e67e22;">🚐 ${isEdit ? `${nextOrder}호차 수정` : '차량 추가'}</h2>
+      <h2 style="margin:0 0 14px;color:#e67e22;">🚐 ${nextOrder}호차 ${isEdit ? '수정' : '추가'}</h2>
 
       <label style="font-size:12px;color:#555;">색상</label>
       <input id="vmColor" type="text" placeholder="예: 흰색, 카니발 흰색" value="${isEdit ? (v.color||'').replace(/"/g,'&quot;') : ''}" autocomplete="off" style="width:100%;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
@@ -319,6 +320,14 @@ function saveVehicleModal(editId) {
   saveData(data);
   closeVehicleModal();
   refreshAll();
+}
+function toggleVehicleActive(id) {
+  const data = loadData();
+  const v = (data.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  // 기본은 활성 (true 또는 undefined). 한 번 누르면 false, 다시 누르면 true
+  v.active = (v.active === false);
+  saveData(data); refreshAll();
 }
 function deleteVehicle(id) {
   if (!confirm('차량을 삭제할까요?')) return;

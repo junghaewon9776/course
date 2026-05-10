@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
-  <link rel="stylesheet" href="style.css?v=20260511z">
+  <link rel="stylesheet" href="style.css?v=20260512e">
 </head>
 <body>
 <header>
@@ -280,8 +280,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511z"></script>
-<script src="common.js?v=20260511z"></script>
+<script src="firebase-config.js?v=20260512e"></script>
+<script src="common.js?v=20260512e"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -972,8 +972,8 @@ function copyPubMonShareText() {
   const data = loadData();
   const pin = (data.publicMonitor || {}).pin || '';
   const text = pin
-    ? `🚐 방역 차량 실시간 위치\n\n링크: ${url}\nPIN: ${pin}`
-    : `🚐 방역 차량 실시간 위치\n\n링크: ${url}`;
+    ? `🚐 코스 차량 실시간 위치\n\n링크: ${url}\nPIN: ${pin}`
+    : `🚐 코스 차량 실시간 위치\n\n링크: ${url}`;
   navigator.clipboard?.writeText(text).then(
     () => alert('📋 안내문 복사됨\n\n' + text),
     () => { alert('복사 실패. 수동 복사:\n\n' + text); }

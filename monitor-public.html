@@ -6,8 +6,8 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <title>방역 차량 위치 (공개)</title>
-  <link rel="stylesheet" href="style.css?v=20260511z">
+  <title>코스 차량 위치 (공개)</title>
+  <link rel="stylesheet" href="style.css?v=20260512e">
   <style>
     body { margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f3f4f6; }
     .topbar {
@@ -25,22 +25,23 @@
       border-top: 1px solid #e5e7eb; text-align: center;
     }
     .live-list {
-      position: fixed; top: 60px; right: 12px; max-width: 240px; max-height: calc(100vh - 140px);
-      background: rgba(255,255,255,0.95); border-radius: 8px; padding: 10px;
+      position: fixed; top: 56px; left: 8px; right: 8px; max-height: calc(100vh - 140px);
+      background: rgba(255,255,255,0.96); border-radius: 8px; padding: 8px 10px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 12px; z-index: 5;
       overflow-y: auto;
     }
     .live-list.collapsed { padding: 6px 10px; max-height: none; overflow: visible; }
     .live-list.collapsed #liveListBody { display: none; }
-    .live-list-header { display:flex; align-items:center; justify-content:space-between; gap:6px; cursor:pointer; user-select:none; }
-    .live-list h3 { margin: 0; font-size: 13px; color: #2c3e50; }
-    .live-toggle { background:#3498db; color:#fff; border:none; width:24px; height:24px; border-radius:12px; font-size:13px; cursor:pointer; line-height:1; flex:none; }
+    .live-list-header { display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+    .live-list h3 { margin: 0; font-size: 14px; color: #2c3e50; flex:1; }
+    .live-toggle { background:#3498db; color:#fff; border:none; width:26px; height:26px; border-radius:13px; font-size:13px; cursor:pointer; line-height:1; flex:none; padding:0; }
     .live-item {
-      padding: 6px 0; border-bottom: 1px solid #eee; cursor: pointer;
+      padding: 8px 0; border-bottom: 1px solid #eee; cursor: pointer;
     }
     .live-item:last-child { border-bottom: 0; }
     .live-item .name { font-weight: 700; color: #2c3e50; }
-    .live-item .sub { color: #888; font-size: 11px; }
+    .live-item .sub { color: #666; font-size: 11px; }
+    .pubBtn { border:none; padding:6px 10px; border-radius:5px; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; color:#fff; }
     .gate {
       position: fixed; inset: 0; background: rgba(44,62,80,0.95); z-index: 999;
       display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -54,7 +55,7 @@
 </head>
 <body>
 <div class="topbar">
-  <h1>🚐 방역 차량 위치</h1>
+  <h1>🚐 코스 차량 위치</h1>
   <span class="status" id="liveStatus">접속 중...</span>
 </div>
 <div id="pubMap"></div>
@@ -79,8 +80,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511z"></script>
-<script src="common.js?v=20260511z"></script>
+<script src="firebase-config.js?v=20260512e"></script>
+<script src="common.js?v=20260512e"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const tokenParam = params.get('t') || params.get('id') || '';
@@ -217,6 +218,7 @@ function vehicleMarkerImage(color, label) {
 
 const liveNameOverlays = {};
 function renderLive(live) {
+  window.__liveCache = live;  // showCourseFromLive 등에서 참조
   const data = loadData();
   const STALE_MS = 5 * 60 * 1000;  // 5분 이상 무업데이트면 표시 안 함
   const now = Date.now();
@@ -249,16 +251,19 @@ function renderLive(live) {
           return;
         }
         if (window.__pubIw && window.__pubIw !== iw) { try { window.__pubIw.close(); } catch (e) {} }
+        // 패널 접기 (운영중 패널이 가리지 않게)
+        const list = document.getElementById('liveList');
+        if (list && !list.classList.contains('collapsed')) togglePubLiveList();
         // 클릭한 마커를 맨 위로
         Object.values(liveMarkers).forEach(om => { try { om.setZIndex(50); } catch(e){} });
         m.setZIndex(999);
         iw.setContent(buildIwContent(sess, event, course));
         iw.open(map, m);
         window.__pubIw = iw;
-        // 마커가 가장자리면 IW 짤림 방지 — 화면 중앙 약간 아래로 팬
+        // 마커를 화면 약간 위로 → IW가 마커 아래쪽 공간에서 잘 보임
         setTimeout(() => {
           map.panTo(m.getPosition());
-          setTimeout(() => map.panBy(0, -120), 250);
+          setTimeout(() => map.panBy(0, -100), 250);
         }, 50);
       });
       m.__iw = iw;
@@ -275,9 +280,9 @@ function renderLive(live) {
     let nameOv = liveNameOverlays[key];
     if (!nameOv) {
       const div = document.createElement('div');
-      div.style.cssText = `background:${color};color:#fff;padding:3px 9px;border-radius:9px;font-size:12px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);font-family:-apple-system,'Malgun Gothic',sans-serif;text-align:center;`;
+      div.style.cssText = `background:${color};color:#fff;padding:1px 6px;border-radius:7px;font-size:9px;font-weight:700;white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,0.3);font-family:-apple-system,'Malgun Gothic',sans-serif;text-align:center;line-height:1.4;`;
       div.textContent = labelText;
-      nameOv = new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.5, zIndex: 51 });
+      nameOv = new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.8, zIndex: 51 });
       nameOv.setMap(map);
       liveNameOverlays[key] = nameOv;
     } else {
@@ -315,14 +320,27 @@ function renderLive(live) {
         ? `${it.sess.completedCount}/${it.sess.totalCount}`
         : '-';
       const safeKey = it.key.replace(/'/g,"\\'");
-      return `<div class="live-item" onclick="focusLive('${safeKey}')">
-        <div style="display:flex;align-items:center;gap:6px;">
+      const vehName = it.sess.crew?.vehicleName || '';
+      const plate = it.sess.crew?.vehicle || '';
+      const drvPhone = it.sess.crew?.driverPhone || '';
+      const phoneTel = drvPhone.replace(/[^0-9+]/g,'');
+      const callBtn = drvPhone
+        ? `<a href="tel:${phoneTel}" onclick="event.stopPropagation()" class="pubBtn" style="background:#27ae60;text-decoration:none;display:inline-block;">📞 ${escapeHtml(drvPhone)}</a>`
+        : '';
+      return `<div class="live-item">
+        <div style="display:flex;gap:8px;align-items:flex-start;">
           <div style="flex:1;min-width:0;">
-            <div class="name" style="color:${it.color};">${escapeHtml(it.driver)}</div>
-            <div class="sub">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')}</div>
-            <div class="sub">진행 ${progress} · ${elapsed}분 전 출발</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px;">
+              ${vehName ? `<span style="background:${it.color};color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px;">🚐 ${escapeHtml(vehName)}</span>` : ''}
+              ${plate ? `<span style="font-family:monospace;font-size:11px;color:#666;">${escapeHtml(plate)}</span>` : ''}
+            </div>
+            <div class="name" style="color:#2c3e50;">${escapeHtml(it.driver)} ${callBtn}</div>
+            <div class="sub">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')} · 진행 ${progress} · ${elapsed}분</div>
           </div>
-          <button onclick="event.stopPropagation();focusLive('${safeKey}')" style="background:${it.color};color:#fff;border:none;padding:6px 8px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">📍 위치</button>
+          <div style="display:flex;flex-direction:column;gap:4px;flex:none;">
+            <button onclick="event.stopPropagation();focusLive('${safeKey}')" class="pubBtn" style="background:${it.color};">📍 위치</button>
+            <button onclick="event.stopPropagation();showCourseFromLive('${safeKey}')" class="pubBtn" style="background:#7f8c8d;">🗺 전체</button>
+          </div>
         </div>
       </div>`;
     }).join('');
@@ -353,10 +371,11 @@ function buildIwContent(sess, event, course) {
     ? `<a href="tel:${ph.replace(/[^0-9+]/g,'')}" style="display:block;background:#27ae60;color:#fff;padding:8px 10px;border-radius:5px;text-decoration:none;font-weight:700;font-size:13px;text-align:center;">📞 ${escapeHtml(label)}</a>`
     : '';
   const veh = sess.crew?.vehicle || '';
-  const vColor = sess.crew?.vehicleColor || sess.crew?.vehicleName || '';
-  const vehLine = [vColor, veh].filter(Boolean).join(' · ');
+  const vColor = sess.crew?.vehicleColor || '';
+  const vName = sess.crew?.vehicleName || '';
   return `<div style="padding:8px 10px;font-size:12px;width:240px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
-    ${vehLine ? `<div style="background:#f8f9fa;padding:4px 7px;border-radius:4px;margin-bottom:6px;font-size:11px;color:#34495e;text-align:center;">🚐 ${escapeHtml(vehLine)}</div>` : ''}
+    ${vName ? `<div style="font-weight:700;color:#fff;background:#e67e22;padding:5px 10px;border-radius:5px;margin-bottom:6px;text-align:center;font-size:14px;">🚐 ${escapeHtml(vName)}</div>` : ''}
+    ${(veh || vColor) ? `<div style="font-size:11px;color:#666;text-align:center;margin-bottom:6px;">${[vColor, veh].filter(Boolean).map(escapeHtml).join(' · ')}</div>` : ''}
     <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:7px;">
       ${callBtn(`전화걸기`, driverPhone)}
       ${assist && assistPhone ? callBtn(`보조 전화걸기`, assistPhone) : ''}
@@ -369,6 +388,9 @@ function buildIwContent(sess, event, course) {
 function focusLive(key) {
   const m = liveMarkers[key];
   if (m && map) {
+    // 패널 접기 (지도 위에 가려지지 않게)
+    const list = document.getElementById('liveList');
+    if (list && !list.classList.contains('collapsed')) togglePubLiveList();
     map.setCenter(m.getPosition());
     map.setLevel(Math.min(map.getLevel(), 4));
     if (m.__iw) {
@@ -376,6 +398,8 @@ function focusLive(key) {
       m.__iw.open(map, m);
       window.__pubIw = m.__iw;
     }
+    // 마커 화면 중앙 약간 아래로 — 위쪽 IW 짤림 방지
+    setTimeout(() => map.panBy(0, -100), 250);
   }
 }
 
@@ -386,6 +410,64 @@ function togglePubLiveList() {
   if (!list) return;
   list.classList.toggle('collapsed');
   if (btn) btn.textContent = list.classList.contains('collapsed') ? '▲' : '▼';
+}
+
+// 코스 전체 보기 (라이브 차량 클릭 시 그 차량의 코스 거점들 표시)
+let __pubCourseMarkers = [];
+let __pubCourseLine = null;
+function showCourseFromLive(key) {
+  const sess = (window.__liveCache || {})[key];
+  if (!sess) {
+    // 캐시가 없으면 한 번 더 시도
+    fbDb.ref('/live').once('value').then(snap => {
+      window.__liveCache = snap.val() || {};
+      const s = window.__liveCache[key];
+      if (s) _renderCourseAnchors(s);
+    });
+    return;
+  }
+  _renderCourseAnchors(sess);
+}
+function _renderCourseAnchors(sess) {
+  const data = loadData();
+  const anchors = (data.anchors || [])
+    .filter(a => a.courseId === sess.courseId)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  if (!anchors.length) { alert('이 코스에 거점이 없습니다'); return; }
+  // 이전 마커 정리
+  __pubCourseMarkers.forEach(m => m.setMap(null));
+  __pubCourseMarkers = [];
+  if (__pubCourseLine) { __pubCourseLine.setMap(null); __pubCourseLine = null; }
+  const course = getCourse(data, sess.courseId);
+  const color = course?.color || '#9b59b6';
+  const bounds = new kakao.maps.LatLngBounds();
+  const path = [];
+  // 작은 색 핀 (번호 X)
+  const dotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="22" viewBox="0 0 18 22">
+    <path d="M9 0 C4 0 0 4 0 9 C0 15 9 22 9 22 C9 22 18 15 18 9 C18 4 14 0 9 0 Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+  </svg>`;
+  const dotImg = new kakao.maps.MarkerImage(
+    'data:image/svg+xml;utf8,' + encodeURIComponent(dotSvg),
+    new kakao.maps.Size(18, 22),
+    { offset: new kakao.maps.Point(9, 22) }
+  );
+  anchors.forEach((a, i) => {
+    const pos = new kakao.maps.LatLng(a.lat, a.lng);
+    bounds.extend(pos);
+    path.push(pos);
+    const marker = new kakao.maps.Marker({
+      position: pos, map, image: dotImg, title: `${i+1}. ${a.name}`, zIndex: 20
+    });
+    __pubCourseMarkers.push(marker);
+  });
+  if (sess.lat && sess.lng) bounds.extend(new kakao.maps.LatLng(sess.lat, sess.lng));
+  __pubCourseLine = new kakao.maps.Polyline({
+    path, strokeWeight: 3, strokeColor: color, strokeOpacity: 0.7, strokeStyle: 'dashed', map
+  });
+  map.setBounds(bounds);
+  // 패널 접기 (지도 가리지 않게)
+  const list = document.getElementById('liveList');
+  if (list && !list.classList.contains('collapsed')) togglePubLiveList();
 }
 
 function escapeHtml(s) {
