@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260511v">
+  <link rel="stylesheet" href="style.css?v=20260511x">
   <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
@@ -94,8 +94,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511v"></script>
-<script src="common.js?v=20260511v"></script>
+<script src="firebase-config.js?v=20260511x"></script>
+<script src="common.js?v=20260511x"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -105,17 +105,29 @@ checkAdminAuth().then(ok => { if (ok) onDataReady(refreshAll); });
 let isAdmin = true;
 
 function refreshAll() {
+  // 입력 중인 필드 포커스 복원 — 차량 카드 인라인 입력이 자꾸 풀리지 않게
+  const ae = document.activeElement;
+  const fid = ae && ae.id ? ae.id : '';
+  const ss = ae && ae.selectionStart, se = ae && ae.selectionEnd;
+
   document.body.classList.toggle('viewer-mode', !isAdmin);
   renderMembers();
   renderTeams();
   renderSavedTeams();
   renderVehicles();
+
+  if (fid) {
+    const el = document.getElementById(fid);
+    if (el && el.focus) {
+      el.focus();
+      try { if (typeof ss === 'number') el.setSelectionRange(ss, se); } catch (e) {}
+    }
+  }
 }
 
 // ────── 차량 등록 ──────
 function renderVehicles() {
   const data = loadData();
-  // order 정렬 (없으면 끝)
   const vehicles = (data.vehicles || []).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
   const el = document.getElementById('vehicleList');
   if (!el) return;
@@ -124,98 +136,209 @@ function renderVehicles() {
     return;
   }
   const memberOptions = (data.members || [])
-    .map(m => `<option value="${m.id}">${(m.name||'')}${m.position ? ' · '+m.position : ''}${m.phone ? ' ('+m.phone+')' : ''}</option>`).join('');
+    .map(m => `<option value="${m.id}">${(m.name||'')}${m.phone ? ' ('+m.phone+')' : ''}</option>`).join('');
+  const total = vehicles.length;
 
   el.innerHTML = vehicles.map((v, idx) => {
-    const driver = getMember(data, v.defaultDriverId);
-    const assist = getMember(data, v.defaultAssistId);
     const isExtDriver = !v.defaultDriverId && !!(v.defaultDriverName || v.defaultDriverPhone);
     const isExtAssist = !v.defaultAssistId && !!(v.defaultAssistName || v.defaultAssistPhone);
     const orderNum = v.order || (idx + 1);
-    const displayName = v.name || (orderNum + '호차');
+    const displayName = v.color || `${orderNum}호차`;
+    const drvSelVal = isExtDriver ? '__external__' : (v.defaultDriverId || '');
+    const astSelVal = isExtAssist ? '__external__' : (v.defaultAssistId || '');
     return `
-      <div class="list-item" style="flex-direction:column;align-items:stretch;gap:6px;border:1px solid #f0d4b3;border-radius:6px;padding:8px;margin-bottom:8px;">
-        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
-          <button class="small gray" onclick="moveVehicle('${v.id}', -1)" style="padding:2px 6px;">▲</button>
-          <button class="small gray" onclick="moveVehicle('${v.id}', 1)" style="padding:2px 6px;">▼</button>
-          <span style="background:${v.color||'#e67e22'};color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px;">${displayName.replace(/</g,'&lt;')}</span>
-          <span class="muted" style="font-size:12px;">${v.plate ? '🔖 '+v.plate.replace(/</g,'&lt;') : '차번호 미입력'}${v.color ? ' · '+v.color : ''}</span>
+      <div class="vehicle-card" style="border:1px solid #f0d4b3;border-radius:8px;padding:8px 10px;margin-bottom:8px;background:#fffaf3;">
+        <!-- 헤더: 순번 + 차량 표시 + 액션 -->
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">
+          <input id="vOrder-${v.id}" type="number" min="1" max="${total}" value="${orderNum}"
+            onchange="setVehicleOrder('${v.id}', this.value)"
+            style="width:48px;padding:4px;text-align:center;font-weight:700;font-size:14px;border:2px solid #e67e22;border-radius:4px;background:#fff;color:#e67e22;">
+          <span style="background:#e67e22;color:#fff;padding:5px 12px;border-radius:5px;font-weight:700;font-size:14px;">🚐 ${displayName.replace(/</g,'&lt;')}</span>
           <span style="flex:1;"></span>
-          <button class="small" onclick="renameVehicle('${v.id}')">수정</button>
-          <button class="small danger" onclick="deleteVehicle('${v.id}')">삭제</button>
+          <button class="small" onclick="editVehicle('${v.id}')">✎ 수정</button>
+          <button class="small danger" onclick="deleteVehicle('${v.id}')">🗑</button>
         </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <label style="font-size:12px;color:#555;min-width:50px;">운전자</label>
-          <select onchange="setVehicleDriver('${v.id}', this.value)" style="flex:1;min-width:140px;">
-            <option value=""${!v.defaultDriverId && !isExtDriver ? ' selected' : ''}>- 미지정 -</option>
-            <option value="__external__"${isExtDriver ? ' selected' : ''}>+ 외부인원 직접입력</option>
+
+        <!-- 색상 + 차번호 인라인 입력 -->
+        <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+          <input id="vColor-${v.id}" type="text" placeholder="색상 (예: 흰색, 카니발 흰색)" value="${(v.color||'').replace(/"/g,'&quot;')}"
+            onchange="setVehicleColor('${v.id}', this.value)"
+            style="flex:2;min-width:140px;font-size:13px;">
+          <input id="vPlate-${v.id}" type="text" placeholder="차번호 (예: 12가3456)" value="${(v.plate||'').replace(/"/g,'&quot;')}"
+            onchange="setVehiclePlate('${v.id}', this.value)"
+            style="flex:1.5;min-width:120px;font-size:13px;">
+        </div>
+
+        <!-- 운전자 -->
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;flex-wrap:wrap;">
+          <span style="background:#34495e;color:#fff;font-size:11px;font-weight:700;padding:3px 7px;border-radius:3px;flex:none;">운전</span>
+          <select onchange="setVehicleDriver('${v.id}', this.value)" style="flex:1;min-width:120px;font-size:12px;padding:4px;">
+            <option value=""${!drvSelVal ? ' selected' : ''}>- 미지정 -</option>
+            <option value="__external__"${drvSelVal === '__external__' ? ' selected' : ''}>+ 외부인원 직접입력</option>
             ${memberOptions.replace(`value="${v.defaultDriverId||''}"`, `value="${v.defaultDriverId||''}" selected`)}
           </select>
-          ${isExtDriver ? `
-            <input type="text" placeholder="이름" value="${(v.defaultDriverName||'').replace(/"/g,'&quot;')}"
-              onblur="setExternalDriver('${v.id}', this.value, document.getElementById('extDP-${v.id}').value)"
-              style="flex:1;min-width:80px;">
-            <input id="extDP-${v.id}" type="tel" placeholder="010-..." value="${(v.defaultDriverPhone||'').replace(/"/g,'&quot;')}"
-              onblur="setExternalDriver('${v.id}', this.previousElementSibling.value, this.value)"
-              style="flex:1;min-width:120px;">
-          ` : ''}
         </div>
-        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <label style="font-size:12px;color:#555;min-width:50px;">보조</label>
-          <select onchange="setVehicleAssist('${v.id}', this.value)" style="flex:1;min-width:140px;">
-            <option value=""${!v.defaultAssistId && !isExtAssist ? ' selected' : ''}>- 미지정 -</option>
-            <option value="__external__"${isExtAssist ? ' selected' : ''}>+ 외부인원 직접입력</option>
+        ${isExtDriver ? `
+          <div style="display:flex;gap:5px;margin-bottom:6px;padding-left:42px;flex-wrap:wrap;">
+            <input id="extDN-${v.id}" type="text" placeholder="이름" value="${(v.defaultDriverName||'').replace(/"/g,'&quot;')}"
+              oninput="setExternalDriverInline('${v.id}', this.value, document.getElementById('extDP-${v.id}').value)"
+              style="flex:1;min-width:80px;font-size:12px;">
+            <input id="extDP-${v.id}" type="tel" placeholder="010-1234-5678" value="${(v.defaultDriverPhone||'').replace(/"/g,'&quot;')}"
+              oninput="setExternalDriverInline('${v.id}', document.getElementById('extDN-${v.id}').value, this.value)"
+              style="flex:1.2;min-width:110px;font-size:12px;">
+          </div>` : ''}
+
+        <!-- 보조 -->
+        <div style="display:flex;gap:5px;align-items:center;margin-bottom:5px;flex-wrap:wrap;">
+          <span style="background:#7f8c8d;color:#fff;font-size:11px;font-weight:700;padding:3px 7px;border-radius:3px;flex:none;">보조</span>
+          <select onchange="setVehicleAssist('${v.id}', this.value)" style="flex:1;min-width:120px;font-size:12px;padding:4px;">
+            <option value=""${!astSelVal ? ' selected' : ''}>- 미지정 -</option>
+            <option value="__external__"${astSelVal === '__external__' ? ' selected' : ''}>+ 외부인원 직접입력</option>
             ${memberOptions.replace(`value="${v.defaultAssistId||''}"`, `value="${v.defaultAssistId||''}" selected`)}
           </select>
-          ${isExtAssist ? `
-            <input type="text" placeholder="이름" value="${(v.defaultAssistName||'').replace(/"/g,'&quot;')}"
-              onblur="setExternalAssist('${v.id}', this.value, document.getElementById('extAP-${v.id}').value)"
-              style="flex:1;min-width:80px;">
-            <input id="extAP-${v.id}" type="tel" placeholder="010-..." value="${(v.defaultAssistPhone||'').replace(/"/g,'&quot;')}"
-              onblur="setExternalAssist('${v.id}', this.previousElementSibling.value, this.value)"
-              style="flex:1;min-width:120px;">
-          ` : ''}
         </div>
-        <div class="muted" style="font-size:11px;">
-          ${driver ? `🚐 ${driver.name}${driver.phone ? ' · '+driver.phone : ''}` : (isExtDriver ? `🚐 외부 ${(v.defaultDriverName||'?')}${v.defaultDriverPhone ? ' · '+v.defaultDriverPhone : ''}` : '운전자 미지정')}
-          ${assist ? ` / 보조 ${assist.name}${assist.phone ? ' · '+assist.phone : ''}` : (isExtAssist ? ` / 보조 외부 ${(v.defaultAssistName||'?')}${v.defaultAssistPhone ? ' · '+v.defaultAssistPhone : ''}` : '')}
-        </div>
+        ${isExtAssist ? `
+          <div style="display:flex;gap:5px;padding-left:42px;flex-wrap:wrap;">
+            <input id="extAN-${v.id}" type="text" placeholder="이름" value="${(v.defaultAssistName||'').replace(/"/g,'&quot;')}"
+              oninput="setExternalAssistInline('${v.id}', this.value, document.getElementById('extAP-${v.id}').value)"
+              style="flex:1;min-width:80px;font-size:12px;">
+            <input id="extAP-${v.id}" type="tel" placeholder="010-1234-5678" value="${(v.defaultAssistPhone||'').replace(/"/g,'&quot;')}"
+              oninput="setExternalAssistInline('${v.id}', document.getElementById('extAN-${v.id}').value, this.value)"
+              style="flex:1.2;min-width:110px;font-size:12px;">
+          </div>` : ''}
       </div>
     `;
   }).join('');
 }
 function addVehicle() {
+  openVehicleModal(null);  // 빈 모달
+}
+function editVehicle(id) {
+  openVehicleModal(id);
+}
+
+// 차량 추가/수정 모달 — 한 화면에 모든 항목
+function openVehicleModal(editId) {
+  const data = loadData();
+  const isEdit = !!editId;
+  const v = isEdit ? (data.vehicles || []).find(x => x.id === editId) : null;
+  const nextOrder = isEdit ? (v.order || 1) : ((data.vehicles?.length ? Math.max(...data.vehicles.map(v => v.order || 0)) : 0) + 1);
+  const memberOpts = (data.members || [])
+    .map(m => `<option value="${m.id}">${(m.name||'')}${m.phone ? ' ('+m.phone+')' : ''}</option>`).join('');
+  const drvSelected = isEdit && v.defaultDriverId ? v.defaultDriverId : '';
+  const astSelected = isEdit && v.defaultAssistId ? v.defaultAssistId : '';
+  const drvIsExt = isEdit && !v.defaultDriverId && (v.defaultDriverName || v.defaultDriverPhone);
+  const astIsExt = isEdit && !v.defaultAssistId && (v.defaultAssistName || v.defaultAssistPhone);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'vehicleModalOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(44,62,80,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:10px;padding:20px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto;">
+      <h2 style="margin:0 0 14px;color:#e67e22;">🚐 ${isEdit ? `차량 수정 (${v.name||nextOrder+'호차'})` : '차량 추가'}</h2>
+
+      <label style="font-size:12px;color:#555;">색상 (예: 흰색 / 카니발 흰색)</label>
+      <input id="vmColor" type="text" placeholder="색상" value="${isEdit ? (v.color||'').replace(/"/g,'&quot;') : ''}" style="width:100%;font-size:14px;margin-bottom:8px;">
+
+      <label style="font-size:12px;color:#555;">차번호 (선택)</label>
+      <input id="vmPlate" type="text" placeholder="12가 3456" value="${isEdit ? (v.plate||'').replace(/"/g,'&quot;') : ''}" style="width:100%;font-size:14px;margin-bottom:14px;">
+
+      <div style="background:#f8f9fa;padding:10px;border-radius:6px;margin-bottom:10px;">
+        <label style="font-size:13px;font-weight:700;color:#34495e;">🧑‍✈️ 기본 운전자</label>
+        <select id="vmDrv" style="width:100%;margin-top:4px;font-size:13px;" onchange="document.getElementById('vmDrvExtBox').style.display=this.value==='__external__'?'block':'none';">
+          <option value="">- 미지정 -</option>
+          <option value="__external__"${drvIsExt ? ' selected' : ''}>+ 외부인원 직접입력</option>
+          ${memberOpts.replace(`value="${drvSelected}"`, `value="${drvSelected}" selected`)}
+        </select>
+        <div id="vmDrvExtBox" style="display:${drvIsExt ? 'block' : 'none'};margin-top:6px;">
+          <input id="vmDrvExtName" type="text" placeholder="외부인원 이름" value="${isEdit ? (v.defaultDriverName||'').replace(/"/g,'&quot;') : ''}" style="width:100%;font-size:13px;margin-bottom:4px;">
+          <input id="vmDrvExtPhone" type="tel" placeholder="010-1234-5678" value="${isEdit ? (v.defaultDriverPhone||'').replace(/"/g,'&quot;') : ''}" style="width:100%;font-size:13px;">
+        </div>
+      </div>
+
+      <div style="background:#f8f9fa;padding:10px;border-radius:6px;margin-bottom:14px;">
+        <label style="font-size:13px;font-weight:700;color:#34495e;">🧑 보조 (선택)</label>
+        <select id="vmAst" style="width:100%;margin-top:4px;font-size:13px;" onchange="document.getElementById('vmAstExtBox').style.display=this.value==='__external__'?'block':'none';">
+          <option value="">- 미지정 -</option>
+          <option value="__external__"${astIsExt ? ' selected' : ''}>+ 외부인원 직접입력</option>
+          ${memberOpts.replace(`value="${astSelected}"`, `value="${astSelected}" selected`)}
+        </select>
+        <div id="vmAstExtBox" style="display:${astIsExt ? 'block' : 'none'};margin-top:6px;">
+          <input id="vmAstExtName" type="text" placeholder="외부인원 이름" value="${isEdit ? (v.defaultAssistName||'').replace(/"/g,'&quot;') : ''}" style="width:100%;font-size:13px;margin-bottom:4px;">
+          <input id="vmAstExtPhone" type="tel" placeholder="010-1234-5678" value="${isEdit ? (v.defaultAssistPhone||'').replace(/"/g,'&quot;') : ''}" style="width:100%;font-size:13px;">
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;">
+        <button class="success" style="flex:1;padding:10px;font-weight:700;" onclick="saveVehicleModal('${editId || ''}')">${isEdit ? '💾 저장' : '+ 추가'}</button>
+        <button class="gray" style="padding:10px 14px;" onclick="closeVehicleModal()">취소</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('vmColor').focus(), 100);
+  // ESC 닫기
+  overlay.onclick = (e) => { if (e.target === overlay) closeVehicleModal(); };
+  document.addEventListener('keydown', vehicleModalKeydown);
+}
+function vehicleModalKeydown(e) {
+  if (e.key === 'Escape') closeVehicleModal();
+}
+function closeVehicleModal() {
+  const ov = document.getElementById('vehicleModalOverlay');
+  if (ov) ov.remove();
+  document.removeEventListener('keydown', vehicleModalKeydown);
+}
+function saveVehicleModal(editId) {
+  const color = (document.getElementById('vmColor').value || '').trim();
+  const plate = (document.getElementById('vmPlate').value || '').trim();
+  const drvVal = document.getElementById('vmDrv').value;
+  const astVal = document.getElementById('vmAst').value;
+  const drvExtName = (document.getElementById('vmDrvExtName')?.value || '').trim();
+  const drvExtPhone = (document.getElementById('vmDrvExtPhone')?.value || '').trim();
+  const astExtName = (document.getElementById('vmAstExtName')?.value || '').trim();
+  const astExtPhone = (document.getElementById('vmAstExtPhone')?.value || '').trim();
+
   const data = loadData();
   if (!data.vehicles) data.vehicles = [];
-  const nextOrder = (data.vehicles.length ? Math.max(...data.vehicles.map(v => v.order || 0)) : 0) + 1;
-  const color = (prompt('차량 색상 (예: 흰색 / 카니발 흰색)', '') || '').trim();
-  const plate = (prompt('차번호 (선택, 예: 12가 3456)', '') || '').trim();
-  data.vehicles.push({
-    id: uid(),
-    order: nextOrder,
-    name: color || `${nextOrder}호차`,  // 색상이 곧 표시명, 없으면 N호차
-    plate,
-    color,
-    defaultDriverId: '', defaultAssistId: '',
-    defaultDriverName: '', defaultDriverPhone: '',
-    defaultAssistName: '', defaultAssistPhone: '',
-    memberIds: []
-  });
+  let v;
+  if (editId) {
+    v = data.vehicles.find(x => x.id === editId);
+    if (!v) { alert('차량을 찾을 수 없습니다'); return; }
+  } else {
+    const nextOrder = (data.vehicles.length ? Math.max(...data.vehicles.map(vv => vv.order || 0)) : 0) + 1;
+    v = {
+      id: uid(), order: nextOrder, memberIds: [],
+      defaultDriverId:'', defaultAssistId:'',
+      defaultDriverName:'', defaultDriverPhone:'',
+      defaultAssistName:'', defaultAssistPhone:''
+    };
+    data.vehicles.push(v);
+  }
+  v.color = color;
+  v.plate = plate;
+  v.name = color || `${v.order || 1}호차`;
+  // 운전자
+  if (drvVal === '__external__') {
+    v.defaultDriverId = '';
+    v.defaultDriverName = drvExtName;
+    v.defaultDriverPhone = drvExtPhone;
+  } else {
+    v.defaultDriverId = drvVal || '';
+    v.defaultDriverName = ''; v.defaultDriverPhone = '';
+  }
+  // 보조
+  if (astVal === '__external__') {
+    v.defaultAssistId = '';
+    v.defaultAssistName = astExtName;
+    v.defaultAssistPhone = astExtPhone;
+  } else {
+    v.defaultAssistId = astVal || '';
+    v.defaultAssistName = ''; v.defaultAssistPhone = '';
+  }
   saveData(data);
+  closeVehicleModal();
   refreshAll();
-}
-function renameVehicle(id) {
-  const data = loadData();
-  const v = (data.vehicles || []).find(x => x.id === id);
-  if (!v) return;
-  const color = prompt('차량 색상 (예: 흰색 / 카니발 흰색)', v.color || '');
-  if (color === null) return;
-  const plate = prompt('차번호 (선택, 예: 12가 3456)', v.plate || '');
-  if (plate === null) return;
-  v.color = color.trim();
-  v.plate = plate.trim();
-  v.name = v.color || `${v.order || 1}호차`;  // 색상으로 표시명 동기화
-  saveData(data); refreshAll();
 }
 function deleteVehicle(id) {
   if (!confirm('차량을 삭제할까요?')) return;
@@ -226,15 +349,37 @@ function deleteVehicle(id) {
     .forEach((v, i) => { v.order = i + 1; });
   saveData(data); refreshAll();
 }
-function moveVehicle(id, dir) {
+function setVehicleOrder(id, val) {
+  const newOrder = parseInt(val, 10);
   const data = loadData();
   const sorted = (data.vehicles || []).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
+  const total = sorted.length;
+  if (isNaN(newOrder) || newOrder < 1 || newOrder > total) {
+    alert(`순번은 1~${total} 사이여야 합니다`);
+    refreshAll();
+    return;
+  }
   const idx = sorted.findIndex(v => v.id === id);
   if (idx < 0) return;
-  const newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= sorted.length) return;
-  [sorted[idx], sorted[newIdx]] = [sorted[newIdx], sorted[idx]];
-  sorted.forEach((v, i) => { v.order = i + 1; });
+  const v = sorted.splice(idx, 1)[0];
+  sorted.splice(newOrder - 1, 0, v);
+  sorted.forEach((vv, i) => { vv.order = i + 1; });
+  saveData(data); refreshAll();
+}
+function setVehicleColor(id, val) {
+  const data = loadData();
+  const v = (data.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  v.color = (val || '').trim();
+  v.name = v.color || `${v.order || 1}호차`;
+  saveData(data); // refreshAll 안 함 (포커스 유지) — Firebase 에코가 알아서 갱신, refreshAll에 포커스 복원 로직 있음
+  refreshAll();
+}
+function setVehiclePlate(id, val) {
+  const data = loadData();
+  const v = (data.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  v.plate = (val || '').trim();
   saveData(data); refreshAll();
 }
 function setVehicleDriver(id, value) {
@@ -243,11 +388,19 @@ function setVehicleDriver(id, value) {
   if (!v) return;
   if (value === '__external__') {
     v.defaultDriverId = '';
+    if (!v.defaultDriverName) v.defaultDriverName = '';
   } else {
     v.defaultDriverId = value || '';
     v.defaultDriverName = ''; v.defaultDriverPhone = '';
   }
   saveData(data); refreshAll();
+  // 외부 선택 시 이름 칸으로 자동 포커스
+  if (value === '__external__') {
+    setTimeout(() => {
+      const inp = document.getElementById('extDN-' + id);
+      if (inp) inp.focus();
+    }, 100);
+  }
 }
 function setVehicleAssist(id, value) {
   const data = loadData();
@@ -255,29 +408,44 @@ function setVehicleAssist(id, value) {
   if (!v) return;
   if (value === '__external__') {
     v.defaultAssistId = '';
+    if (!v.defaultAssistName) v.defaultAssistName = '';
   } else {
     v.defaultAssistId = value || '';
     v.defaultAssistName = ''; v.defaultAssistPhone = '';
   }
   saveData(data); refreshAll();
+  if (value === '__external__') {
+    setTimeout(() => {
+      const inp = document.getElementById('extAN-' + id);
+      if (inp) inp.focus();
+    }, 100);
+  }
 }
-function setExternalDriver(id, name, phone) {
-  const data = loadData();
-  const v = (data.vehicles || []).find(x => x.id === id);
-  if (!v) return;
-  v.defaultDriverId = '';
-  v.defaultDriverName = (name || '').trim();
-  v.defaultDriverPhone = (phone || '').trim();
-  saveData(data); refreshAll();
+// oninput 디바운스 — 키 입력마다 저장하면 너무 자주 → 400ms 후 저장
+const __extSaveTimers = {};
+function setExternalDriverInline(id, name, phone) {
+  clearTimeout(__extSaveTimers['d-'+id]);
+  __extSaveTimers['d-'+id] = setTimeout(() => {
+    const data = loadData();
+    const v = (data.vehicles || []).find(x => x.id === id);
+    if (!v) return;
+    v.defaultDriverId = '';
+    v.defaultDriverName = (name || '').trim();
+    v.defaultDriverPhone = (phone || '').trim();
+    saveData(data); refreshAll();
+  }, 400);
 }
-function setExternalAssist(id, name, phone) {
-  const data = loadData();
-  const v = (data.vehicles || []).find(x => x.id === id);
-  if (!v) return;
-  v.defaultAssistId = '';
-  v.defaultAssistName = (name || '').trim();
-  v.defaultAssistPhone = (phone || '').trim();
-  saveData(data); refreshAll();
+function setExternalAssistInline(id, name, phone) {
+  clearTimeout(__extSaveTimers['a-'+id]);
+  __extSaveTimers['a-'+id] = setTimeout(() => {
+    const data = loadData();
+    const v = (data.vehicles || []).find(x => x.id === id);
+    if (!v) return;
+    v.defaultAssistId = '';
+    v.defaultAssistName = (name || '').trim();
+    v.defaultAssistPhone = (phone || '').trim();
+    saveData(data); refreshAll();
+  }, 400);
 }
 
 // ────── 회원 ──────
