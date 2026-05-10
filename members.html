@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인원관리</title>
-  <link rel="stylesheet" href="style.css?v=20260511l">
+  <link rel="stylesheet" href="style.css?v=20260511v">
   <style>body.viewer-mode .admin-only { display: none !important; }</style>
 </head>
 <body>
@@ -94,8 +94,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511l"></script>
-<script src="common.js?v=20260511l"></script>
+<script src="firebase-config.js?v=20260511v"></script>
+<script src="common.js?v=20260511v"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -115,7 +115,8 @@ function refreshAll() {
 // ────── 차량 등록 ──────
 function renderVehicles() {
   const data = loadData();
-  const vehicles = data.vehicles || [];
+  // order 정렬 (없으면 끝)
+  const vehicles = (data.vehicles || []).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
   const el = document.getElementById('vehicleList');
   if (!el) return;
   if (!vehicles.length) {
@@ -124,48 +125,81 @@ function renderVehicles() {
   }
   const memberOptions = (data.members || [])
     .map(m => `<option value="${m.id}">${(m.name||'')}${m.position ? ' · '+m.position : ''}${m.phone ? ' ('+m.phone+')' : ''}</option>`).join('');
-  el.innerHTML = vehicles.map(v => {
+
+  el.innerHTML = vehicles.map((v, idx) => {
     const driver = getMember(data, v.defaultDriverId);
     const assist = getMember(data, v.defaultAssistId);
+    const isExtDriver = !v.defaultDriverId && !!(v.defaultDriverName || v.defaultDriverPhone);
+    const isExtAssist = !v.defaultAssistId && !!(v.defaultAssistName || v.defaultAssistPhone);
+    const orderNum = v.order || (idx + 1);
+    const displayName = v.name || (orderNum + '호차');
     return `
       <div class="list-item" style="flex-direction:column;align-items:stretch;gap:6px;border:1px solid #f0d4b3;border-radius:6px;padding:8px;margin-bottom:8px;">
-        <div style="display:flex;gap:6px;align-items:center;">
-          <span style="background:${v.color||'#e67e22'};color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px;">${(v.name||'차량').replace(/</g,'&lt;')}</span>
-          <span class="muted" style="font-size:12px;">${v.plate ? '· '+v.plate.replace(/</g,'&lt;') : ''}${v.color ? ' · '+v.color : ''}</span>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+          <button class="small gray" onclick="moveVehicle('${v.id}', -1)" style="padding:2px 6px;">▲</button>
+          <button class="small gray" onclick="moveVehicle('${v.id}', 1)" style="padding:2px 6px;">▼</button>
+          <span style="background:${v.color||'#e67e22'};color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:12px;">${displayName.replace(/</g,'&lt;')}</span>
+          <span class="muted" style="font-size:12px;">${v.plate ? '🔖 '+v.plate.replace(/</g,'&lt;') : '차번호 미입력'}${v.color ? ' · '+v.color : ''}</span>
           <span style="flex:1;"></span>
           <button class="small" onclick="renameVehicle('${v.id}')">수정</button>
           <button class="small danger" onclick="deleteVehicle('${v.id}')">삭제</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-          <label style="font-size:12px;color:#555;">기본 운전자</label>
+          <label style="font-size:12px;color:#555;min-width:50px;">운전자</label>
           <select onchange="setVehicleDriver('${v.id}', this.value)" style="flex:1;min-width:140px;">
-            <option value="">- 미지정 -</option>
+            <option value=""${!v.defaultDriverId && !isExtDriver ? ' selected' : ''}>- 미지정 -</option>
+            <option value="__external__"${isExtDriver ? ' selected' : ''}>+ 외부인원 직접입력</option>
             ${memberOptions.replace(`value="${v.defaultDriverId||''}"`, `value="${v.defaultDriverId||''}" selected`)}
           </select>
-          <label style="font-size:12px;color:#555;">보조</label>
+          ${isExtDriver ? `
+            <input type="text" placeholder="이름" value="${(v.defaultDriverName||'').replace(/"/g,'&quot;')}"
+              onblur="setExternalDriver('${v.id}', this.value, document.getElementById('extDP-${v.id}').value)"
+              style="flex:1;min-width:80px;">
+            <input id="extDP-${v.id}" type="tel" placeholder="010-..." value="${(v.defaultDriverPhone||'').replace(/"/g,'&quot;')}"
+              onblur="setExternalDriver('${v.id}', this.previousElementSibling.value, this.value)"
+              style="flex:1;min-width:120px;">
+          ` : ''}
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:12px;color:#555;min-width:50px;">보조</label>
           <select onchange="setVehicleAssist('${v.id}', this.value)" style="flex:1;min-width:140px;">
-            <option value="">- 미지정 -</option>
+            <option value=""${!v.defaultAssistId && !isExtAssist ? ' selected' : ''}>- 미지정 -</option>
+            <option value="__external__"${isExtAssist ? ' selected' : ''}>+ 외부인원 직접입력</option>
             ${memberOptions.replace(`value="${v.defaultAssistId||''}"`, `value="${v.defaultAssistId||''}" selected`)}
           </select>
+          ${isExtAssist ? `
+            <input type="text" placeholder="이름" value="${(v.defaultAssistName||'').replace(/"/g,'&quot;')}"
+              onblur="setExternalAssist('${v.id}', this.value, document.getElementById('extAP-${v.id}').value)"
+              style="flex:1;min-width:80px;">
+            <input id="extAP-${v.id}" type="tel" placeholder="010-..." value="${(v.defaultAssistPhone||'').replace(/"/g,'&quot;')}"
+              onblur="setExternalAssist('${v.id}', this.previousElementSibling.value, this.value)"
+              style="flex:1;min-width:120px;">
+          ` : ''}
         </div>
         <div class="muted" style="font-size:11px;">
-          ${driver ? `🚐 ${driver.name}${driver.phone ? ' · '+driver.phone : ''}` : '운전자 미지정'}
-          ${assist ? ` / 보조 ${assist.name}${assist.phone ? ' · '+assist.phone : ''}` : ''}
+          ${driver ? `🚐 ${driver.name}${driver.phone ? ' · '+driver.phone : ''}` : (isExtDriver ? `🚐 외부 ${(v.defaultDriverName||'?')}${v.defaultDriverPhone ? ' · '+v.defaultDriverPhone : ''}` : '운전자 미지정')}
+          ${assist ? ` / 보조 ${assist.name}${assist.phone ? ' · '+assist.phone : ''}` : (isExtAssist ? ` / 보조 외부 ${(v.defaultAssistName||'?')}${v.defaultAssistPhone ? ' · '+v.defaultAssistPhone : ''}` : '')}
         </div>
       </div>
     `;
   }).join('');
 }
 function addVehicle() {
-  const name = prompt('차량 이름 (예: 1호차)');
-  if (!name) return;
-  const plate = prompt('차량번호 (선택, 예: 12가 3456)', '') || '';
-  const color = prompt('색상 (선택, 예: 흰색)', '') || '';
   const data = loadData();
   if (!data.vehicles) data.vehicles = [];
+  const nextOrder = (data.vehicles.length ? Math.max(...data.vehicles.map(v => v.order || 0)) : 0) + 1;
+  const color = (prompt('차량 색상 (예: 흰색 / 카니발 흰색)', '') || '').trim();
+  const plate = (prompt('차번호 (선택, 예: 12가 3456)', '') || '').trim();
   data.vehicles.push({
-    id: uid(), name: name.trim(), plate: plate.trim(), color: color.trim(),
-    defaultDriverId: '', defaultAssistId: '', memberIds: []
+    id: uid(),
+    order: nextOrder,
+    name: color || `${nextOrder}호차`,  // 색상이 곧 표시명, 없으면 N호차
+    plate,
+    color,
+    defaultDriverId: '', defaultAssistId: '',
+    defaultDriverName: '', defaultDriverPhone: '',
+    defaultAssistName: '', defaultAssistPhone: '',
+    memberIds: []
   });
   saveData(data);
   refreshAll();
@@ -174,33 +208,75 @@ function renameVehicle(id) {
   const data = loadData();
   const v = (data.vehicles || []).find(x => x.id === id);
   if (!v) return;
-  const name = prompt('차량 이름', v.name || '');
-  if (name === null) return;
-  const plate = prompt('차량번호', v.plate || '');
-  if (plate === null) return;
-  const color = prompt('색상', v.color || '');
+  const color = prompt('차량 색상 (예: 흰색 / 카니발 흰색)', v.color || '');
   if (color === null) return;
-  v.name = name.trim(); v.plate = plate.trim(); v.color = color.trim();
+  const plate = prompt('차번호 (선택, 예: 12가 3456)', v.plate || '');
+  if (plate === null) return;
+  v.color = color.trim();
+  v.plate = plate.trim();
+  v.name = v.color || `${v.order || 1}호차`;  // 색상으로 표시명 동기화
   saveData(data); refreshAll();
 }
 function deleteVehicle(id) {
   if (!confirm('차량을 삭제할까요?')) return;
   const data = loadData();
   data.vehicles = (data.vehicles || []).filter(v => v.id !== id);
+  // order 재정렬
+  data.vehicles.sort((a, b) => (a.order || 9999) - (b.order || 9999))
+    .forEach((v, i) => { v.order = i + 1; });
   saveData(data); refreshAll();
 }
-function setVehicleDriver(id, memberId) {
+function moveVehicle(id, dir) {
+  const data = loadData();
+  const sorted = (data.vehicles || []).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
+  const idx = sorted.findIndex(v => v.id === id);
+  if (idx < 0) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= sorted.length) return;
+  [sorted[idx], sorted[newIdx]] = [sorted[newIdx], sorted[idx]];
+  sorted.forEach((v, i) => { v.order = i + 1; });
+  saveData(data); refreshAll();
+}
+function setVehicleDriver(id, value) {
   const data = loadData();
   const v = (data.vehicles || []).find(x => x.id === id);
   if (!v) return;
-  v.defaultDriverId = memberId || '';
+  if (value === '__external__') {
+    v.defaultDriverId = '';
+  } else {
+    v.defaultDriverId = value || '';
+    v.defaultDriverName = ''; v.defaultDriverPhone = '';
+  }
   saveData(data); refreshAll();
 }
-function setVehicleAssist(id, memberId) {
+function setVehicleAssist(id, value) {
   const data = loadData();
   const v = (data.vehicles || []).find(x => x.id === id);
   if (!v) return;
-  v.defaultAssistId = memberId || '';
+  if (value === '__external__') {
+    v.defaultAssistId = '';
+  } else {
+    v.defaultAssistId = value || '';
+    v.defaultAssistName = ''; v.defaultAssistPhone = '';
+  }
+  saveData(data); refreshAll();
+}
+function setExternalDriver(id, name, phone) {
+  const data = loadData();
+  const v = (data.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  v.defaultDriverId = '';
+  v.defaultDriverName = (name || '').trim();
+  v.defaultDriverPhone = (phone || '').trim();
+  saveData(data); refreshAll();
+}
+function setExternalAssist(id, name, phone) {
+  const data = loadData();
+  const v = (data.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  v.defaultAssistId = '';
+  v.defaultAssistName = (name || '').trim();
+  v.defaultAssistPhone = (phone || '').trim();
   saveData(data); refreshAll();
 }
 

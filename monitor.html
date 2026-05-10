@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260511l">
+  <link rel="stylesheet" href="style.css?v=20260511v">
 </head>
 <body>
 <header>
@@ -59,12 +59,17 @@
   </div>
 
   <!-- 라이브 차량 위치 (지금 운영 중) -->
-  <div class="card" style="border-left:4px solid #27ae60;">
-    <h2>🟢 지금 운영 중 <span id="liveCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
-    <p class="muted" style="font-size:11px;margin-bottom:6px;">
-      운영 중인 차량의 실시간 위치 (10초마다 갱신, 5분 무업데이트면 자동 숨김)
-    </p>
-    <div id="liveList"></div>
+  <div class="card" id="liveCard" style="border-left:4px solid #27ae60;">
+    <div class="flex-between" style="cursor:pointer;user-select:none;" onclick="toggleLiveCard()">
+      <h2>🟢 지금 운영 중 <span id="liveCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
+      <button id="liveCardToggle" class="small" onclick="event.stopPropagation();toggleLiveCard()" style="background:#27ae60;color:#fff;">▼ 접기</button>
+    </div>
+    <div id="liveCardBody">
+      <p class="muted" style="font-size:11px;margin-bottom:6px;">
+        운영 중인 차량의 실시간 위치 (10초마다 갱신, 5분 무업데이트면 자동 숨김)
+      </p>
+      <div id="liveList" style="max-height:320px;overflow-y:auto;"></div>
+    </div>
   </div>
 
   <!-- 공개 모니터링 링크 (관리/공유용) -->
@@ -132,8 +137,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260511l"></script>
-<script src="common.js?v=20260511l"></script>
+<script src="firebase-config.js?v=20260511v"></script>
+<script src="common.js?v=20260511v"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
@@ -366,46 +371,67 @@ function subscribeLive() {
 function vehicleMarkerSvg(color, label) {
   const safe = (label || '?').slice(0, 1);
   // 위에서 본 차량 (Top-down car)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="42" height="56" viewBox="0 0 42 56">
-    <ellipse cx="21" cy="52" rx="13" ry="2.5" fill="rgba(0,0,0,0.25)"/>
-    <rect x="2.5" y="14" width="3.5" height="8" rx="1" fill="#222"/>
-    <rect x="36" y="14" width="3.5" height="8" rx="1" fill="#222"/>
-    <rect x="2.5" y="32" width="3.5" height="8" rx="1" fill="#222"/>
-    <rect x="36" y="32" width="3.5" height="8" rx="1" fill="#222"/>
-    <rect x="6" y="6" width="30" height="42" rx="7" fill="${color}" stroke="white" stroke-width="2"/>
-    <rect x="9" y="9" width="24" height="9" rx="2" fill="rgba(255,255,255,0.85)"/>
-    <rect x="9" y="36" width="24" height="9" rx="2" fill="rgba(255,255,255,0.85)"/>
-    <text x="21" y="31" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" font-weight="bold" fill="white">${safe}</text>
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="34" viewBox="0 0 26 34">
+    <ellipse cx="13" cy="32" rx="8" ry="1.5" fill="rgba(0,0,0,0.25)"/>
+    <rect x="1.5" y="9" width="2" height="5" rx="0.7" fill="#222"/>
+    <rect x="22.5" y="9" width="2" height="5" rx="0.7" fill="#222"/>
+    <rect x="1.5" y="20" width="2" height="5" rx="0.7" fill="#222"/>
+    <rect x="22.5" y="20" width="2" height="5" rx="0.7" fill="#222"/>
+    <rect x="3.5" y="3.5" width="19" height="26" rx="5" fill="${color}" stroke="white" stroke-width="1.5"/>
+    <rect x="5.5" y="5.5" width="15" height="6" rx="1.5" fill="rgba(255,255,255,0.85)"/>
+    <rect x="5.5" y="22" width="15" height="6" rx="1.5" fill="rgba(255,255,255,0.85)"/>
+    <text x="13" y="20" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="white">${safe}</text>
   </svg>`;
   return new kakao.maps.MarkerImage(
     'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-    new kakao.maps.Size(42, 56),
-    { offset: new kakao.maps.Point(21, 52) }
+    new kakao.maps.Size(26, 34),
+    { offset: new kakao.maps.Point(13, 32) }
   );
 }
 // 이름 라벨 (마커 위쪽에 떠 있는 텍스트 박스) — kakao CustomOverlay 사용
 const liveNameOverlays = {};
 function buildNameOverlay(pos, name, color) {
   const div = document.createElement('div');
-  div.style.cssText = `transform:translate(-50%,-100%);background:${color};color:#fff;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);margin-top:-58px;font-family:-apple-system,'Malgun Gothic',sans-serif;`;
+  div.style.cssText = `background:${color};color:#fff;padding:3px 9px;border-radius:9px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.3);font-family:-apple-system,'Malgun Gothic',sans-serif;text-align:center;`;
   div.textContent = name;
-  return new kakao.maps.CustomOverlay({ position: pos, content: div, yAnchor: 1, zIndex: 51 });
+  // xAnchor 0.5 = 가로 중앙, yAnchor 1 = 라벨 바닥이 position에 위치
+  // → 마커(34px 높이) 위쪽에 라벨이 뜨게 position을 그대로 두고 yAnchor만 사용
+  return new kakao.maps.CustomOverlay({ position: pos, content: div, xAnchor: 0.5, yAnchor: 2.5, zIndex: 51 });
 }
 function buildVehicleInfoHtml(sess) {
   const driver = sess.crew?.driver || '운전자';
   const assist = sess.crew?.assist || '';
   const driverPhone = sess.crew?.driverPhone || '';
   const assistPhone = sess.crew?.assistPhone || '';
-  const veh = [sess.crew?.vehicle, sess.crew?.vehicleColor].filter(Boolean).join(' / ');
-  const phoneLink = (name, ph) => ph
-    ? `<a href="tel:${ph.replace(/[^0-9+]/g,'')}" style="display:inline-block;margin-top:4px;background:#27ae60;color:#fff;padding:6px 10px;border-radius:5px;text-decoration:none;font-weight:700;font-size:12px;">📞 ${name} (${ph})</a>`
-    : `<div style="color:#888;font-size:11px;margin-top:2px;">${name} (전화번호 없음)</div>`;
+  const data = loadData();
+  const courseAnchors = (data.anchors || [])
+    .filter(a => a.courseId === sess.courseId)
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  const total = courseAnchors.length;
+  const done = sess.completedCount || 0;
+  // 거점 가로 나열 (완료 = 회색, 다음 = 강조, 미방문 = 검정)
+  const anchorChips = courseAnchors.map((a, i) => {
+    let style = '';
+    if (i < done) style = 'background:#ecf0f1;color:#95a5a6;text-decoration:line-through;'; // 완료
+    else if (i === done) style = 'background:#f39c12;color:#fff;font-weight:700;';            // 다음
+    else style = 'background:#ecf0f1;color:#34495e;';                                          // 미방문
+    return `<span style="display:inline-block;${style}padding:3px 7px;border-radius:10px;font-size:10px;margin:2px 2px 0 0;white-space:nowrap;">${i+1}.${(a.name||'').replace(/</g,'&lt;')}</span>`;
+  }).join('');
+  const phoneBtn = (label, ph) => ph
+    ? `<a href="tel:${ph.replace(/[^0-9+]/g,'')}" style="display:block;background:#27ae60;color:#fff;padding:8px 10px;border-radius:5px;text-decoration:none;font-weight:700;font-size:13px;text-align:center;">📞 ${label}</a>`
+    : '';
+  const veh = sess.crew?.vehicle || '';
+  const vColor = sess.crew?.vehicleColor || sess.crew?.vehicleName || '';
+  const vehLine = [vColor, veh].filter(Boolean).join(' · ');
   return `
-    <div style="padding:10px 12px;font-size:12px;min-width:200px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
-      <div style="font-weight:700;margin-bottom:4px;">🚐 운전: ${driver}</div>
-      ${phoneLink(driver, driverPhone)}
-      ${assist ? `<div style="margin-top:8px;font-weight:700;">보조: ${assist}</div>${phoneLink(assist, assistPhone)}` : ''}
-      ${veh ? `<div style="margin-top:8px;color:#666;">차량: ${veh}</div>` : ''}
+    <div style="padding:8px 10px;font-size:12px;width:240px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
+      ${vehLine ? `<div style="background:#f8f9fa;padding:4px 7px;border-radius:4px;margin-bottom:6px;font-size:11px;color:#34495e;text-align:center;">🚐 ${vehLine.replace(/</g,'&lt;')}</div>` : ''}
+      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:7px;">
+        ${phoneBtn(`전화걸기`, driverPhone)}
+        ${assist && assistPhone ? phoneBtn(`보조 전화걸기`, assistPhone) : ''}
+      </div>
+      <div style="font-size:10px;color:#888;margin-bottom:3px;">거점 진행 (${done}/${total})</div>
+      <div style="line-height:1.4;">${anchorChips || '<span style="color:#888;">거점 없음</span>'}</div>
     </div>
   `;
 }
@@ -431,13 +457,31 @@ function renderLive(live) {
     let m = liveMarkers[key];
     if (!m) {
       m = new kakao.maps.Marker({ position: pos, map, image: img, title: driver, zIndex: 50 });
-      // 클릭 시 InfoWindow (이름 + 전화 링크)
+      // 클릭 = InfoWindow 토글 + 그 마커 맨 위로 (zIndex 999)
       const iw = new kakao.maps.InfoWindow({ content: buildVehicleInfoHtml(sess), removable: true });
       kakao.maps.event.addListener(m, 'click', () => {
-        if (window.__monIw) { try { window.__monIw.close(); } catch (e) {} }
+        // 같은 마커 다시 누르면 닫기
+        if (window.__monIw === iw && iw.getMap && iw.getMap()) {
+          iw.close();
+          window.__monIw = null;
+          return;
+        }
+        // 다른 IW 열려있으면 먼저 닫기
+        if (window.__monIw && window.__monIw !== iw) {
+          try { window.__monIw.close(); } catch (e) {}
+        }
+        // 모든 마커 zIndex 원복, 클릭한 것만 맨 위
+        Object.values(liveMarkers).forEach(om => { try { om.setZIndex(50); } catch(e){} });
+        m.setZIndex(999);
         iw.setContent(buildVehicleInfoHtml(sess));
         iw.open(map, m);
         window.__monIw = iw;
+        // 마커가 화면 가장자리면 InfoWindow 짤림 → 마커를 살짝 화면 아래쪽 1/3 지점으로 팬
+        setTimeout(() => {
+          map.panTo(m.getPosition());
+          // 마커를 화면 중앙 약간 아래로 → 위쪽에 IW 띄울 공간 확보
+          setTimeout(() => map.panBy(0, -120), 250);
+        }, 50);
       });
       m.__iw = iw;
       liveMarkers[key] = m;
@@ -486,18 +530,24 @@ function renderLive(live) {
       const progress = (it.sess.totalCount > 0)
         ? `${it.sess.completedCount}/${it.sess.totalCount}`
         : '-';
-      // 다음 거점 도착예상 + 코스 전체 남은 예상
+      // 다음 거점 + 도착예상
       const courseAnchors = (data.anchors || [])
         .filter(a => a.courseId === it.sess.courseId)
         .sort((a, b) => (a.order || 0) - (b.order || 0));
       const remainAnchors = courseAnchors.slice(it.sess.completedCount || 0);
-      let nextEta = '';      // 현재 위치 → 다음 거점
-      let remainEta = '';    // 코스 끝까지
-      if (remainAnchors.length && typeof it.sess.lat === 'number' && typeof remainAnchors[0].lat === 'number') {
-        const dToNext = distance(it.sess.lat, it.sess.lng, remainAnchors[0].lat, remainAnchors[0].lng);
-        nextEta = ` · 다음 <b>${escapeHtml(remainAnchors[0].name||'')}</b>까지 약 ${formatEtaMin(estimateMinutes(dToNext, 0))}`;
-        const dTotal = dToNext + totalAnchorDistance(remainAnchors);
-        remainEta = ' · 끝까지 약 ' + formatEtaMin(estimateMinutes(dTotal, remainAnchors.length));
+      let nextLabel = '';    // GPS 없어도 다음 거점 이름은 표시
+      let nextEta = '';      // GPS 있으면 도착 예상시간
+      let remainEta = '';
+      if (remainAnchors.length) {
+        nextLabel = ` · 다음 <b>${escapeHtml(remainAnchors[0].name||'')}</b>`;
+        if (typeof it.sess.lat === 'number' && typeof remainAnchors[0].lat === 'number') {
+          const dToNext = distance(it.sess.lat, it.sess.lng, remainAnchors[0].lat, remainAnchors[0].lng);
+          nextEta = ` (약 ${formatEtaMin(estimateMinutes(dToNext, 0))})`;
+          const dTotal = dToNext + totalAnchorDistance(remainAnchors);
+          remainEta = ' · 끝까지 약 ' + formatEtaMin(estimateMinutes(dTotal, remainAnchors.length));
+        }
+      } else if (courseAnchors.length) {
+        nextLabel = ' · 🎉 전 거점 완료';
       }
       const veh = [it.sess.crew?.vehicle, it.sess.crew?.vehicleColor].filter(Boolean).join(' / ');
       const safeKey = it.key.replace(/'/g,"\\'");
@@ -509,7 +559,7 @@ function renderLive(live) {
           <div class="num" style="background:${it.color};color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">${(it.driver||'?').slice(0,1)}</div>
           <div style="flex:1;min-width:0;">
             <div class="name" style="font-weight:600;color:#2c3e50;">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')} · ${escapeHtml(it.driver)}</div>
-            <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분 진행${nextEta}${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}</div>
+            <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex:none;">
             <button onclick="toggleFollowDriver('${safeKey}')" style="background:${followBg};color:#fff;border:none;padding:6px 10px;border-radius:5px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">${followLabel}</button>
@@ -558,6 +608,16 @@ function fitDriverCourse(key) {
   // fit하면 따라가기 끔
   stopFollow('fit-course');
 }
+// 라이브 카드 접기/펼치기 (차량 많을 때 지도 위로 끌어올리기)
+function toggleLiveCard() {
+  const body = document.getElementById('liveCardBody');
+  const btn = document.getElementById('liveCardToggle');
+  if (!body) return;
+  const collapsed = body.style.display === 'none';
+  body.style.display = collapsed ? 'block' : 'none';
+  if (btn) btn.textContent = collapsed ? '▼ 접기' : '▲ 펼치기';
+}
+
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
 }
