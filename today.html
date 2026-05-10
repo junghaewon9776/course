@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>오늘의 운영</title>
-  <link rel="stylesheet" href="style.css?v=20260512e">
+  <link rel="stylesheet" href="style.css?v=20260512n">
 </head>
 <body>
 <header>
@@ -98,8 +98,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512e"></script>
-<script src="common.js?v=20260512e"></script>
+<script src="firebase-config.js?v=20260512n"></script>
+<script src="common.js?v=20260512n"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
 <div id="errBar"></div>
@@ -422,68 +422,65 @@ function openStartForm(eventId, courseId) {
 
   const card = document.getElementById('startFormCard');
   card.style.display = 'block';
+  // 활성 차량 있으면 → 차량 버튼만 (조/수동 입력 폼 X)
+  // 활성 차량 없으면 → 조 선택 + 수동 입력 폼만 (차량 섹션 X)
+  const vehicleMode = sortedVehicles.length > 0;
   card.innerHTML = `
     <div class="card" style="border:2px solid #3498db;">
       <h2>📝 ${event.name} · ${course.name}</h2>
-      ${vehicles.length ? `
-        <div style="margin-bottom:14px;">
-          <label style="font-weight:700;color:#27ae60;">⚡ 차량 한 번 누르고 바로 시작</label>
+      ${vehicleMode ? `
+        <div>
+          <label style="font-weight:700;color:#27ae60;">⚡ 차량을 누르고 바로 시작</label>
           <div style="margin-top:6px;">${vehicleButtons}</div>
-          <p class="muted" style="font-size:11px;text-align:center;">— 또는 아래에서 직접 입력 —</p>
         </div>
-      ` : ''}
-      <p class="muted" style="margin-bottom:8px;">${sortedVehicles.length ? '위 차량 버튼 누르거나, 직접 입력' : '운전자와 보조자 선택 (조 선택은 선택사항)'}</p>
+      ` : `
+        <p class="muted" style="margin-bottom:8px;">운전자와 보조자 선택 (조 선택은 선택사항)</p>
 
-      ${sortedVehicles.length ? '' : `
         <label>조 (선택)</label>
         <select id="fTeam" onchange="autoFillFromTeam()">
           <option value="">-- 조 선택 (선택사항) --</option>
           ${teamOpts}
         </select>
 
-        <label>등록 차량 (선택하면 운전자/보조 자동 채움)</label>
-        <select id="fVehicleSel" onchange="autoFillFromVehicle()">
-          <option value="">-- 차량 선택 --</option>
-          ${vehicles.map(v => {
-            const drv = getMember(data, v.defaultDriverId);
-            return `<option value="${v.id}">🚐 ${v.name||'차량'}${v.plate?' · '+v.plate:''}${drv?' · '+drv.name:''}</option>`;
-          }).join('')}
-        </select>
+        <label>운전자 *</label>
+        <div style="position:relative;">
+          <input id="fDriver" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
+                 oninput="showSuggestions('fDriver','fDriverSuggest')"
+                 onfocus="showSuggestions('fDriver','fDriverSuggest')"
+                 onblur="setTimeout(()=>document.getElementById('fDriverSuggest').style.display='none',200)">
+          <div id="fDriverSuggest" class="suggestList"></div>
+        </div>
+
+        <label>보조자</label>
+        <div style="position:relative;">
+          <input id="fAssist" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
+                 oninput="showSuggestions('fAssist','fAssistSuggest')"
+                 onfocus="showSuggestions('fAssist','fAssistSuggest')"
+                 onblur="setTimeout(()=>document.getElementById('fAssistSuggest').style.display='none',200)">
+          <div id="fAssistSuggest" class="suggestList"></div>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <div style="flex:2;">
+            <label>차량번호 (선택)</label>
+            <input id="fVehicle" type="text" placeholder="예: 12가3456">
+          </div>
+          <div style="flex:1;">
+            <label>차량색 (선택)</label>
+            <input id="fVehicleColor" type="text" placeholder="예: 흰색">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-top:14px;">
+          <button class="success" style="flex:1;" onclick="confirmStartForm('${eventId}','${courseId}')">▶ 시작</button>
+          <button class="gray" onclick="closeStartForm()">취소</button>
+        </div>
       `}
-
-      <label>운전자 *</label>
-      <div style="position:relative;">
-        <input id="fDriver" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
-               oninput="showSuggestions('fDriver','fDriverSuggest')"
-               onfocus="showSuggestions('fDriver','fDriverSuggest')"
-               onblur="setTimeout(()=>document.getElementById('fDriverSuggest').style.display='none',200)">
-        <div id="fDriverSuggest" class="suggestList"></div>
-      </div>
-
-      <label>보조자</label>
-      <div style="position:relative;">
-        <input id="fAssist" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
-               oninput="showSuggestions('fAssist','fAssistSuggest')"
-               onfocus="showSuggestions('fAssist','fAssistSuggest')"
-               onblur="setTimeout(()=>document.getElementById('fAssistSuggest').style.display='none',200)">
-        <div id="fAssistSuggest" class="suggestList"></div>
-      </div>
-
-      <div style="display:flex;gap:6px;margin-top:6px;">
-        <div style="flex:2;">
-          <label>차량번호 (선택)</label>
-          <input id="fVehicle" type="text" placeholder="예: 12가3456">
+      ${vehicleMode ? `
+        <div style="margin-top:10px;text-align:center;">
+          <button class="gray" onclick="closeStartForm()" style="padding:8px 16px;">취소</button>
         </div>
-        <div style="flex:1;">
-          <label>차량색 (선택)</label>
-          <input id="fVehicleColor" type="text" placeholder="예: 흰색">
-        </div>
-      </div>
-
-      <div style="display:flex;gap:6px;margin-top:14px;">
-        <button class="success" style="flex:1;" onclick="confirmStartForm('${eventId}','${courseId}')">▶ 시작</button>
-        <button class="gray" onclick="closeStartForm()">취소</button>
-      </div>
+      ` : ''}
     </div>
   `;
   // 폼 영역으로 자동 스크롤
@@ -604,8 +601,19 @@ function confirmStartForm(eventId, courseId) {
   const vehicle = (document.getElementById('fVehicle')?.value || '').trim();
   const vehicleColor = (document.getElementById('fVehicleColor')?.value || '').trim();
   const vehicleName = (document.getElementById('fVehicleName')?.value || '').trim();
+  // 회원 검색해서 전화번호 자동 첨부 (수동 입력 시에도 텔레그램에 전화 링크 들어가도록)
+  const data = loadData();
+  const findPhone = (n) => {
+    if (!n) return '';
+    const m = (data.members || []).find(x => (x.name||'').trim() === n.trim());
+    return m?.phone || '';
+  };
   closeStartForm();
-  startSession(eventId, courseId, teamId, { driver, assist, vehicle, vehicleColor, vehicleName });
+  startSession(eventId, courseId, teamId, {
+    driver, assist, vehicle, vehicleColor, vehicleName,
+    driverPhone: findPhone(driver),
+    assistPhone: findPhone(assist)
+  });
 }
 
 function quickStart(eventId, courseId, teamId) {
@@ -686,7 +694,7 @@ function startSession(eventId, courseId, teamId, crew) {
 
   // 텔레그램: 코스 시작 알림
   const vehInfo = [crew?.vehicle, crew?.vehicleColor].filter(Boolean).join(' / ');
-  sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${crew?.driver || '-'}${crew?.assist ? '\n보조: ' + crew.assist : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시작: ${new Date().toLocaleString('ko-KR')}`);
+  sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${tgPersonLink(crew?.driver, crew?.driverPhone)}${crew?.assist ? '\n보조: ' + tgPersonLink(crew.assist, crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시작: ${new Date().toLocaleString('ko-KR')}`);
 
   // 시작하면 GPS 자동 ON
   if (watchId === null) {
@@ -701,6 +709,14 @@ function saveSession() {
 }
 
 // 라이브 위치 publish — GPS 업데이트 시 10초마다 한 번
+// 텔레그램 메시지용 — 이름 + 전화 링크 (HTML mode)
+function tgPersonLink(name, phone) {
+  if (!name) return '-';
+  if (!phone) return name;
+  const tel = phone.replace(/[^0-9+]/g, '');
+  return `${name} <a href="tel:${tel}">${phone}</a>`;
+}
+
 // ─── 현장사진/영수증 업로드 ───
 async function onPhotoSelected(e, type) {
   const file = e.target.files[0];
@@ -1205,7 +1221,7 @@ function toggleDone(anchorId) {
     const course = getCourse(data, currentSession.courseId);
     const vehInfo = [currentSession.crew?.vehicle, currentSession.crew?.vehicleColor].filter(Boolean).join(' / ');
     const idx = (data.anchors || []).filter(x => x.courseId === currentSession.courseId).sort((x,y)=>(x.order||0)-(y.order||0)).findIndex(x => x.id === anchorId) + 1;
-    sendTelegram(`🚐 <b>탑승완료</b>\n${event?.name || ''} · ${course?.name || ''}\n${idx}번 ${a?.name || ''}\n운전: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / 보조: ' + currentSession.crew.assist : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시각: ${new Date().toLocaleTimeString('ko-KR')}`);
+    sendTelegram(`🚐 <b>탑승완료</b>\n${event?.name || ''} · ${course?.name || ''}\n${idx}번 ${a?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시각: ${new Date().toLocaleTimeString('ko-KR')}`);
   }
 }
 
@@ -1543,7 +1559,7 @@ function finishCourse() {
     return (d/1000).toFixed(1);
   })();
   const vehInfoFinish = [currentSession.crew?.vehicle, currentSession.crew?.vehicleColor].filter(Boolean).join(' / ');
-  sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / 보조: ' + currentSession.crew.assist : ''}${vehInfoFinish ? '\n차량: ' + vehInfoFinish : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분`);
+  sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfoFinish ? '\n차량: ' + vehInfoFinish : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분`);
 
   alert('✅ 코스 완료 보고됨');
   if (watchId !== null) toggleGPS();
@@ -1593,7 +1609,7 @@ function requestNewAnchor() {
   }
   renderMapForSession();
   // 텔레그램: 거점추가 요청 알림
-  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n요청자: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / ' + currentSession.crew.assist : ''}`);
+  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   alert('관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
 }
 
@@ -1640,7 +1656,9 @@ function reportComplaint() {
   renderMapForSession();
   // 텔레그램: 민원 접수 알림
   const ev = getEvent(data, currentSession.eventId);
-  sendTelegram(`📞 <b>민원 접수</b>\n${ev?.name || ''}\n연락처: ${phone || '-'}\n내용: ${content || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n접수자: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / ' + currentSession.crew.assist : ''}`);
+  const phoneTel = phone ? phone.replace(/[^0-9+]/g, '') : '';
+  const phoneStr = phone ? `<a href="tel:${phoneTel}">${phone}</a>` : '-';
+  sendTelegram(`📞 <b>민원 접수</b>\n${ev?.name || ''}\n연락처: ${phoneStr}\n내용: ${content || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   alert('✅ 민원 접수됨\n관리자가 확인할 수 있습니다.');
 }
 

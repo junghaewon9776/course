@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260512e">
+  <link rel="stylesheet" href="style.css?v=20260512n">
 </head>
 <body>
 <header>
@@ -137,8 +137,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512e"></script>
-<script src="common.js?v=20260512e"></script>
+<script src="firebase-config.js?v=20260512n"></script>
+<script src="common.js?v=20260512n"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
@@ -330,6 +330,23 @@ function showCourseOnMap(courseId) {
       title: `${i + 1}. ${a.name}`,
       zIndex: 20
     });
+    // 클릭 시 InfoWindow (거점 이름 + 메모) — today.html 운영 화면처럼
+    const memoHtml = a.memo ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;font-size:11px;">${escapeHtml(a.memo)}</div>` : '';
+    const naviUrl = `https://map.kakao.com/link/to/${encodeURIComponent(a.name||'거점')},${a.lat},${a.lng}`;
+    const iw = new kakao.maps.InfoWindow({
+      removable: true,
+      content: `<div style="padding:8px 10px;font-size:12px;min-width:160px;max-width:240px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
+        <div style="font-weight:700;color:${course.color};margin-bottom:2px;font-size:11px;">${i+1}번 거점</div>
+        <div style="font-weight:700;color:#2c3e50;font-size:13px;">${escapeHtml(a.name||'')}</div>
+        ${memoHtml}
+        <div style="margin-top:6px;"><a href="${naviUrl}" target="_blank" style="color:#3498db;font-size:11px;text-decoration:none;">🧭 길찾기</a></div>
+      </div>`
+    });
+    kakao.maps.event.addListener(marker, 'click', () => {
+      if (window.__crsIw) { try { window.__crsIw.close(); } catch (e) {} }
+      iw.open(map, marker);
+      window.__crsIw = iw;
+    });
     __courseQuickMarkers.push(marker);
   });
   __courseQuickLine = new kakao.maps.Polyline({
@@ -421,16 +438,20 @@ function buildVehicleInfoHtml(sess) {
   const veh = sess.crew?.vehicle || '';
   const vColor = sess.crew?.vehicleColor || '';
   const vName = sess.crew?.vehicleName || '';
+  const compactPhoneRow = (label, ph) => ph
+    ? `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+        <span style="flex:1;color:#34495e;">${label.replace(/</g,'&lt;')}</span>
+        <a href="tel:${ph.replace(/[^0-9+]/g,'')}" style="background:#27ae60;color:#fff;padding:3px 8px;border-radius:4px;text-decoration:none;font-weight:700;font-size:11px;white-space:nowrap;">📞 전화걸기</a>
+      </div>`
+    : `<div style="padding:3px 0;color:#888;font-size:11px;">${label.replace(/</g,'&lt;')} (번호 없음)</div>`;
   return `
-    <div style="padding:8px 10px;font-size:12px;width:240px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
-      ${vName ? `<div style="font-weight:700;color:#fff;background:#e67e22;padding:5px 10px;border-radius:5px;margin-bottom:6px;text-align:center;font-size:14px;">🚐 ${vName.replace(/</g,'&lt;')}</div>` : ''}
-      ${(veh || vColor) ? `<div style="font-size:11px;color:#666;text-align:center;margin-bottom:6px;">${[vColor, veh].filter(Boolean).join(' · ').replace(/</g,'&lt;')}</div>` : ''}
-      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:7px;">
-        ${phoneBtn(`전화걸기`, driverPhone)}
-        ${assist && assistPhone ? phoneBtn(`보조 전화걸기`, assistPhone) : ''}
-      </div>
-      <div style="font-size:10px;color:#888;margin-bottom:3px;">거점 진행 (${done}/${total})</div>
-      <div style="line-height:1.4;">${anchorChips || '<span style="color:#888;">거점 없음</span>'}</div>
+    <div style="padding:7px 9px;font-size:11px;width:200px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
+      ${vName ? `<div style="font-weight:700;color:#fff;background:#e67e22;padding:3px 8px;border-radius:4px;margin-bottom:5px;text-align:center;font-size:12px;">🚐 ${vName.replace(/</g,'&lt;')}</div>` : ''}
+      ${(veh || vColor) ? `<div style="font-size:10px;color:#666;text-align:center;margin-bottom:5px;">${[vColor, veh].filter(Boolean).join(' · ').replace(/</g,'&lt;')}</div>` : ''}
+      ${compactPhoneRow(driver || '운전자', driverPhone)}
+      ${assist ? compactPhoneRow(assist, assistPhone) : ''}
+      <div style="font-size:10px;color:#888;margin-top:5px;margin-bottom:3px;">거점 (${done}/${total})</div>
+      <div style="line-height:1.4;font-size:10px;">${anchorChips || '<span style="color:#888;">거점 없음</span>'}</div>
     </div>
   `;
 }
@@ -489,8 +510,8 @@ function renderLive(live) {
       m.setImage(img);
       if (m.__iw && m.__iw.getMap && m.__iw.getMap()) m.__iw.setContent(buildVehicleInfoHtml(sess));
     }
-    // 라벨 (CustomOverlay) — 차번호 우선, 없으면 차량명, 그것도 없으면 운전자
-    const labelText = sess.crew?.vehicle || sess.crew?.vehicleName || driver;
+    // 라벨 (CustomOverlay) — 차량명(1호차) 우선, 없으면 차번호, 그것도 없으면 운전자
+    const labelText = sess.crew?.vehicleName || sess.crew?.vehicle || driver;
     let nameOv = liveNameOverlays[key];
     if (!nameOv) {
       nameOv = buildNameOverlay(pos, labelText, color);

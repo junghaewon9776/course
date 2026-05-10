@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인쇄용 - 방역코스</title>
-  <link rel="stylesheet" href="style.css?v=20260512e">
+  <link rel="stylesheet" href="style.css?v=20260512n">
   <style>
     body { background: #fff; }
     .print-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
@@ -64,6 +64,39 @@
       .print-wrap { padding: 8px; max-width: none; }
       .course-item { page-break-inside: avoid; }
     }
+
+    /* 호차 인쇄 모드 */
+    body.mode-hocha .print-wrap { padding: 0; max-width: none; }
+    .hocha-page {
+      width: 100%; min-height: 95vh; box-sizing: border-box;
+      padding: 30px 20px; display: flex; flex-direction: column;
+      align-items: center; text-align: center;
+      page-break-after: always; border: 1px dashed #ccc; margin-bottom: 16px;
+    }
+    .hocha-page:last-child { page-break-after: auto; }
+    .hocha-num {
+      font-size: 240pt; font-weight: 900; color: #e67e22; line-height: 0.9;
+      margin-bottom: 18mm;
+    }
+    .hocha-color { font-size: 50pt; font-weight: 700; color: #34495e; margin-bottom: 8mm; }
+    .hocha-plate {
+      font-size: 60pt; font-weight: 800; color: #fff;
+      background: #2c3e50; padding: 8mm 16mm; border-radius: 6mm;
+      font-family: monospace; letter-spacing: 3mm; margin-bottom: 12mm;
+    }
+    .hocha-crew { font-size: 22pt; margin-bottom: 12mm; }
+    .hocha-crew-row { margin: 3mm 0; }
+    .hocha-role {
+      background: #34495e; color: #fff; padding: 2mm 6mm; border-radius: 3mm;
+      font-size: 16pt; font-weight: 700; margin-right: 4mm;
+    }
+    .hocha-name { font-weight: 700; color: #2c3e50; }
+    .hocha-phone { color: #666; font-family: monospace; font-size: 18pt; margin-left: 4mm; }
+    .hocha-qr { margin-top: auto; }
+    .hocha-qr-label { font-size: 11pt; color: #555; margin-top: 4mm; }
+    @media print {
+      .hocha-page { border: none; margin: 0; min-height: 100vh; padding: 25mm 20mm; }
+    }
   </style>
 </head>
 <body class="sz-m">
@@ -80,16 +113,21 @@
       <option value="sz-m" selected>보통</option>
       <option value="sz-l">크게</option>
     </select>
-    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+    <label>모드:</label>
+    <select id="printMode" onchange="render()" style="width:auto;display:inline-block;">
+      <option value="course">코스 / 조 인쇄</option>
+      <option value="hocha">🚐 호차 인쇄</option>
+    </select>
+    <label class="modeOptCourse" style="display:flex;align-items:center;gap:4px;cursor:pointer;">
       <input id="onlyFeaturedCourse" type="checkbox" checked onchange="render()">
       <span>⭐ 대표 코스만</span>
     </label>
-    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+    <label class="modeOptCourse" style="display:flex;align-items:center;gap:4px;cursor:pointer;">
       <input id="onlyFeatured" type="checkbox" onchange="render()">
       <span>⭐ 대표 거점만</span>
     </label>
     <button class="success" onclick="window.print()">🖨 인쇄</button>
-    <button class="small" onclick="editNotice()">✎ 공지 편집</button>
+    <button class="small modeOptCourse" onclick="editNotice()">✎ 공지 편집</button>
     <span style="color:#888;font-size:12px;">PC: Ctrl+P / 폰: 메뉴 → 인쇄/PDF</span>
   </div>
 
@@ -99,8 +137,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260512e"></script>
-<script src="common.js?v=20260512e"></script>
+<script src="firebase-config.js?v=20260512n"></script>
+<script src="common.js?v=20260512n"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(initEventFilter);
 window.onDataChanged = () => render();
@@ -112,12 +150,21 @@ function initEventFilter() {
   const cur = sel.value;
   sel.innerHTML = '<option value="">전체</option>' +
     (data.events || []).map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
+  // URL 파라미터로 모드 자동 선택
+  const params = new URLSearchParams(location.search);
+  const mode = params.get('mode');
+  if (mode === 'hocha') {
+    const ms = document.getElementById('printMode');
+    if (ms) ms.value = 'hocha';
+  }
   render();
 }
 
 function changeSize() {
   const v = document.getElementById('sizeSel').value;
-  document.body.className = v;
+  // 사이즈 클래스만 교체, mode-hocha 등 다른 클래스는 유지
+  document.body.classList.remove('sz-s', 'sz-m', 'sz-l');
+  document.body.classList.add(v);
 }
 
 function editNotice() {
@@ -129,7 +176,55 @@ function editNotice() {
   saveData(data);
 }
 
+// 🚐 호차 인쇄 — A4 한 페이지당 1대 (1호차/색상/차번호/운전·보조/QR)
+function renderHocha() {
+  const data = loadData();
+  const params = new URLSearchParams(location.search);
+  const onlyId = params.get('v');
+  let vehicles = (data.vehicles || []).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
+  if (onlyId) vehicles = vehicles.filter(v => v.id === onlyId);
+  const todayUrl = location.origin + location.pathname.replace(/print\.html$/, '') + 'today.html';
+  const qrApi = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(url)}`;
+  const esc = s => String(s||'').replace(/</g,'&lt;');
+  if (!vehicles.length) {
+    document.getElementById('printContent').innerHTML = '<div class="empty" style="padding:40px;text-align:center;">등록된 차량이 없습니다.<br>인원관리에서 차량을 먼저 추가하세요.</div>';
+    return;
+  }
+  const pages = vehicles.map((v, idx) => {
+    const drvMember = getMember(data, v.defaultDriverId);
+    const astMember = getMember(data, v.defaultAssistId);
+    const drvName = drvMember?.name || v.defaultDriverName || '';
+    const drvPhone = drvMember?.phone || v.defaultDriverPhone || '';
+    const astName = astMember?.name || v.defaultAssistName || '';
+    const astPhone = astMember?.phone || v.defaultAssistPhone || '';
+    const orderNum = v.order || (idx + 1);
+    return `
+      <div class="hocha-page">
+        <div class="hocha-num">${orderNum}호차</div>
+        ${v.color ? `<div class="hocha-color">${esc(v.color)}</div>` : ''}
+        ${v.plate ? `<div class="hocha-plate">${esc(v.plate)}</div>` : ''}
+        <div class="hocha-crew">
+          ${drvName ? `<div class="hocha-crew-row"><span class="hocha-role">운전</span><span class="hocha-name">${esc(drvName)}</span>${drvPhone ? `<span class="hocha-phone">${esc(drvPhone)}</span>` : ''}</div>` : ''}
+          ${astName ? `<div class="hocha-crew-row"><span class="hocha-role">보조</span><span class="hocha-name">${esc(astName)}</span>${astPhone ? `<span class="hocha-phone">${esc(astPhone)}</span>` : ''}</div>` : ''}
+        </div>
+        <div class="hocha-qr">
+          <img src="${qrApi(todayUrl)}" alt="QR" width="180" height="180">
+          <div class="hocha-qr-label">📱 QR 스캔 → 오늘운영 → 본인 호차 누르고 시작</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  document.getElementById('printContent').innerHTML = pages;
+}
+
 function render() {
+  const mode = document.getElementById('printMode')?.value || 'course';
+  document.body.classList.toggle('mode-hocha', mode === 'hocha');
+  // 코스 모드 옵션 토글 (대표코스/거점/공지편집)
+  document.querySelectorAll('.modeOptCourse').forEach(el => {
+    el.style.display = mode === 'course' ? '' : 'none';
+  });
+  if (mode === 'hocha') return renderHocha();
   const data = loadData();
   const eventFilter = document.getElementById('eventFilter').value;
 
