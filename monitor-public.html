@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>코스 차량 위치 (공개)</title>
-  <link rel="stylesheet" href="style.css?v=20260513i">
+  <link rel="stylesheet" href="style.css?v=20260513n">
   <style>
     body { margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif; background: #f3f4f6; }
     .topbar {
@@ -80,8 +80,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260513i"></script>
-<script src="common.js?v=20260513i"></script>
+<script src="firebase-config.js?v=20260513n"></script>
+<script src="common.js?v=20260513n"></script>
 <script>
 const params = new URLSearchParams(location.search);
 const tokenParam = params.get('t') || params.get('id') || '';
@@ -185,6 +185,11 @@ function initMap() {
     level: data.mapDefault?.level || 6
   });
   map.relayout();
+  // 위성/지도 + 줌 컨트롤
+  try {
+    map.addControl(new kakao.maps.MapTypeControl(), kakao.maps.ControlPosition.TOPRIGHT);
+    map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+  } catch (e) { console.warn('지도 컨트롤 추가 실패', e); }
   // /live 노드 실시간 구독
   fbDb.ref('/live').on('value', snap => {
     const live = snap.val() || {};
@@ -199,6 +204,17 @@ function extractHochaNum(name) {
   if (!name) return null;
   const m = String(name).match(/(\d+)\s*호\s*차/);
   return m ? m[1] : null;
+}
+function deriveHochaName(sess) {
+  const raw = sess?.crew?.vehicleName || '';
+  if (extractHochaNum(raw) !== null) return raw;
+  const data = loadData();
+  const plate = (sess?.crew?.vehicle || '').trim();
+  if (plate && data.vehicles?.length) {
+    const match = data.vehicles.find(v => (v.plate || '').trim() === plate);
+    if (match) return `${match.order || 1}호차`;
+  }
+  return raw;
 }
 function vehicleMarkerImage(color, label, heading) {
   const num = extractHochaNum(label);
@@ -255,7 +271,7 @@ function renderLive(live) {
     const driver = sess.crew?.driver || '운전자';
     const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
     let m = liveMarkers[key];
-    const markerLabel = sess.crew?.vehicleName || sess.crew?.vehicle || driver || '?';
+    const markerLabel = deriveHochaName(sess) || sess.crew?.vehicle || driver || '?';
     let heading = (typeof sess.heading === 'number' && !isNaN(sess.heading)) ? sess.heading : null;
     const prev = prevPos[key];
     if (heading === null && prev && (Math.abs(prev.lat - sess.lat) > 1e-6 || Math.abs(prev.lng - sess.lng) > 1e-6)) {
@@ -304,7 +320,7 @@ function renderLive(live) {
     }
     // 라벨 (지도 POI 스타일 — 차번호 텍스트만)
     const platePart = sess.crew?.vehicle || '';
-    const hochaPart = sess.crew?.vehicleName || driver || '?';
+    const hochaPart = deriveHochaName(sess) || driver || '?';
     const labelText = platePart || hochaPart;
     let nameOv = liveNameOverlays[key];
     if (!nameOv) {
@@ -360,7 +376,7 @@ function renderLive(live) {
         ? `${it.sess.completedCount}/${it.sess.totalCount}`
         : '-';
       const safeKey = it.key.replace(/'/g,"\\'");
-      const vehName = it.sess.crew?.vehicleName || '';
+      const vehName = deriveHochaName(it.sess) || '';
       const plate = it.sess.crew?.vehicle || '';
       const drvPhone = it.sess.crew?.driverPhone || '';
       const phoneTel = drvPhone.replace(/[^0-9+]/g,'');
@@ -412,7 +428,7 @@ function buildIwContent(sess, event, course) {
     : '';
   const veh = sess.crew?.vehicle || '';
   const vColor = sess.crew?.vehicleColor || '';
-  const vName = sess.crew?.vehicleName || '';
+  const vName = deriveHochaName(sess);
   const compactPhoneRow = (label, ph) => ph
     ? `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;">
         <span style="flex:1;color:#34495e;">${escapeHtml(label)}</span>

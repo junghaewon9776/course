@@ -7,7 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
-  <link rel="stylesheet" href="style.css?v=20260513i">
+  <link rel="stylesheet" href="style.css?v=20260513p">
 </head>
 <body>
 <header>
@@ -105,8 +105,28 @@
 
   <!-- 코스 전체 보기 (항상 표시) -->
   <div class="card" style="border-left:4px solid #3498db;">
-    <h2>🗺 코스 전체 보기</h2>
-    <p class="muted" style="font-size:11px;margin-bottom:6px;">코스 누르면 그 코스의 모든 거점이 지도에 표시됩니다 (운영 중 아니어도 가능).</p>
+    <div class="flex-between" style="flex-wrap:wrap;gap:8px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <h2 style="margin:0;">🗺 코스 전체 보기</h2>
+        <button id="btnAllCourses" onclick="showAllCoursesOnMap()" style="background:linear-gradient(135deg,#2c3e50,#34495e);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:800;cursor:pointer;font-size:12px;box-shadow:0 1px 3px rgba(0,0,0,0.2);">
+          🌐 전체 코스
+        </button>
+        <button onclick="clearCoursePreview()" style="background:#ecf0f1;color:#7f8c8d;border:1px solid #bdc3c7;padding:6px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:12px;">
+          ✕ 미리보기 끄기
+        </button>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#555;">
+          <input type="checkbox" id="anchorsAlwaysOn" onchange="toggleAllAnchors()" checked>
+          <span>전체 핑</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:12px;color:#555;">
+          <input type="checkbox" id="cnsAlwaysOn" onchange="toggleComplaintNoSpray()" checked>
+          <span>📞 민원 ⛔ 방역금지</span>
+        </label>
+      </div>
+    </div>
+    <p class="muted" style="font-size:11px;margin:6px 0 6px;">전체 핑이 항상 지도에 떠 있어요. 특정 코스 강조하려면 아래 버튼 클릭.</p>
     <div id="courseQuickList" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
   </div>
 
@@ -137,13 +157,13 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260513i"></script>
-<script src="common.js?v=20260513i"></script>
+<script src="firebase-config.js?v=20260513p"></script>
+<script src="common.js?v=20260513p"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
 window.onAuthSuccess = () => onDataReady(loadKakaoMap);
-window.onDataChanged = () => { if (map) { render(); renderCourseQuickList(); renderPubMonConfig(); } };
+window.onDataChanged = () => { if (map) { render(); renderCourseQuickList(); renderPubMonConfig(); renderAllAnchorsAlwaysOn(); renderComplaintsAndNoSpray(); } };
 checkAdminAuth().then(ok => { if (ok) onDataReady(loadKakaoMap); });
 
 let __kakaoLoadAttempt = 0;
@@ -174,13 +194,232 @@ function initMonitorMap() {
     level: data.mapDefault.level || 5
   });
   map.relayout();
+  // 위성/지도 전환 + 줌 컨트롤 (카카오 기본 컨트롤)
+  try {
+    const mtCtl = new kakao.maps.MapTypeControl();
+    map.addControl(mtCtl, kakao.maps.ControlPosition.TOPRIGHT);
+    const zmCtl = new kakao.maps.ZoomControl();
+    map.addControl(zmCtl, kakao.maps.ControlPosition.RIGHT);
+  } catch (e) { console.warn('지도 컨트롤 추가 실패', e); }
   render();
   subscribeLive();
   renderCourseQuickList();
   renderPubMonConfig();
+  renderAllAnchorsAlwaysOn();  // 전체 코스 핑 영구 표시
+  renderComplaintsAndNoSpray();  // 민원 + 방역금지 (관제 전용)
+  // 체크박스 상태 sync
+  const cb = document.getElementById('anchorsAlwaysOn');
+  if (cb) cb.checked = localStorage.getItem('hideAllAnchors') !== '1';
+  const cb2 = document.getElementById('cnsAlwaysOn');
+  if (cb2) cb2.checked = localStorage.getItem('hideComplaintNoSpray') !== '1';
   // 사용자가 지도 직접 만지면 따라가기 자동 해제
   kakao.maps.event.addListener(map, 'dragstart', () => stopFollow('manual-drag'));
   kakao.maps.event.addListener(map, 'zoom_start', () => stopFollow('manual-zoom'));
+}
+
+// ─── 거점 InfoWindow 헬퍼 (토글 + 일관된 패딩) ───
+function attachAnchorInfoWindow(marker, content) {
+  const iw = new kakao.maps.InfoWindow({ removable: true, content });
+  kakao.maps.event.addListener(marker, 'click', () => {
+    // 같은 마커 다시 누르면 닫기
+    if (window.__crsIw === iw && iw.getMap && iw.getMap()) {
+      try { iw.close(); } catch (e) {}
+      window.__crsIw = null;
+      return;
+    }
+    if (window.__crsIw && window.__crsIw !== iw) {
+      try { window.__crsIw.close(); } catch (e) {}
+    }
+    iw.open(map, marker);
+    window.__crsIw = iw;
+  });
+  return iw;
+}
+function buildAnchorIwHtml({ headerColor, headerText, name, memo, naviUrl }) {
+  const memoHtml = memo ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;font-size:11px;line-height:1.4;">${escapeHtml(memo)}</div>` : '';
+  return `<div style="padding:9px 11px 11px;font-size:11px;min-width:160px;max-width:240px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;line-height:1.45;">
+    <div style="font-weight:700;color:${headerColor};margin-bottom:3px;font-size:10px;">${headerText}</div>
+    <div style="font-weight:700;color:#2c3e50;font-size:13px;word-break:keep-all;">${escapeHtml(name||'')}</div>
+    ${memoHtml}
+    <a href="${naviUrl}" target="_blank" style="display:inline-block;margin-top:7px;background:#3498db;color:#fff;padding:4px 10px;border-radius:4px;font-size:11px;text-decoration:none;font-weight:600;">🧭 길찾기</a>
+  </div>`;
+}
+
+// ─── 모든 코스 거점 영구 표시 (항상 켜짐, 클릭 미리보기와 별개) ───
+const __alwaysOnAnchors = [];
+const __alwaysOnLines = [];
+function clearAlwaysOnAnchors() {
+  __alwaysOnAnchors.forEach(m => m.setMap(null));
+  __alwaysOnAnchors.length = 0;
+  __alwaysOnLines.forEach(l => l.setMap(null));
+  __alwaysOnLines.length = 0;
+}
+function renderAllAnchorsAlwaysOn() {
+  if (!map) return;
+  clearAlwaysOnAnchors();
+  if (localStorage.getItem('hideAllAnchors') === '1') return;  // 토글 OFF
+  const data = loadData();
+  const evVis = (data.visibility || {}).events || {};
+  const csVis = (data.visibility || {}).courses || {};
+  for (const ev of (data.events || [])) {
+    if (evVis[ev.id] === false) continue;
+    for (const c of (ev.courses || [])) {
+      if (csVis[c.id] === false) continue;
+      const anchors = (data.anchors || [])
+        .filter(a => a.courseId === c.id)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      if (!anchors.length) continue;
+      // 작고 반투명한 핑 — 라이브 차량과 안 부딪히게
+      const dotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="18" viewBox="0 0 14 18">
+        <path d="M7 0 C3 0 0 3 0 7 C0 11 7 18 7 18 C7 18 14 11 14 7 C14 3 11 0 7 0 Z" fill="${c.color}" stroke="white" stroke-width="1" opacity="0.85"/>
+      </svg>`;
+      const dotImg = new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(dotSvg),
+        new kakao.maps.Size(14, 18),
+        { offset: new kakao.maps.Point(7, 18) }
+      );
+      const path = [];
+      anchors.forEach((a, i) => {
+        const pos = new kakao.maps.LatLng(a.lat, a.lng);
+        path.push(pos);
+        const marker = new kakao.maps.Marker({
+          position: pos, map,
+          image: dotImg,
+          title: `[${c.name}] ${i + 1}. ${a.name}`,
+          zIndex: 10  // 라이브 차량(50)보다 아래
+        });
+        const naviUrl = `https://map.kakao.com/link/to/${encodeURIComponent(a.name||'거점')},${a.lat},${a.lng}`;
+        attachAnchorInfoWindow(marker, buildAnchorIwHtml({
+          headerColor: c.color,
+          headerText: `${escapeHtml(ev.name)} · ${escapeHtml(c.name)} · ${i+1}번`,
+          name: a.name,
+          memo: a.memo,
+          naviUrl
+        }));
+        __alwaysOnAnchors.push(marker);
+      });
+      // 가벼운 점선 라인
+      const line = new kakao.maps.Polyline({
+        path, strokeWeight: 1.5, strokeColor: c.color,
+        strokeOpacity: 0.4, strokeStyle: 'shortdash'
+      });
+      line.setMap(map);
+      __alwaysOnLines.push(line);
+    }
+  }
+}
+function toggleAllAnchors() {
+  const cur = localStorage.getItem('hideAllAnchors') === '1';
+  localStorage.setItem('hideAllAnchors', cur ? '0' : '1');
+  renderAllAnchorsAlwaysOn();
+  renderCourseQuickList();
+}
+
+// ─── 민원 + 방역금지 핀 (관제 전용 — 공개페이지엔 안 보임) ───
+const __complaintMarkers = [];
+const __noSprayMarkers = [];
+const __noSprayCircles = [];
+function clearComplaintAndNoSprayMarkers() {
+  __complaintMarkers.forEach(m => m.setMap(null));
+  __complaintMarkers.length = 0;
+  __noSprayMarkers.forEach(m => m.setMap(null));
+  __noSprayMarkers.length = 0;
+  __noSprayCircles.forEach(c => c.setMap(null));
+  __noSprayCircles.length = 0;
+}
+// 행사가 "방역행사"류인지 (효도위안잔치 등은 제외) — 이름에 "방역" 포함 여부로 판별
+function isDisinfectionEvent(ev) {
+  if (!ev) return false;
+  return /방역/.test(ev.name || '');
+}
+function renderComplaintsAndNoSpray() {
+  if (!map) return;
+  clearComplaintAndNoSprayMarkers();
+  if (localStorage.getItem('hideComplaintNoSpray') === '1') return;
+  const data = loadData();
+  const evVis = (data.visibility || {}).events || {};
+  // 보이는 방역행사 ID 집합
+  const disinfectEvIds = new Set(
+    (data.events || [])
+      .filter(ev => evVis[ev.id] !== false && isDisinfectionEvent(ev))
+      .map(ev => ev.id)
+  );
+  // 방역행사가 하나도 안 보이면 → 핀 전부 숨김 (효도위안잔치만 운영중일 때)
+  if (disinfectEvIds.size === 0) return;
+
+  // 민원 (미처리 + 방역행사 소속만)
+  const complaints = (data.complaints || []).filter(c => {
+    if (c.status === 'resolved') return false;
+    // eventId가 있으면 방역행사 소속인지 확인. 없으면 (구 데이터) 표시
+    return !c.eventId || disinfectEvIds.has(c.eventId);
+  });
+  complaints.forEach(c => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="12" fill="#f1c40f" stroke="white" stroke-width="2"/>
+      <path d="M11 9c-.5 0-1 .4-1 1 0 4 3 7 7 7 .6 0 1-.4 1-1v-2c0-.5-.4-1-1-1l-2 .3c-.4-.6-.8-1-1.3-1.3l.3-2c0-.6-.4-1-1-1H11z" fill="white"/>
+    </svg>`;
+    const m = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(c.lat, c.lng), map,
+      image: new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(24, 24),
+        { offset: new kakao.maps.Point(12, 12) }
+      ),
+      title: '[민원] ' + (c.phone || ''),
+      zIndex: 30
+    });
+    const phoneTel = (c.phone || '').replace(/[^0-9+]/g, '');
+    const phoneLink = c.phone
+      ? `<div style="margin-top:6px;font-size:11px;"><a href="tel:${phoneTel}" style="color:#27ae60;text-decoration:none;font-weight:600;">📞 ${escapeHtml(c.phone)}</a></div>`
+      : '';
+    const iwHtml = `<div style="padding:9px 11px 11px;font-size:12px;max-width:240px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;line-height:1.45;">
+      <div style="font-weight:700;color:#b7950b;margin-bottom:4px;">📞 민원 (미처리)</div>
+      <div style="color:#444;white-space:pre-wrap;font-size:12px;word-break:keep-all;">${escapeHtml(c.content || '내용 없음')}</div>
+      ${phoneLink}
+      <div style="margin-top:6px;font-size:10px;color:#888;">${new Date(c.createdAt || 0).toLocaleString('ko-KR')}</div>
+    </div>`;
+    attachAnchorInfoWindow(m, iwHtml);
+    __complaintMarkers.push(m);
+  });
+
+  // 방역금지 구역 (반경 원 + 핀)
+  (data.noSprayZones || []).forEach(z => {
+    const radius = z.radius || 50;
+    const pos = new kakao.maps.LatLng(z.lat, z.lng);
+    const circle = new kakao.maps.Circle({
+      center: pos, radius,
+      strokeWeight: 2, strokeColor: '#e74c3c', strokeOpacity: 0.7, strokeStyle: 'solid',
+      fillColor: '#e74c3c', fillOpacity: 0.15, map, zIndex: 5
+    });
+    __noSprayCircles.push(circle);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="12" fill="#e74c3c" stroke="white" stroke-width="2"/>
+      <path d="M5 14a9 9 0 0118 0 9 9 0 01-18 0zm3.5-6.5l13 13" stroke="white" stroke-width="2.5" fill="none"/>
+    </svg>`;
+    const m = new kakao.maps.Marker({
+      position: pos, map,
+      image: new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(24, 24),
+        { offset: new kakao.maps.Point(12, 12) }
+      ),
+      title: '[방역금지] ' + (z.name || ''),
+      zIndex: 30
+    });
+    const iwHtml = `<div style="padding:9px 11px 11px;font-size:12px;max-width:230px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;line-height:1.45;">
+      <div style="font-weight:700;color:#e74c3c;margin-bottom:4px;">⛔ 방역금지</div>
+      <div style="font-weight:700;color:#2c3e50;font-size:13px;word-break:keep-all;">${escapeHtml(z.name || '')}</div>
+      ${z.reason ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;font-size:11px;">${escapeHtml(z.reason)}</div>` : ''}
+      <div style="margin-top:5px;color:#888;font-size:11px;">반경 ${radius}m</div>
+    </div>`;
+    attachAnchorInfoWindow(m, iwHtml);
+    __noSprayMarkers.push(m);
+  });
+}
+function toggleComplaintNoSpray() {
+  const cur = localStorage.getItem('hideComplaintNoSpray') === '1';
+  localStorage.setItem('hideComplaintNoSpray', cur ? '0' : '1');
+  renderComplaintsAndNoSpray();
 }
 
 // ─── 공개 모니터링 관리 (admin과 동일 기능) ───
@@ -272,6 +511,7 @@ function renderCourseQuickList() {
   const evVis = (data.visibility || {}).events || {};
   const csVis = (data.visibility || {}).courses || {};
   const buttons = [];
+  const visibleCourseIds = [];
   for (const ev of (data.events || [])) {
     if (evVis[ev.id] === false) continue;  // 행사 숨김
     for (const c of (ev.courses || [])) {
@@ -281,6 +521,7 @@ function renderCourseQuickList() {
         .sort((a, b) => (a.order || 0) - (b.order || 0));
       const count = courseAnchors.length;
       if (!count) continue;
+      visibleCourseIds.push(c.id);
       buttons.push(`
         <button onclick="showCourseOnMap('${c.id}')" style="background:${c.color};color:#fff;border:none;padding:8px 12px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px;">
           ${escapeHtml(ev.name)} · ${escapeHtml(c.name)}
@@ -289,9 +530,105 @@ function renderCourseQuickList() {
       `);
     }
   }
+  // 헤더의 "🌐 전체 코스" 버튼 표시 여부 (코스 1개면 의미 없음)
+  const btnAll = document.getElementById('btnAllCourses');
+  if (btnAll) btnAll.style.display = visibleCourseIds.length > 1 ? '' : 'none';
   el.innerHTML = buttons.length
     ? buttons.join('')
     : '<span class="muted" style="font-size:12px;">표시할 코스가 없습니다 (admin에서 숨김 처리되었거나 거점이 없음)</span>';
+}
+
+// 모든 보이는 코스의 거점을 한 번에 지도에 표시
+function showAllCoursesOnMap() {
+  const data = loadData();
+  const evVis = (data.visibility || {}).events || {};
+  const csVis = (data.visibility || {}).courses || {};
+  // 이전 미리보기 정리
+  __courseQuickMarkers.forEach(m => m.setMap(null));
+  __courseQuickMarkers = [];
+  if (__courseQuickLine) { __courseQuickLine.setMap(null); __courseQuickLine = null; }
+  if (window.__allCourseLines) {
+    window.__allCourseLines.forEach(l => l.setMap(null));
+    window.__allCourseLines = [];
+  }
+  if (typeof logTrack !== 'undefined' && logTrack) { logTrack.setMap(null); logTrack = null; }
+  selectedLogIdx = null;
+
+  window.__allCourseLines = [];
+  const bounds = new kakao.maps.LatLngBounds();
+  let totalAnchors = 0;
+  let totalCourses = 0;
+
+  for (const ev of (data.events || [])) {
+    if (evVis[ev.id] === false) continue;
+    for (const c of (ev.courses || [])) {
+      if (csVis[c.id] === false) continue;
+      const anchors = (data.anchors || [])
+        .filter(a => a.courseId === c.id)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      if (!anchors.length) continue;
+      totalCourses++;
+      // 코스마다 색깔 다른 핀
+      const dotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 16 20">
+        <path d="M8 0 C3.5 0 0 3.5 0 8 C0 13 8 20 8 20 C8 20 16 13 16 8 C16 3.5 12.5 0 8 0 Z" fill="${c.color}" stroke="white" stroke-width="1.2"/>
+      </svg>`;
+      const dotImg = new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(dotSvg),
+        new kakao.maps.Size(16, 20),
+        { offset: new kakao.maps.Point(8, 20) }
+      );
+      const path = [];
+      anchors.forEach((a, i) => {
+        const pos = new kakao.maps.LatLng(a.lat, a.lng);
+        bounds.extend(pos);
+        path.push(pos);
+        totalAnchors++;
+        const marker = new kakao.maps.Marker({
+          position: pos, map,
+          image: dotImg,
+          title: `[${c.name}] ${i + 1}. ${a.name}`,
+          zIndex: 20
+        });
+        const naviUrl = `https://map.kakao.com/link/to/${encodeURIComponent(a.name||'거점')},${a.lat},${a.lng}`;
+        attachAnchorInfoWindow(marker, buildAnchorIwHtml({
+          headerColor: c.color,
+          headerText: `${escapeHtml(c.name)} · ${i+1}번`,
+          name: a.name,
+          memo: a.memo,
+          naviUrl
+        }));
+        __courseQuickMarkers.push(marker);
+      });
+      // 코스 라인
+      const line = new kakao.maps.Polyline({
+        path, strokeWeight: 2, strokeColor: c.color,
+        strokeOpacity: 0.6, strokeStyle: 'shortdash'
+      });
+      line.setMap(map);
+      window.__allCourseLines.push(line);
+    }
+  }
+
+  if (totalAnchors === 0) {
+    alert('표시할 거점이 없습니다');
+    return;
+  }
+  map.setBounds(bounds);
+  const info = document.getElementById('logInfo');
+  if (info) info.innerHTML = `<b>🌐 전체 코스 미리보기</b> · ${totalCourses}개 코스 · ${totalAnchors}개 거점`;
+}
+
+function clearCoursePreview() {
+  __courseQuickMarkers.forEach(m => m.setMap(null));
+  __courseQuickMarkers = [];
+  if (__courseQuickLine) { __courseQuickLine.setMap(null); __courseQuickLine = null; }
+  if (window.__allCourseLines) {
+    window.__allCourseLines.forEach(l => l.setMap(null));
+    window.__allCourseLines = [];
+  }
+  if (window.__crsIw) { try { window.__crsIw.close(); } catch (e) {} }
+  const info = document.getElementById('logInfo');
+  if (info) info.textContent = '';
 }
 function showCourseOnMap(courseId) {
   const data = loadData();
@@ -330,23 +667,15 @@ function showCourseOnMap(courseId) {
       title: `${i + 1}. ${a.name}`,
       zIndex: 20
     });
-    // 클릭 시 InfoWindow (거점 이름 + 메모) — today.html 운영 화면처럼
-    const memoHtml = a.memo ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;font-size:11px;">${escapeHtml(a.memo)}</div>` : '';
+    // 클릭 시 InfoWindow (거점 이름 + 메모) — 헬퍼로 토글 처리
     const naviUrl = `https://map.kakao.com/link/to/${encodeURIComponent(a.name||'거점')},${a.lat},${a.lng}`;
-    const iw = new kakao.maps.InfoWindow({
-      removable: true,
-      content: `<div style="padding:8px 10px;font-size:12px;min-width:160px;max-width:240px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
-        <div style="font-weight:700;color:${course.color};margin-bottom:2px;font-size:11px;">${i+1}번 거점</div>
-        <div style="font-weight:700;color:#2c3e50;font-size:13px;">${escapeHtml(a.name||'')}</div>
-        ${memoHtml}
-        <div style="margin-top:6px;"><a href="${naviUrl}" target="_blank" style="color:#3498db;font-size:11px;text-decoration:none;">🧭 길찾기</a></div>
-      </div>`
-    });
-    kakao.maps.event.addListener(marker, 'click', () => {
-      if (window.__crsIw) { try { window.__crsIw.close(); } catch (e) {} }
-      iw.open(map, marker);
-      window.__crsIw = iw;
-    });
+    attachAnchorInfoWindow(marker, buildAnchorIwHtml({
+      headerColor: course.color,
+      headerText: `${i+1}번 거점`,
+      name: a.name,
+      memo: a.memo,
+      naviUrl
+    }));
     __courseQuickMarkers.push(marker);
   });
   __courseQuickLine = new kakao.maps.Polyline({
@@ -389,6 +718,20 @@ function extractHochaNum(name) {
   if (!name) return null;
   const m = String(name).match(/(\d+)\s*호\s*차/);
   return m ? m[1] : null;
+}
+// 라이브 세션 → 등록된 차량 테이블 조회로 호차명 도출 (vehicleName이 옛 데이터면 폴백)
+function deriveHochaName(sess) {
+  const raw = sess?.crew?.vehicleName || '';
+  // 이미 "N호차" 형태면 그대로
+  if (extractHochaNum(raw) !== null) return raw;
+  // 차번호(plate) 매칭으로 등록 차량 찾기
+  const data = loadData();
+  const plate = (sess?.crew?.vehicle || '').trim();
+  if (plate && data.vehicles?.length) {
+    const match = data.vehicles.find(v => (v.plate || '').trim() === plate);
+    if (match) return `${match.order || 1}호차`;
+  }
+  return raw;  // 매칭 실패 시 원본 (카니발 흰색 등) 반환
 }
 function vehicleMarkerSvg(color, label, heading) {
   // label은 "1호차"/"10호차" 형식 우선 — 숫자만 추출, 없으면 첫 2글자
@@ -474,7 +817,7 @@ function buildVehicleInfoHtml(sess) {
     : '';
   const veh = sess.crew?.vehicle || '';
   const vColor = sess.crew?.vehicleColor || '';
-  const vName = sess.crew?.vehicleName || '';
+  const vName = deriveHochaName(sess);
   const compactPhoneRow = (label, ph) => ph
     ? `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;">
         <span style="flex:1;color:#34495e;">${label.replace(/</g,'&lt;')}</span>
@@ -509,7 +852,7 @@ function renderLive(live) {
     const driver = sess.crew?.driver || '운전자';
     const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
     // 마커 가운데 글자 — 차량명("1호차" "10호차")에서 숫자 추출, 없으면 첫글자
-    const markerLabel = sess.crew?.vehicleName || sess.crew?.vehicle || driver || '?';
+    const markerLabel = deriveHochaName(sess) || sess.crew?.vehicle || driver || '?';
     // 진행 방향 — sess.heading 우선, 없으면 prev→curr 위치차이로 계산
     let heading = (typeof sess.heading === 'number' && !isNaN(sess.heading)) ? sess.heading : null;
     const prev = prevPos[key];
@@ -557,7 +900,7 @@ function renderLive(live) {
     }
     // 라벨 (CustomOverlay) — 위:차번호, 아래:호차 (호차 없으면 운전자)
     const platePart = sess.crew?.vehicle || '';
-    const hochaPart = sess.crew?.vehicleName || driver || '?';
+    const hochaPart = deriveHochaName(sess) || driver || '?';
     let nameOv = liveNameOverlays[key];
     if (!nameOv) {
       nameOv = buildNameOverlay(pos, platePart, hochaPart, color);
@@ -624,7 +967,7 @@ function renderLive(live) {
       const isFollowing = __followKey === it.key;
       const followLabel = isFollowing ? '🎯 따라가는 중' : '📍 따라가기';
       const followBg = isFollowing ? '#27ae60' : it.color;
-      const hochaName = it.sess.crew?.vehicleName || '';
+      const hochaName = deriveHochaName(it.sess) || '';
       // 좌측 호차 배지 — 호차 있으면 큼직, 없으면 운전자 이니셜 동그라미 (폴백)
       const leftBadge = hochaName
         ? `<div style="background:${it.color};color:#fff;padding:8px 12px;border-radius:8px;font-weight:800;font-size:16px;flex:none;min-width:62px;text-align:center;line-height:1.1;box-shadow:0 1px 3px rgba(0,0,0,0.15);">${escapeHtml(hochaName)}</div>`
