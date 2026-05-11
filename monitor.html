@@ -207,6 +207,48 @@ function initMonitorMap() {
   kakao.maps.event.addListener(map, 'zoom_start', () => stopFollow('manual-zoom'));
 }
 
+// 라이브 세션에서 courseId로 운영중인 호차 찾기
+function getVehiclesOnCourse(courseId) {
+  const live = window.__liveCache || {};
+  const STALE_MS = 5 * 60 * 1000;
+  const now = Date.now();
+  const result = [];
+  for (const [key, sess] of Object.entries(live)) {
+    if (!sess || sess.courseId !== courseId) continue;
+    if (!sess.lastUpdate || now - sess.lastUpdate > STALE_MS) continue;
+    const hocha = deriveHochaName(sess) || sess.crew?.driver || '?';
+    const driver = sess.crew?.driver || '';
+    const driverPhone = sess.crew?.driverPhone || '';
+    const progress = (sess.totalCount > 0)
+      ? `${sess.completedCount || 0}/${sess.totalCount}`
+      : '';
+    result.push({ hocha, driver, driverPhone, progress });
+  }
+  return result;
+}
+// 거점에 정적으로 배정된 차량 (등록 시 코스 단위) — 라이브에 없을 때 폴백
+function getVehiclesAssignedToCourse(courseId) {
+  // 현재 차량 데이터에는 courseId 매핑 없음. 향후 확장 가능.
+  return [];
+}
+function buildVehicleBadgesForCourse(courseId, courseColor) {
+  const vehs = getVehiclesOnCourse(courseId);
+  if (!vehs.length) {
+    return `<div style="margin-top:5px;font-size:11px;color:#aaa;">🚐 이 코스 운행 중인 차량 없음</div>`;
+  }
+  return vehs.map(v => {
+    const tel = v.driverPhone ? v.driverPhone.replace(/[^0-9+]/g,'') : '';
+    const phoneBtn = tel
+      ? `<a href="tel:${tel}" style="background:#27ae60;color:#fff;padding:2px 7px;border-radius:3px;font-size:10px;text-decoration:none;font-weight:600;margin-left:4px;">📞</a>`
+      : '';
+    return `<div style="margin-top:5px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+      <span style="background:${courseColor};color:#fff;padding:3px 8px;border-radius:4px;font-weight:800;font-size:11px;">🚐 ${escapeHtml(v.hocha)}</span>
+      <span style="font-size:11px;color:#555;">${escapeHtml(v.driver)}${v.progress ? ` · 진행 ${v.progress}` : ''}</span>
+      ${phoneBtn}
+    </div>`;
+  }).join('');
+}
+
 // ─── 거점 InfoWindow 헬퍼 (토글 + 일관된 패딩) ───
 function attachAnchorInfoWindow(marker, content) {
   const iw = new kakao.maps.InfoWindow({ removable: true, content });
@@ -225,12 +267,13 @@ function attachAnchorInfoWindow(marker, content) {
   });
   return iw;
 }
-function buildAnchorIwHtml({ headerColor, headerText, name, memo, naviUrl }) {
+function buildAnchorIwHtml({ headerColor, headerText, name, memo, naviUrl, vehicleBadges }) {
   const memoHtml = memo ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;font-size:11px;line-height:1.4;">${escapeHtml(memo)}</div>` : '';
-  return `<div style="padding:9px 11px 11px;font-size:11px;min-width:160px;max-width:240px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;line-height:1.45;">
+  return `<div style="padding:9px 11px 11px;font-size:11px;min-width:180px;max-width:260px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;line-height:1.45;">
     <div style="font-weight:700;color:${headerColor};margin-bottom:3px;font-size:10px;">${headerText}</div>
     <div style="font-weight:700;color:#2c3e50;font-size:13px;word-break:keep-all;">${escapeHtml(name||'')}</div>
     ${memoHtml}
+    ${vehicleBadges || ''}
     <a href="${naviUrl}" target="_blank" style="display:inline-block;margin-top:7px;background:#3498db;color:#fff;padding:4px 10px;border-radius:4px;font-size:11px;text-decoration:none;font-weight:600;">🧭 길찾기</a>
   </div>`;
 }
@@ -285,7 +328,8 @@ function renderAllAnchorsAlwaysOn() {
           headerText: `${escapeHtml(ev.name)} · ${escapeHtml(c.name)} · ${i+1}번`,
           name: a.name,
           memo: a.memo,
-          naviUrl
+          naviUrl,
+          vehicleBadges: ''
         }));
         __alwaysOnAnchors.push(marker);
       });
@@ -626,7 +670,8 @@ function showAllCoursesOnMap() {
           headerText: `${escapeHtml(c.name)} · ${i+1}번`,
           name: a.name,
           memo: a.memo,
-          naviUrl
+          naviUrl,
+          vehicleBadges: ''
         }));
         __courseQuickMarkers.push(marker);
       });
@@ -717,7 +762,8 @@ function showCourseOnMap(courseId) {
       headerText: `${i+1}번 거점`,
       name: a.name,
       memo: a.memo,
-      naviUrl
+      naviUrl,
+      vehicleBadges: buildVehicleBadgesForCourse(course.id, course.color)
     }));
     __courseQuickMarkers.push(marker);
   });
@@ -1303,28 +1349,28 @@ function drawLog(log) {
         <span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#888;font-size:10px;">로딩...</span>
       </div>
     `).join('');
-    photoIds.forEach(id => {
-      loadPhoto(id).then(p => {
-        if (!p) return;
-        const img = document.getElementById('lph-' + id);
-        if (img) { img.src = p.dataUrl; img.style.display = 'block'; img.parentElement.querySelectorAll('span').forEach(s => s.style.display='none'); }
-      }).catch(() => {});
+    photoIds.forEach(function(id) {
+      getPhotoDataUrl(id).then(function(dataUrl) {
+        if (!dataUrl) return;
+        var img = document.getElementById('lph-' + id);
+        if (img) { img.src = dataUrl; img.style.display = 'block'; img.parentElement.querySelectorAll('span').forEach(function(s) { s.style.display='none'; }); }
+      }).catch(function() {});
     });
   }
 }
 async function viewLogPhoto(id) {
-  const p = await loadPhoto(id);
+  var p = await loadPhoto(id);
   if (!p) { alert('사진을 불러올 수 없습니다'); return; }
-  const overlay = document.createElement('div');
+  var dataUrl = await getPhotoDataUrl(id);
+  if (!dataUrl) { alert('사진 데이터를 가져올 수 없습니다'); return; }
+  var overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;cursor:pointer;';
-  const ts = new Date(p.takenAt).toLocaleString('ko-KR');
-  overlay.innerHTML = `
-    <div style="position:relative;max-width:100%;max-height:100%;text-align:center;">
-      <img src="${p.dataUrl}" style="max-width:100%;max-height:85vh;border-radius:8px;">
-      <div style="color:#fff;margin-top:8px;font-size:13px;">${ts}${p.lat ? ` · 📍 ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : ''}</div>
-    </div>
-  `;
-  overlay.onclick = () => overlay.remove();
+  var ts = new Date(p.takenAt).toLocaleString('ko-KR');
+  overlay.innerHTML = '<div style="position:relative;max-width:100%;max-height:100%;text-align:center;">'
+    + '<img src="' + dataUrl + '" style="max-width:100%;max-height:85vh;border-radius:8px;">'
+    + '<div style="color:#fff;margin-top:8px;font-size:13px;">' + ts + (p.lat ? ' · 📍 ' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) : '') + '</div>'
+    + '</div>';
+  overlay.onclick = function() { overlay.remove(); };
   document.body.appendChild(overlay);
 }
 

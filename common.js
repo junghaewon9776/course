@@ -97,37 +97,49 @@ function generatePublicToken() {
   return s;
 }
 
-// ───────── 현장사진 업로드 (today.html → /photos/{id}) ─────────
-// 클라이언트에서 리사이즈 + JPEG 압축해서 base64로 RTDB에 저장
-// /photos는 saveData가 안 건드리는 별도 노드 (live와 동일 패턴)
+// ───────── 현장사진 업로드 (Google Drive 저장) ─────────
+// 클라이언트에서 리사이즈 + JPEG 압축 → GAS 웹앱으로 전송 → Drive 저장
+// RTDB /photos 에는 메타 + Drive URL만 저장 (base64 안 넣음)
 async function compressImage(file, maxDim = 1024, quality = 0.8) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      let { width, height } = img;
-      if (width > maxDim || height > maxDim) {
-        if (width > height) { height = Math.round(height * maxDim / width); width = maxDim; }
-        else { width = Math.round(width * maxDim / height); height = maxDim; }
+  return new Promise(function(resolve, reject) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
       }
-      const canvas = document.createElement('canvas');
-      canvas.width = width; canvas.height = height;
-      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
-    img.onerror = () => reject(new Error('이미지 로드 실패'));
-    const reader = new FileReader();
-    reader.onload = () => { img.src = reader.result; };
-    reader.onerror = () => reject(new Error('파일 읽기 실패'));
+    img.onerror = function() { reject(new Error('이미지 로드 실패')); };
+    var reader = new FileReader();
+    reader.onload = function() { img.src = reader.result; };
+    reader.onerror = function() { reject(new Error('파일 읽기 실패')); };
     reader.readAsDataURL(file);
   });
 }
+
+// Drive 업로드용 GAS 웹앱 설정 (admin.html → drivePhoto)
+function _getDrivePhotoConfig() {
+  var data = (typeof _cache !== 'undefined' && _cache) ? _cache : loadData();
+  return data.drivePhoto || {};
+}
+
+// 메모리 캐시 (세션 중 같은 사진 반복 로드 방지)
+var _photoCache = {};
+
 async function uploadFieldPhoto(file, meta) {
   if (typeof fbDb === 'undefined') throw new Error('Firebase 미초기화');
-  const dataUrl = await compressImage(file);
-  const photoId = uid();
-  const payload = {
-    dataUrl,
-    type: meta?.type || 'field',  // 'field' | 'receipt'
+  var cfg = _getDrivePhotoConfig();
+  if (!cfg.webhookUrl) throw new Error('사진 업로드 설정 필요 (관리자 → Drive 사진 설정)');
+
+  var dataUrl = await compressImage(file);
+  var photoId = uid();
+  var payload = {
+    type: meta?.type || 'field',
     takenAt: Date.now(),
     sessionKey: meta?.sessionKey || '',
     eventId: meta?.eventId || '',
@@ -137,16 +149,90 @@ async function uploadFieldPhoto(file, meta) {
     lng: meta?.lng ?? null,
     note: meta?.note || ''
   };
+
+  // GAS 웹앱으로 전송 → Drive에 저장 (비공개) → fileId 반환
+  var res = await fetch(cfg.webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({
+      action: 'upload',
+      photoId: photoId,
+      dataUrl: dataUrl,
+      type: payload.type,
+      takenAt: payload.takenAt,
+      eventId: payload.eventId,
+      courseId: payload.courseId,
+      sessionKey: payload.sessionKey,
+      lat: payload.lat,
+      lng: payload.lng,
+      note: payload.note,
+      token: cfg.token || '',
+      appName: cfg.appName || '방역코스'
+    })
+  });
+  var result = {};
+  try { result = await res.json(); } catch(e) {}
+
+  // RTDB에는 메타 + Drive fileId만 저장 (base64 안 넣음)
+  payload.driveFileId = result.fileId || '';
+  payload.photoId = photoId;
   await fbDb.ref('/photos/' + photoId).set(payload);
-  return { photoId, ...payload };
+
+  // 방금 업로드한 사진은 캐시에 넣어서 바로 표시
+  _photoCache[photoId] = dataUrl;
+  return { photoId: photoId, dataUrl: dataUrl, ...payload };
 }
+
 function loadPhoto(photoId) {
   if (typeof fbDb === 'undefined') return Promise.resolve(null);
-  return fbDb.ref('/photos/' + photoId).once('value').then(s => s.val());
+  return fbDb.ref('/photos/' + photoId).once('value').then(function(s) { return s.val(); });
 }
-function deletePhoto(photoId) {
-  if (typeof fbDb === 'undefined') return Promise.resolve();
-  return fbDb.ref('/photos/' + photoId).remove();
+
+// GAS 프록시를 통해 Drive 사진 가져오기 (로그인 검증)
+async function fetchPhotoData(fileId) {
+  if (!fileId) return null;
+  var cfg = _getDrivePhotoConfig();
+  if (!cfg.webhookUrl) return null;
+  var url = cfg.webhookUrl + '?action=view&fileId=' + encodeURIComponent(fileId) + '&token=' + encodeURIComponent(cfg.token || '');
+  var res = await fetch(url);
+  var data = await res.json();
+  return data.dataUrl || null;
+}
+
+// photoId로 이미지 dataUrl 가져오기 (캐시 → RTDB 메타 → GAS 프록시)
+async function getPhotoDataUrl(photoId) {
+  if (_photoCache[photoId]) return _photoCache[photoId];
+  var photo = await loadPhoto(photoId);
+  if (!photo) return null;
+  // 기존 base64 데이터가 있으면 그대로 사용 (마이그레이션 호환)
+  if (photo.dataUrl) {
+    _photoCache[photoId] = photo.dataUrl;
+    return photo.dataUrl;
+  }
+  if (!photo.driveFileId) return null;
+  var dataUrl = await fetchPhotoData(photo.driveFileId);
+  if (dataUrl) _photoCache[photoId] = dataUrl;
+  return dataUrl;
+}
+
+// Drive 파일도 같이 삭제 (GAS 웹앱 경유)
+async function deletePhoto(photoId) {
+  if (typeof fbDb === 'undefined') return;
+  var photo = await loadPhoto(photoId);
+  await fbDb.ref('/photos/' + photoId).remove();
+  delete _photoCache[photoId];
+  if (photo && photo.driveFileId) {
+    var cfg = _getDrivePhotoConfig();
+    if (cfg.webhookUrl) {
+      try {
+        await fetch(cfg.webhookUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'delete', fileId: photo.driveFileId, token: cfg.token || '' })
+        });
+      } catch(e) { console.warn('Drive 파일 삭제 실패:', e); }
+    }
+  }
 }
 
 // ───────── 네이버 SENS SMS (프록시 서버 경유) ─────────

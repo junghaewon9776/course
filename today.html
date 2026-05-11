@@ -751,40 +751,9 @@ async function onPhotoSelected(e, type) {
     renderPhotoStrip();
     document.getElementById('gpsStatus').textContent = `✅ ${typeLabel} 업로드 완료`;
     if (navigator.vibrate) navigator.vibrate(80);
-    // 구글시트 동기화 (설정되어 있으면 백그라운드)
-    syncPhotoToSheet(result).catch(e => console.warn('시트 동기화 실패:', e));
   } catch (err) {
     console.error('사진 업로드 실패:', err);
     alert('❌ 업로드 실패: ' + err.message);
-  }
-}
-// 구글 Apps Script 웹앱으로 사진 메타+이미지 전송 (admin 설정에서 URL 입력 시 동작)
-async function syncPhotoToSheet(photo) {
-  const data = loadData();
-  const cfg = data.sheetSync || {};
-  if (!cfg.enabled || !cfg.webhookUrl) return;
-  try {
-    await fetch(cfg.webhookUrl, {
-      method: 'POST',
-      mode: 'no-cors',  // Apps Script CORS 회피
-      headers: { 'Content-Type': 'text/plain' }, // CORS preflight 회피
-      body: JSON.stringify({
-        type: photo.type || 'field',
-        photoId: photo.photoId,
-        dataUrl: photo.dataUrl,
-        takenAt: photo.takenAt,
-        sessionKey: photo.sessionKey,
-        eventId: photo.eventId,
-        courseId: photo.courseId,
-        teamId: photo.teamId,
-        lat: photo.lat,
-        lng: photo.lng,
-        note: photo.note,
-        token: cfg.token || ''
-      })
-    });
-  } catch (e) {
-    console.warn('시트 webhook 실패:', e);
   }
 }
 function renderPhotoStrip() {
@@ -804,38 +773,42 @@ function renderPhotoStrip() {
   `).join('');
   // 비동기 로드
   ids.forEach(id => {
-    loadPhoto(id).then(p => {
+    loadPhoto(id).then(function(p) {
       if (!p) return;
-      const img = document.getElementById('ph-' + id);
-      const wrap = document.getElementById('phWrap-' + id);
-      const badge = document.getElementById('phBadge-' + id);
-      if (img) {
-        img.src = p.dataUrl;
-        img.style.display = 'block';
-        wrap.querySelectorAll('span').forEach(s => { if (s.id !== 'phBadge-'+id) s.style.display='none'; });
-        if (p.type === 'receipt') {
-          wrap.style.borderColor = '#e67e22';
-          if (badge) { badge.textContent = '🧾'; badge.style.display = 'block'; badge.style.background = 'rgba(230,126,34,0.95)'; }
-        } else if (badge) {
-          badge.textContent = '📷'; badge.style.display = 'block';
-        }
+      var img = document.getElementById('ph-' + id);
+      var wrap = document.getElementById('phWrap-' + id);
+      var badge = document.getElementById('phBadge-' + id);
+      if (!img) return;
+      // 타입 배지 먼저 표시
+      if (p.type === 'receipt') {
+        wrap.style.borderColor = '#e67e22';
+        if (badge) { badge.textContent = '🧾'; badge.style.display = 'block'; badge.style.background = 'rgba(230,126,34,0.95)'; }
+      } else if (badge) {
+        badge.textContent = '📷'; badge.style.display = 'block';
       }
-    }).catch(() => {});
+      // GAS 프록시 통해 이미지 로드
+      getPhotoDataUrl(id).then(function(dataUrl) {
+        if (!dataUrl) return;
+        img.src = dataUrl;
+        img.style.display = 'block';
+        wrap.querySelectorAll('span').forEach(function(s) { if (s.id !== 'phBadge-'+id) s.style.display='none'; });
+      });
+    }).catch(function() {});
   });
 }
 async function viewPhoto(id) {
-  const p = await loadPhoto(id);
+  var p = await loadPhoto(id);
   if (!p) { alert('사진을 불러올 수 없습니다'); return; }
-  const overlay = document.createElement('div');
+  var dataUrl = await getPhotoDataUrl(id);
+  if (!dataUrl) { alert('사진 데이터를 가져올 수 없습니다'); return; }
+  var overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;cursor:pointer;';
-  const ts = new Date(p.takenAt).toLocaleString('ko-KR');
-  overlay.innerHTML = `
-    <div style="position:relative;max-width:100%;max-height:100%;text-align:center;">
-      <img src="${p.dataUrl}" style="max-width:100%;max-height:85vh;border-radius:8px;">
-      <div style="color:#fff;margin-top:8px;font-size:13px;">${ts}${p.lat ? ` · 📍 ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}` : ''}</div>
-    </div>
-  `;
-  overlay.onclick = () => overlay.remove();
+  var ts = new Date(p.takenAt).toLocaleString('ko-KR');
+  overlay.innerHTML = '<div style="position:relative;max-width:100%;max-height:100%;text-align:center;">'
+    + '<img src="' + dataUrl + '" style="max-width:100%;max-height:85vh;border-radius:8px;">'
+    + '<div style="color:#fff;margin-top:8px;font-size:13px;">' + ts + (p.lat ? ' · 📍 ' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) : '') + '</div>'
+    + '</div>';
+  overlay.onclick = function() { overlay.remove(); };
   document.body.appendChild(overlay);
 }
 async function removePhoto(id) {
