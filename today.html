@@ -416,27 +416,20 @@ function openStartForm(eventId, courseId) {
 
   // 차량 큰 버튼들 — 활성 차량만, order 정렬
   const sortedVehicles = vehicles.filter(v => v.active !== false).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
-  const vehicleButtons = sortedVehicles.map(v => {
+  const vehicleButtons = '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + sortedVehicles.map(v => {
     const drv = getMember(data, v.defaultDriverId);
-    const ast = getMember(data, v.defaultAssistId);
     const driverName = drv ? drv.name : (v.defaultDriverName || '');
-    const assistName = ast ? ast.name : (v.defaultAssistName || '');
-    const orderNum = v.order || 1;
-    const carName = `${orderNum}호차`;
-    // 부제목: 차번호 · 색상 · 운전자(/+보조)
-    const parts = [];
-    if (v.plate) parts.push(`🔖 ${v.plate}`);
-    if (v.color) parts.push(`🎨 ${v.color}`);
-    if (driverName) parts.push(`🧑‍✈️ ${driverName}${assistName ? ' / ' + assistName : ''}`);
-    const subtitle = parts.join(' · ');
+    const vehName = v.name || v.plate || `${v.order||1}호차`;
+    const plateStr = v.plate ? v.plate : '';
     return `
       <button onclick="quickStartByVehicle('${eventId}','${courseId}','${v.id}')"
-              style="display:block;width:100%;padding:14px;margin-bottom:8px;background:#27ae60;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;text-align:left;">
-        <div style="font-size:18px;margin-bottom:4px;">🚐 ${carName}</div>
-        <div style="font-weight:400;font-size:13px;opacity:0.95;">${subtitle.replace(/</g,'&lt;') || '<span style="opacity:0.7;">정보 미입력</span>'}</div>
+              style="flex:1;min-width:120px;padding:14px 10px;background:#27ae60;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;text-align:center;">
+        <div style="font-size:18px;">🚐 ${vehName.replace(/</g,'&lt;')}</div>
+        ${plateStr ? '<div style="font-weight:400;font-size:12px;opacity:0.9;margin-top:2px;">'+plateStr.replace(/</g,'&lt;')+'</div>' : ''}
+        ${driverName ? '<div style="font-weight:400;font-size:11px;opacity:0.8;margin-top:2px;">'+driverName.replace(/</g,'&lt;')+'</div>' : ''}
       </button>
     `;
-  }).join('');
+  }).join('') + '</div>';
 
   const card = document.getElementById('startFormCard');
   card.style.display = 'block';
