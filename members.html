@@ -381,6 +381,19 @@ function setAllVehiclesActive(active) {
     ? `🚐 차량 ${vehicles.length}대 모두 활성화 완료\n오늘운영 = 차량 버튼 모드`
     : `🧑 차량 ${vehicles.length}대 모두 비활성화 완료\n오늘운영 = 조 입력 모드`);
 }
+function moveVehicle(id, dir) {
+  const data = loadData();
+  const sorted = (data.vehicles || []).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
+  const idx = sorted.findIndex(v => v.id === id);
+  if (idx < 0) return;
+  const swapIdx = idx + dir;
+  if (swapIdx < 0 || swapIdx >= sorted.length) return;
+  const tmp = sorted[idx];
+  sorted[idx] = sorted[swapIdx];
+  sorted[swapIdx] = tmp;
+  sorted.forEach((v, i) => { v.order = i + 1; });
+  saveData(data); refreshAll();
+}
 function deleteVehicle(id) {
   if (!confirm('차량을 삭제할까요?')) return;
   const data = loadData();
