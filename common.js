@@ -312,6 +312,24 @@ function toggleInfoWindow(iw, marker, mapRef) {
   }
 }
 
+// ───────── 기기 감지 + IP ─────────
+function getDeviceType() {
+  var ua = navigator.userAgent || '';
+  if (/Mobi|Android|iPhone|iPad|iPod/i.test(ua)) return '📱 모바일';
+  return '💻 PC';
+}
+
+let _cachedIP = null;
+async function getClientIP() {
+  if (_cachedIP) return _cachedIP;
+  try {
+    const r = await fetch('https://api.ipify.org?format=json');
+    const j = await r.json();
+    _cachedIP = j.ip || '알수없음';
+  } catch (e) { _cachedIP = '알수없음'; }
+  return _cachedIP;
+}
+
 // ───────── 텔레그램 알림 ─────────
 async function sendTelegram(text) {
   try {
@@ -642,10 +660,13 @@ async function doLogin() {
     document.getElementById('loginGate').remove();
     initFirebaseSync();
     if (window.onAuthSuccess) window.onAuthSuccess();
-    // 텔레그램: 로그인 알림 (Firebase 데이터 도착 후)
+    // 텔레그램: 로그인 알림 (Firebase 데이터 도착 후, 기기+IP 포함)
     onDataReady(() => {
       const u = (loadData().users || {})[fbAuth.currentUser?.uid] || {};
-      sendTelegram(`🔐 <b>관리자 로그인</b>\nID: ${id}\n이름: ${u.name || '-'}\n시각: ${new Date().toLocaleString('ko-KR')}`);
+      getClientIP().then(ip => {
+        const dev = getDeviceType();
+        sendTelegram(`🔐 <b>관리자 로그인</b>\nID: ${id}\n이름: ${u.name || '-'}\n시각: ${new Date().toLocaleString('ko-KR')}\n접속: ${dev} · IP ${ip}`);
+      });
     });
     // 초기비번 123456면 변경 강제
     if (pw === '123456') setTimeout(promptPasswordChange, 600);

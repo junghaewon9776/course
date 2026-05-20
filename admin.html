@@ -152,6 +152,14 @@
         <p class="muted" style="margin-top:6px;font-size:11px;">💡 민원은 운영(today) 지도에 빨간 핀으로 표시되고 클릭하면 전화걸기 가능</p>
       </div>
 
+      <!-- 행사별 조/차량 선택 -->
+      <div class="card" style="border-left:4px solid #7c3aed;">
+        <h2>🏷 행사별 조 · 차량 선택</h2>
+        <label>대상 행사</label>
+        <select id="evtAssignSel" onchange="renderEvtAssign()"></select>
+        <div id="evtAssignArea" style="margin-top:8px;"></div>
+      </div>
+
       <!-- 조 -->
       <div class="card">
         <div class="flex-between"><h2>조 (인원)</h2>
@@ -800,6 +808,8 @@ function refreshAll() {
   renderAnchors();
   renderComplaints();
   renderTeams();
+  renderEventSelect('evtAssignSel');
+  renderEvtAssign();
   renderSchedules();
   renderTelegramConfig();
   renderMap();
@@ -2037,6 +2047,119 @@ function renderMap() {
     map.setBounds(bounds);
     __adminMapFitDone = true;
   }
+}
+
+// ────── 행사별 조/차량 선택 ──────
+let _evtCfgCache = {};
+
+function _loadEvtCfg() {
+  fbDb.ref('/eventConfig').on('value', snap => {
+    _evtCfgCache = snap.val() || {};
+    renderEvtAssign();
+  });
+}
+// initFirebaseSync 이후 호출되도록 onDataReady에 등록
+onDataReady(_loadEvtCfg);
+
+function _getEvtCfg(eventId) {
+  const c = _evtCfgCache[eventId] || {};
+  return { teams: Array.isArray(c.teams) ? c.teams : [], vehicles: Array.isArray(c.vehicles) ? c.vehicles : [] };
+}
+
+function _saveEvtCfg(eventId, cfg) {
+  fbDb.ref('/eventConfig/' + eventId).set(cfg);
+}
+
+function toggleEvtTeam(eventId, teamId) {
+  const cfg = _getEvtCfg(eventId);
+  const idx = cfg.teams.indexOf(teamId);
+  if (idx >= 0) cfg.teams.splice(idx, 1); else cfg.teams.push(teamId);
+  _saveEvtCfg(eventId, cfg);
+}
+function toggleEvtVehicle(eventId, vehId) {
+  const cfg = _getEvtCfg(eventId);
+  const idx = cfg.vehicles.indexOf(vehId);
+  if (idx >= 0) cfg.vehicles.splice(idx, 1); else cfg.vehicles.push(vehId);
+  _saveEvtCfg(eventId, cfg);
+}
+
+function renderEvtAssign() {
+  const el = document.getElementById('evtAssignArea');
+  if (!el) return;
+  const data = loadData();
+  const eventId = document.getElementById('evtAssignSel')?.value;
+  const event = (data.events || []).find(e => e.id === eventId);
+  if (!event) { el.innerHTML = '<div class="empty">행사를 선택하세요</div>'; return; }
+  const cfg = _getEvtCfg(eventId);
+  const teams = data.teams || [];
+  const vehs = data.vehicles || [];
+
+  let h = '<div style="margin-bottom:12px;">';
+  h += '<div style="font-weight:700;margin-bottom:6px;">🏷 조 선택 <span style="font-weight:400;color:#888;font-size:12px;">(' + cfg.teams.length + '/' + teams.length + ')</span></div>';
+  if (!teams.length) {
+    h += '<div class="empty" style="font-size:12px;">조가 없습니다. 아래에서 추가하세요</div>';
+  } else {
+    const mems = data.members || [];
+    h += teams.map(t => {
+      const on = cfg.teams.indexOf(t.id) >= 0;
+      const ids = t.memberIds || [];
+      const leadMem = mems.find(m => m.id === t.leaderId);
+      const memNames = ids.map(mid => { const m = mems.find(x => x.id === mid); return m ? m.name : ''; }).filter(Boolean);
+      const leaderName = leadMem ? leadMem.name : (t.leader || '');
+      return `<div style="padding:6px 8px;margin:3px 0;border:1.5px solid ${on ? '#7c3aed' : '#e5e7eb'};border-radius:8px;background:${on ? '#f5f3ff' : '#fff'};">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+          <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleEvtTeam('${eventId}','${t.id}')">
+          <span style="font-weight:600;">${t.name}</span>
+          <span style="color:#888;font-size:11px;">${t.vehicle ? '🚗' + t.vehicle : ''} ${leaderName ? '👑' + leaderName : ''} ${ids.length}명</span>
+        </label>
+        ${ids.length ? '<div style="margin:4px 0 0 28px;font-size:11px;color:#666;">' + memNames.join(', ') + '</div>' : ''}
+      </div>`;
+    }).join('');
+  }
+  h += '</div>';
+
+  h += '<div>';
+  h += '<div style="font-weight:700;margin-bottom:6px;">🚗 차량 선택 <span style="font-weight:400;color:#888;font-size:12px;">(' + cfg.vehicles.length + '/' + vehs.length + ')</span></div>';
+  if (!vehs.length) {
+    h += '<div class="empty" style="font-size:12px;">차량이 없습니다. 아래에서 추가하세요</div>';
+  } else {
+    h += vehs.map(v => {
+      const on = cfg.vehicles.indexOf(v.id) >= 0;
+      return `<label style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin:3px 0;border:1.5px solid ${on ? '#0ea5e9' : '#e5e7eb'};border-radius:8px;background:${on ? '#f0f9ff' : '#fff'};cursor:pointer;font-size:13px;">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleEvtVehicle('${eventId}','${v.id}')">
+        <span style="font-weight:600;">${v.plate || v.name || v.id}</span>
+        <span style="color:#888;font-size:11px;">${v.driver || ''}</span>
+      </label>`;
+    }).join('');
+  }
+  h += '</div>';
+
+  // 차량 추가 간편 UI
+  h += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;">
+    <div style="display:flex;gap:4px;">
+      <input id="_quickVehName" type="text" placeholder="차량 이름/번호" style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+      <input id="_quickVehDriver" type="text" placeholder="운전자" style="flex:1;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:12px;">
+      <button class="small" onclick="quickAddVehicle('${eventId}')">+ 차량</button>
+    </div>
+  </div>`;
+
+  el.innerHTML = h;
+}
+
+function quickAddVehicle(eventId) {
+  const name = document.getElementById('_quickVehName')?.value.trim();
+  const driver = document.getElementById('_quickVehDriver')?.value.trim();
+  if (!name) { alert('차량 이름을 입력하세요'); return; }
+  const data = loadData();
+  if (!data.vehicles) data.vehicles = [];
+  const newId = 'v_' + Date.now();
+  data.vehicles.push({ id: newId, name, plate: name, driver: driver || '', color: '#3498db', active: true });
+  saveData(data);
+  // 자동으로 현재 행사에 선택
+  const cfg = _getEvtCfg(eventId);
+  cfg.vehicles.push(newId);
+  _saveEvtCfg(eventId, cfg);
+  refreshAll();
 }
 </script>
 </body>

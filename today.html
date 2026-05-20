@@ -697,9 +697,12 @@ function startSession(eventId, courseId, teamId, crew) {
   renderMapForSession();
   renderPhotoStrip();
 
-  // 텔레그램: 코스 시작 알림
+  // 텔레그램: 코스 시작 알림 (기기+IP 포함)
   const vehInfo = [crew?.vehicle, crew?.vehicleColor].filter(Boolean).join(' / ');
-  sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${tgPersonLink(crew?.driver, crew?.driverPhone)}${crew?.assist ? '\n보조: ' + tgPersonLink(crew.assist, crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시작: ${new Date().toLocaleString('ko-KR')}`);
+  getClientIP().then(ip => {
+    const dev = getDeviceType();
+    sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${tgPersonLink(crew?.driver, crew?.driverPhone)}${crew?.assist ? '\n보조: ' + tgPersonLink(crew.assist, crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시작: ${new Date().toLocaleString('ko-KR')}\n접속: ${dev} · IP ${ip}`);
+  });
 
   // 시작하면 GPS 자동 ON
   if (watchId === null) {
