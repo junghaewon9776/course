@@ -140,9 +140,10 @@ function renderVehicles() {
   }
   const total = vehicles.length;
 
+  let activeCount = 0;
   el.innerHTML = vehicles.map((v, idx) => {
-    const orderNum = v.order || (idx + 1);
-    const displayName = `${orderNum}호차`;  // 항상 N호차 표시
+    if (v.active !== false) activeCount++;
+    const displayName = v.active !== false ? `${activeCount}호차` : `비활성`;  // 항상 N호차 표시
     // 운전자/보조 정보 추출 (회원 또는 외부)
     const drvMember = getMember(data, v.defaultDriverId);
     const astMember = getMember(data, v.defaultAssistId);
