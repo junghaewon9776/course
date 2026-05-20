@@ -724,6 +724,9 @@ function getMember(data, memberId) {
 function getVehicle(data, vehicleId) {
   return ((data && data.vehicles) || []).find(v => v.id === vehicleId);
 }
+function findMemberByName(data, name) {
+  return ((data && data.members) || []).find(m => m.name === name);
+}
 function getCourseAnchors(data, courseId) {
   return (data.anchors || [])
     .filter(a => a.courseId === courseId)
