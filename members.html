@@ -142,8 +142,9 @@ function renderVehicles() {
 
   let activeCount = 0;
   el.innerHTML = vehicles.map((v, idx) => {
-    if (v.active !== false) activeCount++;
-    const displayName = v.active !== false ? `${activeCount}호차` : `비활성`;  // 항상 N호차 표시
+    const isActive = v.active !== false && v.active !== 'false';
+    if (isActive) activeCount++;
+    const displayName = isActive ? `${activeCount}호차` : `비활성`;  // 항상 N호차 표시
     // 운전자/보조 정보 추출 (회원 또는 외부)
     const drvMember = getMember(data, v.defaultDriverId);
     const astMember = getMember(data, v.defaultAssistId);
@@ -157,16 +158,16 @@ function renderVehicles() {
       ? `<a href="tel:${ph.replace(/[^0-9+]/g,'')}" style="color:#3498db;text-decoration:none;font-family:monospace;" onclick="event.stopPropagation()">📞 ${ph.replace(/</g,'&lt;')}</a>`
       : '';
     return `
-      <div class="vehicle-card" style="border:1px solid ${v.active === false ? '#ddd' : '#f0d4b3'};border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${v.active === false ? '#f5f5f5' : '#fffaf3'};${v.active === false ? 'opacity:0.7;' : ''}">
+      <div class="vehicle-card" style="border:1px solid ${isActive ? '#f0d4b3' : '#ddd'};border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${isActive ? '#fffaf3' : '#f5f5f5'};${isActive ? '' : 'opacity:0.7;'}">
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
           <button class="small gray" onclick="moveVehicle('${v.id}', -1)" style="padding:2px 7px;font-size:13px;">▲</button>
           <button class="small gray" onclick="moveVehicle('${v.id}', 1)" style="padding:2px 7px;font-size:13px;">▼</button>
-          <span style="background:${v.active === false ? '#bdc3c7' : '#e67e22'};color:#fff;padding:6px 14px;border-radius:6px;font-weight:700;font-size:16px;">🚐 ${displayName}</span>
+          <span style="background:${isActive ? '#e67e22' : '#bdc3c7'};color:#fff;padding:6px 14px;border-radius:6px;font-weight:700;font-size:16px;">🚐 ${displayName}</span>
           <span style="flex:1;"></span>
           <button onclick="toggleVehicleActive('${v.id}')"
-                  title="${v.active === false ? '비활성화 — 클릭하면 활성화 (오늘운영에 표시)' : '활성화 — 클릭하면 비활성화 (오늘운영에서 숨김)'}"
-                  style="background:${v.active === false ? '#95a5a6' : '#27ae60'};color:#fff;border:none;padding:6px 12px;border-radius:5px;font-weight:700;font-size:12px;cursor:pointer;">
-            ${v.active === false ? '🚫 비활성' : '✅ 활성'}
+                  title="${isActive ? '활성화 — 클릭하면 비활성화 (오늘운영에서 숨김)' : '비활성화 — 클릭하면 활성화 (오늘운영에 표시)'}"
+                  style="background:${isActive ? '#27ae60' : '#95a5a6'};color:#fff;border:none;padding:6px 12px;border-radius:5px;font-weight:700;font-size:12px;cursor:pointer;">
+            ${isActive ? '✅ 활성' : '🚫 비활성'}
           </button>
           <button class="small" onclick="printOneVehicle('${v.id}')" title="이 차량 호차 A4 인쇄">🖨</button>
           <button class="small" onclick="editVehicle('${v.id}')">✎ 수정</button>
