@@ -2050,19 +2050,10 @@ function renderMap() {
 }
 
 // ────── 행사별 조/차량 선택 ──────
-let _evtCfgCache = {};
-
-function _loadEvtCfg() {
-  fbDb.ref('/eventConfig').on('value', snap => {
-    _evtCfgCache = snap.val() || {};
-    renderEvtAssign();
-  });
-}
-// initFirebaseSync 이후 호출되도록 onDataReady에 등록
-onDataReady(_loadEvtCfg);
-
+// _cache(전체 DB)에 이미 포함되므로 별도 리스너 불필요
 function _getEvtCfg(eventId) {
-  const c = _evtCfgCache[eventId] || {};
+  const all = (_cache || {}).eventConfig || {};
+  const c = all[eventId] || {};
   return { teams: Array.isArray(c.teams) ? c.teams : [], vehicles: Array.isArray(c.vehicles) ? c.vehicles : [] };
 }
 

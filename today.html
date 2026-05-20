@@ -135,16 +135,14 @@ let __mapInitialFitDone = false;
 let _initStarted = false;
 
 // ────── 행사별 조/차량 선택 (eventConfig) ──────
-let _evtCfgCache = {};
-onDataReady(() => {
-  fbDb.ref('/eventConfig').on('value', snap => {
-    _evtCfgCache = snap.val() || {};
-    if (!currentSession) renderAssignments();
-  });
-});
+// _cache(전체 DB)에 이미 포함되므로 별도 리스너 불필요
 function _getEvtCfg(eventId) {
-  const c = _evtCfgCache[eventId] || {};
+  const all = (_cache || {}).eventConfig || {};
+  const c = all[eventId] || {};
   return { teams: Array.isArray(c.teams) ? c.teams : [], vehicles: Array.isArray(c.vehicles) ? c.vehicles : [] };
+}
+function _hasEvtCfg(eventId) {
+  return !!((_cache || {}).eventConfig || {})[eventId];
 }
 function startInit() {
   if (_initStarted) return;
@@ -410,7 +408,7 @@ function openStartForm(eventId, courseId) {
   // eventConfig에서 이 행사에 선택된 조/차량만 필터링
   // config가 존재하면 선택된 것만 (조만 선택 → 차량 빈 배열 = 조 모드)
   const evtCfg = _getEvtCfg(eventId);
-  const hasEvtCfg = !!_evtCfgCache[eventId];
+  const hasEvtCfg = _hasEvtCfg(eventId);
   const teams = hasEvtCfg ? allTeams.filter(t => evtCfg.teams.indexOf(t.id) >= 0) : allTeams;
   const vehicles = hasEvtCfg ? allVehicles.filter(v => evtCfg.vehicles.indexOf(v.id) >= 0) : allVehicles;
 
