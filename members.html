@@ -174,7 +174,7 @@ function renderVehicles() {
         <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:10px;font-size:13px;color:#34495e;">
           ${v.plate ? `<span>🔖 <b style="font-family:monospace;">${v.plate.replace(/</g,'&lt;')}</b></span>` : ''}
           ${v.color ? `<span>🎨 ${v.color.replace(/</g,'&lt;')}</span>` : ''}
-          ${v.owner ? `<span>🏢 ${v.owner.replace(/</g,'&lt;')}</span>` : ''}
+          ${v.owner ? `<span>🏢 ${v.owner.replace(/</g,'&lt;')}${v.ownerPhone ? ' · ' + phoneLink(v.ownerPhone) : ''}</span>` : ''}
         </div>
         <div style="margin-top:6px;font-size:13px;color:#34495e;">
           🧑‍✈️ <b>운전:</b> ${drvName ? drvName.replace(/</g,'&lt;') + (drvIsExt ? ' <span style="font-size:10px;color:#888;">(외부)</span>' : '') : '<span style="color:#bbb;">미지정</span>'}
@@ -233,7 +233,10 @@ function openVehicleModal(editId) {
       <input id="vmPlate" type="text" placeholder="예: 12가 3456" value="${isEdit ? (v.plate||'').replace(/"/g,'&quot;') : ''}" autocomplete="off" style="width:100%;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
 
       <label style="font-size:12px;color:#555;">보험사 / 소유주</label>
-      <input id="vmOwner" type="text" placeholder="예: DB손보 홍길동" value="${isEdit ? (v.owner||'').replace(/"/g,'&quot;') : ''}" autocomplete="off" style="width:100%;font-size:14px;margin-bottom:14px;box-sizing:border-box;">
+      <input id="vmOwner" type="text" placeholder="예: DB손보 홍길동" value="${isEdit ? (v.owner||'').replace(/"/g,'&quot;') : ''}" autocomplete="off" style="width:100%;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
+
+      <label style="font-size:12px;color:#555;">보험사(소유주) 연락처</label>
+      <input id="vmOwnerPhone" type="tel" placeholder="예: 010-1234-5678" value="${isEdit ? (v.ownerPhone||'').replace(/"/g,'&quot;') : ''}" autocomplete="off" style="width:100%;font-size:14px;margin-bottom:14px;box-sizing:border-box;">
 
       <div style="background:#f8f9fa;padding:10px;border-radius:6px;margin-bottom:10px;">
         <label style="font-size:13px;font-weight:700;color:#34495e;">🧑‍✈️ 운전자</label>
@@ -297,6 +300,7 @@ function saveVehicleModal(editId) {
   const color = (document.getElementById('vmColor').value || '').trim();
   const plate = (document.getElementById('vmPlate').value || '').trim();
   const owner = (document.getElementById('vmOwner').value || '').trim();
+  const ownerPhone = (document.getElementById('vmOwnerPhone').value || '').trim();
   const drvVal = document.getElementById('vmDrv').value;
   const astVal = document.getElementById('vmAst').value;
   const drvExtName = (document.getElementById('vmDrvExtName')?.value || '').trim();
@@ -323,6 +327,7 @@ function saveVehicleModal(editId) {
   v.color = color;
   v.plate = plate;
   v.owner = owner;
+  v.ownerPhone = ownerPhone;
   v.name = `${v.order || 1}호차`;  // 항상 N호차로 표시
   // 운전자
   if (drvVal === '__external__') {
