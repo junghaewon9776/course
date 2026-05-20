@@ -416,10 +416,10 @@ function openStartForm(eventId, courseId) {
 
   // 차량 큰 버튼들 — 활성 차량만, order 정렬
   const sortedVehicles = vehicles.filter(v => v.active !== false).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
-  const vehicleButtons = '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + sortedVehicles.map(v => {
+  const vehicleButtons = '<div style="display:flex;flex-wrap:wrap;gap:8px;">' + sortedVehicles.map((v, idx) => {
     const drv = getMember(data, v.defaultDriverId);
     const driverName = drv ? drv.name : (v.defaultDriverName || '');
-    const hochaLabel = `${v.order||1}호차`;
+    const hochaLabel = `${idx+1}호차`;
     const subParts = [v.plate, v.color, driverName].filter(Boolean);
     const subLine = subParts.length ? subParts.join(' · ') : '';
     return `
