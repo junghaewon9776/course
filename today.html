@@ -133,6 +133,19 @@ window.onDataChanged = () => { if (!currentSession) renderAssignments(); updateM
 
 let __mapInitialFitDone = false;
 let _initStarted = false;
+
+// ────── 행사별 조/차량 선택 (eventConfig) ──────
+let _evtCfgCache = {};
+onDataReady(() => {
+  fbDb.ref('/eventConfig').on('value', snap => {
+    _evtCfgCache = snap.val() || {};
+    if (!currentSession) renderAssignments();
+  });
+});
+function _getEvtCfg(eventId) {
+  const c = _evtCfgCache[eventId] || {};
+  return { teams: Array.isArray(c.teams) ? c.teams : [], vehicles: Array.isArray(c.vehicles) ? c.vehicles : [] };
+}
 function startInit() {
   if (_initStarted) return;
   _initStarted = true;
@@ -390,9 +403,14 @@ function openStartForm(eventId, courseId) {
   const event = getEvent(data, eventId);
   const course = getCourse(data, courseId);
   const members = data.members || [];
-  const teams = data.teams || [];
-  const vehicles = data.vehicles || [];
+  const allTeams = data.teams || [];
+  const allVehicles = data.vehicles || [];
   assistList = [];
+
+  // eventConfig에서 이 행사에 선택된 조/차량만 필터링
+  const evtCfg = _getEvtCfg(eventId);
+  const teams = evtCfg.teams.length ? allTeams.filter(t => evtCfg.teams.indexOf(t.id) >= 0) : allTeams;
+  const vehicles = evtCfg.vehicles.length ? allVehicles.filter(v => evtCfg.vehicles.indexOf(v.id) >= 0) : allVehicles;
 
   const teamOpts = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
 
