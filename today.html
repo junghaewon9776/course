@@ -544,8 +544,10 @@ function autoFillFromTeam() {
 
   const leader = getMember(data, team.leaderId);
   const vice = getMember(data, team.viceLeaderId);
-  document.getElementById('fDriver').value = leader?.name || '';
-  document.getElementById('fAssist').value = vice?.name || '';
+  const fDrv = document.getElementById('fDriver');
+  const fAst = document.getElementById('fAssist');
+  if (fDrv) fDrv.value = leader?.name || '';
+  if (fAst) fAst.value = vice?.name || '';
 }
 
 // 차량 한 번 누르고 즉시 시작 (효도위안잔치처럼 차량 단위 운영용)
