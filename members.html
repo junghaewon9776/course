@@ -183,6 +183,17 @@ function renderVehicles() {
           🧑 <b>보조:</b> ${astName ? astName.replace(/</g,'&lt;') + (astIsExt ? ' <span style="font-size:10px;color:#888;">(외부)</span>' : '') : '<span style="color:#bbb;">미지정</span>'}
           ${phoneLink(astPhone) ? ' · ' + phoneLink(astPhone) : ''}
         </div>
+        <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+          <span style="font-size:11px;color:#888;font-weight:600;">행사:</span>
+          ${(data.events||[]).map(ev => {
+            const cfg = (data.eventConfig||{})[ev.id] || {};
+            const vehs = Array.isArray(cfg.vehicles) ? cfg.vehicles : [];
+            const on = vehs.indexOf(v.id) >= 0;
+            return '<label style="display:inline-flex;align-items:center;gap:3px;font-size:12px;padding:3px 8px;border:1px solid '+(on?'#e67e22':'#ddd')+';border-radius:12px;background:'+(on?'#fef5ec':'#f9f9f9')+';cursor:pointer;">'
+              +'<input type="checkbox" '+(on?'checked':'')+' onchange="toggleVehEvent(\''+v.id+'\',\''+ev.id+'\')" style="width:14px;height:14px;">'
+              +'<span>'+ev.name.replace(/</g,'&lt;')+'</span></label>';
+          }).join('')}
+        </div>
       </div>
     `;
   }).join('');
@@ -328,6 +339,14 @@ function saveVehicleModal(editId) {
   saveData(data);
   closeVehicleModal();
   refreshAll();
+}
+function toggleVehEvent(vehId, eventId) {
+  const cfg = (_cache || {}).eventConfig || {};
+  const evtCfg = cfg[eventId] || { teams: [], vehicles: [] };
+  if (!Array.isArray(evtCfg.vehicles)) evtCfg.vehicles = [];
+  const idx = evtCfg.vehicles.indexOf(vehId);
+  if (idx >= 0) evtCfg.vehicles.splice(idx, 1); else evtCfg.vehicles.push(vehId);
+  fbDb.ref('/eventConfig/' + eventId).set(evtCfg);
 }
 function toggleVehicleActive(id) {
   const data = loadData();

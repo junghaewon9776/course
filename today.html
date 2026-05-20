@@ -440,25 +440,23 @@ function openStartForm(eventId, courseId) {
 
   const card = document.getElementById('startFormCard');
   card.style.display = 'block';
-  // 활성 차량 있으면 → 차량 버튼만 (조/수동 입력 폼 X)
-  // 활성 차량 없으면 → 조 선택 + 수동 입력 폼만 (차량 섹션 X)
-  const vehicleMode = sortedVehicles.length > 0;
+  const hasVehicles = sortedVehicles.length > 0;
+  const hasTeams = teams.length > 0;
   card.innerHTML = `
     <div class="card" style="border:2px solid #3498db;">
       <h2>📝 ${event.name} · ${course.name}</h2>
-      ${vehicleMode ? `
-        <div>
-          <label style="font-weight:700;color:#27ae60;">⚡ 차량을 누르고 바로 시작</label>
-          <div style="margin-top:6px;">${vehicleButtons}</div>
-        </div>
-      ` : `
-        <p class="muted" style="margin-bottom:8px;">운전자와 보조자 선택 (조 선택은 선택사항)</p>
-
-        <label>조 (선택)</label>
-        <select id="fTeam" onchange="autoFillFromTeam()">
-          <option value="">-- 조 선택 (선택사항) --</option>
+      ${hasTeams ? `
+        <label style="font-weight:700;">🏷 조 선택</label>
+        <select id="fTeam" onchange="autoFillFromTeam()" style="margin-bottom:10px;">
+          <option value="">-- 조 선택 --</option>
           ${teamOpts}
         </select>
+      ` : ''}
+      ${hasVehicles ? `
+        <label style="font-weight:700;color:#27ae60;">⚡ 차량 선택</label>
+        <div style="margin-top:6px;">${vehicleButtons}</div>
+      ` : `
+        <p class="muted" style="margin-bottom:8px;">운전자와 보조자 선택</p>
 
         <label>운전자 *</label>
         <div style="position:relative;">
@@ -494,11 +492,9 @@ function openStartForm(eventId, courseId) {
           <button class="gray" onclick="closeStartForm()">취소</button>
         </div>
       `}
-      ${vehicleMode ? `
-        <div style="margin-top:10px;text-align:center;">
-          <button class="gray" onclick="closeStartForm()" style="padding:8px 16px;">취소</button>
-        </div>
-      ` : ''}
+      <div style="margin-top:10px;text-align:center;">
+        <button class="gray" onclick="closeStartForm()" style="padding:8px 16px;">취소</button>
+      </div>
     </div>
   `;
   // 폼 영역으로 자동 스크롤
@@ -577,9 +573,12 @@ function quickStartByVehicle(eventId, courseId, vehicleId) {
   }
   // 호차명은 order 번호로 자동 생성 (예: "1호차", "10호차")
   const hochaName = `${v.order || 1}호차`;
-  if (!confirm(`▶ ${hochaName} (${driverName})으로 시작할까요?`)) return;
+  const teamId = document.getElementById('fTeam')?.value || '';
+  const teamName = teamId ? ((data.teams||[]).find(t=>t.id===teamId)||{}).name||'' : '';
+  const confirmMsg = teamName ? `▶ ${teamName} · ${hochaName} (${driverName})으로 시작할까요?` : `▶ ${hochaName} (${driverName})으로 시작할까요?`;
+  if (!confirm(confirmMsg)) return;
   closeStartForm();
-  startSession(eventId, courseId, '', {
+  startSession(eventId, courseId, teamId, {
     driver: driverName,
     driverPhone: driverPhone,
     assist: assistName,
