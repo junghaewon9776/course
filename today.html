@@ -408,9 +408,11 @@ function openStartForm(eventId, courseId) {
   assistList = [];
 
   // eventConfig에서 이 행사에 선택된 조/차량만 필터링
+  // config가 존재하면 선택된 것만 (조만 선택 → 차량 빈 배열 = 조 모드)
   const evtCfg = _getEvtCfg(eventId);
-  const teams = evtCfg.teams.length ? allTeams.filter(t => evtCfg.teams.indexOf(t.id) >= 0) : allTeams;
-  const vehicles = evtCfg.vehicles.length ? allVehicles.filter(v => evtCfg.vehicles.indexOf(v.id) >= 0) : allVehicles;
+  const hasEvtCfg = !!_evtCfgCache[eventId];
+  const teams = hasEvtCfg ? allTeams.filter(t => evtCfg.teams.indexOf(t.id) >= 0) : allTeams;
+  const vehicles = hasEvtCfg ? allVehicles.filter(v => evtCfg.vehicles.indexOf(v.id) >= 0) : allVehicles;
 
   const teamOpts = teams.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
 
