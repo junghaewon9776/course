@@ -65,9 +65,12 @@
       <button id="liveCardToggle" class="small" onclick="event.stopPropagation();toggleLiveCard()" style="background:#27ae60;color:#fff;">▼ 접기</button>
     </div>
     <div id="liveCardBody">
-      <p class="muted" style="font-size:11px;margin-bottom:6px;">
-        운영 중인 차량의 실시간 위치 (10초마다 갱신, 5분 무업데이트면 자동 숨김)
-      </p>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <p class="muted" style="font-size:11px;margin:0;">
+          운영 중인 차량의 실시간 위치 (갱신 주기 선택 가능, 5분 무업데이트면 자동 숨김)
+        </p>
+        <button id="monGpsBtn" class="small" onclick="toggleMonitorGPS()" style="white-space:nowrap;">📍 내 위치</button>
+      </div>
       <div id="liveList" style="max-height:320px;overflow-y:auto;"></div>
     </div>
   </div>
@@ -1404,6 +1407,48 @@ function deleteLog(key) {
   saveData(data);
   selectedLogIdx = null;
   render();
+}
+
+// ─── 모니터링 본부 내 위치 GPS ───
+let __monWatchId = null;
+let __monMarker = null;
+function toggleMonitorGPS() {
+  const btn = document.getElementById('monGpsBtn');
+  if (__monWatchId !== null) {
+    navigator.geolocation.clearWatch(__monWatchId);
+    __monWatchId = null;
+    if (__monMarker) { __monMarker.setMap(null); __monMarker = null; }
+    btn.textContent = '📍 내 위치';
+    btn.style.background = '';
+    return;
+  }
+  if (!navigator.geolocation) { alert('GPS 미지원 브라우저'); return; }
+  __monWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const p = new kakao.maps.LatLng(lat, lng);
+      if (!__monMarker) {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+          <circle cx="14" cy="14" r="12" fill="#3498db" stroke="#fff" stroke-width="2.5" opacity="0.9"/>
+          <circle cx="14" cy="14" r="4" fill="#fff"/>
+        </svg>`;
+        const img = new kakao.maps.MarkerImage(
+          'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg),
+          new kakao.maps.Size(28, 28),
+          { offset: new kakao.maps.Point(14, 14) }
+        );
+        __monMarker = new kakao.maps.Marker({ position: p, map, image: img, title: '내 위치 (본부)', zIndex: 100 });
+      } else {
+        __monMarker.setPosition(p);
+      }
+    },
+    err => { alert('GPS 오류: ' + err.message); },
+    { enableHighAccuracy: true, maximumAge: 3000 }
+  );
+  btn.textContent = '⏸ 내 위치 OFF';
+  btn.style.background = '#3498db';
+  btn.style.color = '#fff';
 }
 </script>
 </body>
