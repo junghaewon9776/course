@@ -1412,14 +1412,17 @@ function deleteLog(key) {
 // ─── 모니터링 본부 내 위치 GPS ───
 let __monWatchId = null;
 let __monMarker = null;
+const __monLiveKey = 'monitor_' + Math.random().toString(36).slice(2, 8);
 function toggleMonitorGPS() {
   const btn = document.getElementById('monGpsBtn');
   if (__monWatchId !== null) {
     navigator.geolocation.clearWatch(__monWatchId);
     __monWatchId = null;
     if (__monMarker) { __monMarker.setMap(null); __monMarker = null; }
+    unpublishLiveSession(__monLiveKey);
     btn.textContent = '📍 내 위치';
     btn.style.background = '';
+    btn.style.color = '';
     return;
   }
   if (!navigator.geolocation) { alert('GPS 미지원 브라우저'); return; }
@@ -1444,6 +1447,13 @@ function toggleMonitorGPS() {
       } else {
         __monMarker.setPosition(p);
       }
+      // Firebase에도 본부 위치 publish → 운영 중인 사람들 지도에도 표시
+      publishLiveSession(__monLiveKey, {
+        lat, lng, heading: pos.coords.heading,
+        crew: { driver: '📊 본부', vehicleName: '본부' },
+        completedCount: 0, totalCount: 0,
+        startedAt: Date.now()
+      });
     },
     err => { alert('GPS 오류: ' + err.message); },
     { enableHighAccuracy: true, maximumAge: 3000 }
@@ -1452,6 +1462,10 @@ function toggleMonitorGPS() {
   btn.style.background = '#3498db';
   btn.style.color = '#fff';
 }
+// 페이지 떠날 때 본부 위치 정리
+window.addEventListener('beforeunload', () => {
+  if (__monWatchId !== null) unpublishLiveSession(__monLiveKey);
+});
 </script>
 </body>
 </html>
