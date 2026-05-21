@@ -73,7 +73,10 @@
           <button onclick="searchPlace()" style="white-space:nowrap;">🔍 검색</button>
         </div>
         <div id="searchResults" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #ddd;border-radius:5px;margin-bottom:8px;background:#fff;"></div>
-        <div id="map" class="map"></div>
+        <div style="position:relative;">
+          <div id="map" class="map"></div>
+          <div id="mapModeBanner" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;"></div>
+        </div>
         <p class="muted" style="margin-top:6px;">💡 검색 → 결과 클릭 / 지도 클릭 → 새 거점 추가 / 핀 드래그 → 위치 수정</p>
       </div>
     </div>
@@ -373,6 +376,19 @@ function setMode(mode) {
   // 거점 모드 외 옛날 indicator 숨김
   const ind = document.getElementById('clickModeIndicator');
   if (ind) ind.style.display = 'none';
+  // 지도 위 모드 안내 배너
+  const banner = document.getElementById('mapModeBanner');
+  if (banner) {
+    if (mode === 'complaint') {
+      banner.textContent = '📍 지도를 클릭하여 민원 위치를 선택하세요';
+      banner.style.cssText = 'display:block;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;background:#fcf3cf;color:#7d6608;border:2px solid #f1c40f;';
+    } else if (mode === 'noSpray') {
+      banner.textContent = '📍 지도를 클릭하여 방역불가 위치를 선택하세요';
+      banner.style.cssText = 'display:block;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;background:#fadbd8;color:#922b21;border:2px solid #e74c3c;';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
 }
 
 function toggleMode(mode) {
