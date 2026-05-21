@@ -1461,7 +1461,7 @@ function toggleMonitorGPS() {
       });
     },
     err => { alert('GPS 오류: ' + err.message); },
-    { enableHighAccuracy: true, maximumAge: 3000 }
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
   );
   btn.textContent = '⏸ 내 위치 OFF';
   btn.style.background = '#3498db';
