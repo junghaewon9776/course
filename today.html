@@ -44,6 +44,12 @@
         </div>
         <div class="op-toolbar">
           <button class="small" id="gpsToggle" onclick="toggleGPS()">📍 GPS 시작</button>
+          <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 전송 주기">
+            <option value="3000">3초</option>
+            <option value="5000">5초</option>
+            <option value="10000" selected>10초</option>
+            <option value="16000">16초</option>
+          </select>
           <button class="small gray" id="followToggle" onclick="toggleFollow()">🎯 따라가기</button>
           <button class="small gray" id="naviToggle" onclick="toggleNavi()">🧭 내비모드</button>
           <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
@@ -837,11 +843,15 @@ async function removePhoto(id) {
 }
 
 let __lastLivePublish = 0;
+let __liveIntervalMs = 10000;
+function setLiveInterval(ms) {
+  __liveIntervalMs = parseInt(ms, 10) || 10000;
+}
 function publishCurrentLive() {
   if (!currentSession || currentSession.finishedAt) return;
   if (!currentPos) return;
   const now = Date.now();
-  if (now - __lastLivePublish < 10000) return;
+  if (now - __lastLivePublish < __liveIntervalMs) return;
   __lastLivePublish = now;
   const data = loadData();
   const totalAnchors = (data.anchors || []).filter(a => a.courseId === currentSession.courseId).length;
