@@ -70,6 +70,7 @@
           운영 중인 차량의 실시간 위치 (갱신 주기 선택 가능, 5분 무업데이트면 자동 숨김)
         </p>
         <button id="monGpsBtn" class="small" onclick="toggleMonitorGPS()" style="white-space:nowrap;">📍 내 위치</button>
+        <button class="small" onclick="fitAllLiveMarkers()" style="white-space:nowrap;background:#e67e22;color:#fff;">🗺 전체보기</button>
       </div>
       <div id="liveList" style="max-height:320px;overflow-y:auto;"></div>
     </div>
@@ -1462,6 +1463,25 @@ function toggleMonitorGPS() {
   btn.style.background = '#3498db';
   btn.style.color = '#fff';
 }
+// 전체보기 — 모든 라이브 마커 + 내 위치가 보이게 지도 줌/위치 조정
+function fitAllLiveMarkers() {
+  const points = [];
+  for (const key of Object.keys(liveMarkers)) {
+    const pos = liveMarkers[key].getPosition();
+    points.push(pos);
+  }
+  if (__monMarker) points.push(__monMarker.getPosition());
+  if (!points.length) { alert('표시된 위치가 없습니다'); return; }
+  if (points.length === 1) {
+    map.setCenter(points[0]);
+    map.setLevel(4);
+    return;
+  }
+  const bounds = new kakao.maps.LatLngBounds();
+  points.forEach(p => bounds.extend(p));
+  map.setBounds(bounds, 80);
+}
+
 // 페이지 떠날 때 본부 위치 정리
 window.addEventListener('beforeunload', () => {
   if (__monWatchId !== null) unpublishLiveSession(__monLiveKey);
