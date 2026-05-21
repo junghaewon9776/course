@@ -396,15 +396,13 @@ function setMode(mode) {
   const banner = document.getElementById('mapModeBanner');
   if (banner) {
     const modeLabel = mode === 'complaint' ? '민원' : mode === 'noSpray' ? '방역불가' : '';
+    const colorMap = { complaint: 'background:#fcf3cf;color:#7d6608;border:2px solid #f1c40f;', noSpray: 'background:#fadbd8;color:#922b21;border:2px solid #e74c3c;' };
+    const borderMap = { complaint: '#f1c40f', noSpray: '#e74c3c' };
     if (modeLabel) {
       banner.innerHTML = `🔍 위 검색창에 <b>주소 입력</b> 또는 <b>지도 클릭</b>으로 ${modeLabel} 위치를 선택하세요`;
-      const colors = mode === 'complaint'
-        ? 'background:#fcf3cf;color:#7d6608;border:2px solid #f1c40f;'
-        : 'background:#fadbd8;color:#922b21;border:2px solid #e74c3c;';
-      banner.style.cssText = 'display:block;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;' + colors;
-      // 검색창 포커스 + 강조
+      banner.style.cssText = 'display:block;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;' + colorMap[mode];
       const si = document.getElementById('searchInput');
-      if (si) { si.focus(); si.placeholder = `${modeLabel} 위치 주소 검색 (예: 영광읍사무소)`; si.style.border = '2px solid ' + (mode === 'complaint' ? '#f1c40f' : '#e74c3c'); }
+      if (si) { si.focus(); si.placeholder = `${modeLabel} 위치 주소 검색 (예: 영광읍사무소)`; si.style.border = '2px solid ' + borderMap[mode]; }
     } else {
       banner.style.display = 'none';
       const si = document.getElementById('searchInput');
