@@ -1439,6 +1439,8 @@ function toggleMonitorGPS() {
           { offset: new kakao.maps.Point(14, 14) }
         );
         __monMarker = new kakao.maps.Marker({ position: p, map, image: img, title: '내 위치 (본부)', zIndex: 100 });
+        map.setCenter(p);
+        map.setLevel(4);
       } else {
         __monMarker.setPosition(p);
       }
