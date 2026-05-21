@@ -45,8 +45,8 @@
         <div class="op-toolbar">
           <button class="small" id="gpsToggle" onclick="toggleGPS()">📍 GPS 시작</button>
           <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 전송 주기">
+            <option value="0">실시간</option>
             <option value="3000">3초</option>
-            <option value="5000">5초</option>
             <option value="10000" selected>10초</option>
             <option value="15000">15초</option>
           </select>
