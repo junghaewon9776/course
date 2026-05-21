@@ -8,6 +8,22 @@
   <meta http-equiv="Expires" content="0">
   <title>관리자 - 코스 관리</title>
   <link rel="stylesheet" href="style.css?v=20260512v">
+  <style>
+    .fm-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;}
+    .fm-box{background:#fff;border-radius:12px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.25);}
+    .fm-header{padding:16px 20px 12px;border-bottom:1px solid #eee;font-size:16px;font-weight:700;display:flex;justify-content:space-between;align-items:center;}
+    .fm-header button{background:none;border:none;font-size:22px;cursor:pointer;color:#888;padding:0 4px;}
+    .fm-body{padding:16px 20px;}
+    .fm-body label{display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:4px;margin-top:12px;}
+    .fm-body label:first-child{margin-top:0;}
+    .fm-body input,.fm-body textarea{width:100%;padding:10px;border:1px solid #d0d5dd;border-radius:8px;font-size:14px;box-sizing:border-box;}
+    .fm-body textarea{resize:vertical;min-height:60px;}
+    .fm-body .fm-hint{font-size:11px;color:#888;margin-top:2px;}
+    .fm-footer{padding:12px 20px 16px;display:flex;gap:8px;justify-content:flex-end;}
+    .fm-footer button{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;}
+    .fm-save{background:#3498db;color:#fff;} .fm-save:hover{background:#2980b9;}
+    .fm-cancel{background:#eee;color:#333;} .fm-cancel:hover{background:#ddd;}
+  </style>
 </head>
 <body>
 <header>
@@ -400,25 +416,62 @@ function toggleMode(mode) {
   setMode(mode);
 }
 
-function addNoSprayAt(lat, lng, areaHint = '') {
-  const name = prompt('방역불가 지역 이름 (예: 장어 양식장, 양봉장)', areaHint);
-  if (name === null) return;
-  const reason = prompt('이유 / 메모 (선택)', '') || '';
-  const radiusInput = prompt('금지 반경 (미터, 예: 50)', '50');
-  if (radiusInput === null) return;
-  const radius = Math.max(5, parseInt(radiusInput, 10) || 50);
-  const data = loadData();
-  if (!Array.isArray(data.noSprayZones)) data.noSprayZones = [];
-  data.noSprayZones.push({
-    id: uid(),
-    lat, lng,
-    name: (name || '방역불가').trim(),
-    reason: reason.trim(),
-    radius,
-    createdAt: Date.now()
+/* ── 범용 폼 모달 ── */
+function openFormModal(title, fields, onSave) {
+  // fields = [{ key, label, type:'text'|'textarea'|'number'|'tel', value, placeholder, hint }]
+  const ov = document.createElement('div');
+  ov.className = 'fm-overlay';
+  const rows = fields.map(f => {
+    const tag = f.type === 'textarea'
+      ? `<textarea id="fm_${f.key}" placeholder="${f.placeholder || ''}">${f.value || ''}</textarea>`
+      : `<input id="fm_${f.key}" type="${f.type || 'text'}" value="${(f.value || '').replace(/"/g,'&quot;')}" placeholder="${f.placeholder || ''}">`;
+    return `<label>${f.label}</label>${tag}${f.hint ? `<div class="fm-hint">${f.hint}</div>` : ''}`;
+  }).join('');
+  ov.innerHTML = `<div class="fm-box">
+    <div class="fm-header"><span>${title}</span><button onclick="this.closest('.fm-overlay').remove()">&times;</button></div>
+    <div class="fm-body">${rows}</div>
+    <div class="fm-footer"><button class="fm-cancel" onclick="this.closest('.fm-overlay').remove()">취소</button><button class="fm-save" id="fmSaveBtn">저장</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  // 첫 필드 포커스
+  const first = ov.querySelector('.fm-body input, .fm-body textarea');
+  if (first) setTimeout(() => first.focus(), 50);
+  // 저장
+  ov.querySelector('#fmSaveBtn').onclick = () => {
+    const result = {};
+    fields.forEach(f => {
+      const el = ov.querySelector('#fm_' + f.key);
+      result[f.key] = el ? el.value : '';
+    });
+    ov.remove();
+    onSave(result);
+  };
+  // Enter 키로 저장 (textarea 제외)
+  ov.querySelectorAll('.fm-body input').forEach(inp => {
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ov.querySelector('#fmSaveBtn').click(); } });
   });
-  saveData(data);
-  refreshAll();
+}
+
+function addNoSprayAt(lat, lng, areaHint = '') {
+  openFormModal('🚫 방역불가 지역 추가', [
+    { key: 'name', label: '지역 이름', placeholder: '예: 장어 양식장, 양봉장', value: areaHint },
+    { key: 'reason', label: '이유 / 메모 (선택)', placeholder: '예: 양봉장 밀집 구역' },
+    { key: 'radius', label: '금지 반경 (미터)', type: 'number', value: '50', placeholder: '50' }
+  ], r => {
+    if (!r.name.trim()) { alert('이름을 입력하세요'); return; }
+    const radius = Math.max(5, parseInt(r.radius, 10) || 50);
+    const data = loadData();
+    if (!Array.isArray(data.noSprayZones)) data.noSprayZones = [];
+    data.noSprayZones.push({
+      id: uid(), lat, lng,
+      name: r.name.trim(),
+      reason: (r.reason || '').trim(),
+      radius,
+      createdAt: Date.now()
+    });
+    saveData(data); refreshAll();
+  });
 }
 
 function deleteNoSprayZone(id) {
@@ -432,17 +485,17 @@ function editNoSprayZone(id) {
   const data = loadData();
   const z = (data.noSprayZones || []).find(x => x.id === id);
   if (!z) return;
-  const name = prompt('이름', z.name || '');
-  if (name === null) return;
-  const reason = prompt('사유 (선택)', z.reason || '');
-  if (reason === null) return;
-  const radiusStr = prompt('반경 (m, 숫자)', String(z.radius || 50));
-  if (radiusStr === null) return;
-  const radius = parseInt(radiusStr, 10);
-  z.name = name.trim();
-  z.reason = reason.trim();
-  if (!isNaN(radius) && radius > 0) z.radius = radius;
-  saveData(data); refreshAll();
+  openFormModal('🚫 방역불가 수정', [
+    { key: 'name', label: '이름', value: z.name || '' },
+    { key: 'reason', label: '사유 (선택)', value: z.reason || '' },
+    { key: 'radius', label: '반경 (m)', type: 'number', value: String(z.radius || 50) }
+  ], r => {
+    z.name = r.name.trim();
+    z.reason = (r.reason || '').trim();
+    const radius = parseInt(r.radius, 10);
+    if (!isNaN(radius) && radius > 0) z.radius = radius;
+    saveData(data); refreshAll();
+  });
 }
 
 function handleMapClick(lat, lng) {
@@ -468,15 +521,18 @@ function handleMapClick(lat, lng) {
     alert('먼저 "거점" 패널에서 대상 코스를 선택하세요');
     return;
   }
-  const name = prompt('거점 이름 (예: 행복어린이집 정문)');
-  if (!name) return;
-  const memo = prompt('메모 (정차 위치, 골목 안내 등) - 선택', '') || '';
-  if (!data.anchors) data.anchors = [];
-  const order = data.anchors.filter(a => a.courseId === courseId).length + 1;
-  const eventId = getCourseEventId(data, courseId);
-  data.anchors.push({ id: uid(), name, lat, lng, memo, eventId, courseId, order });
-  saveData(data);
-  refreshAll();
+  openFormModal('📍 거점 추가', [
+    { key: 'name', label: '거점 이름', placeholder: '예: 행복어린이집 정문' },
+    { key: 'memo', label: '메모 (선택)', placeholder: '정차 위치, 골목 안내 등' }
+  ], r => {
+    if (!r.name.trim()) { alert('이름을 입력하세요'); return; }
+    const d = loadData();
+    if (!d.anchors) d.anchors = [];
+    const order = d.anchors.filter(a => a.courseId === courseId).length + 1;
+    const eventId = getCourseEventId(d, courseId);
+    d.anchors.push({ id: uid(), name: r.name.trim(), lat, lng, memo: (r.memo || '').trim(), eventId, courseId, order });
+    saveData(d); refreshAll();
+  });
 }
 
 // ────── 주소/장소 검색 ──────
@@ -794,23 +850,21 @@ function pickSearchResult(r) {
     closeSearchResults();
     return;
   }
-  if (!confirm(`"${r.name}"\n${r.address || ''}\n\n이 위치를 거점으로 추가할까요?`)) {
-    closeSearchResults();
-    return;
-  }
-  const name = prompt('거점 이름', r.name);
-  if (!name) { closeSearchResults(); return; }
-  const memo = prompt('메모 (선택)', r.address || '') || '';
-
-  const data = loadData();
-  if (!data.anchors) data.anchors = [];
-  const order = data.anchors.filter(a => a.courseId === courseId).length + 1;
-  const eventId = getCourseEventId(data, courseId);
-  data.anchors.push({ id: uid(), name, lat: r.lat, lng: r.lng, memo, eventId, courseId, order });
-  saveData(data);
   closeSearchResults();
-  document.getElementById('searchInput').value = '';
-  refreshAll();
+  openFormModal('📍 거점 추가 — 검색 결과', [
+    { key: 'name', label: '거점 이름', value: r.name },
+    { key: 'memo', label: '메모 (선택)', value: r.address || '', placeholder: '정차 위치, 골목 안내 등' }
+  ], res => {
+    if (!res.name.trim()) { alert('이름을 입력하세요'); return; }
+    const data = loadData();
+    if (!data.anchors) data.anchors = [];
+    const order = data.anchors.filter(a => a.courseId === courseId).length + 1;
+    const eventId = getCourseEventId(data, courseId);
+    data.anchors.push({ id: uid(), name: res.name.trim(), lat: r.lat, lng: r.lng, memo: (res.memo || '').trim(), eventId, courseId, order });
+    saveData(data);
+    document.getElementById('searchInput').value = '';
+    refreshAll();
+  });
 }
 
 function refreshAll() {
@@ -1508,30 +1562,29 @@ function moveAnchor(id, dir) {
 function editAnchor(id) {
   const data = loadData();
   const a = data.anchors.find(x => x.id === id);
-  const name = prompt('거점 이름', a.name);
-  if (name === null) return;
-  const memo = prompt('메모', a.memo || '');
-  if (memo === null) return;
-  // 이장 배정 (콤마로 여러 명, 이름 또는 전화번호로 매칭)
+  if (!a) return;
   const villageHeads = (a.villageHeadIds || [])
     .map(mid => (data.members || []).find(m => m.id === mid))
     .filter(Boolean)
     .map(m => m.name)
     .join(', ');
-  const newHeads = prompt(
-    '담당 이장님 (콤마로 여러 명, 이름 입력)\n예: 김이장, 박이장\n빈칸 = 없음',
-    villageHeads
-  );
-  if (newHeads === null) return;
-  const headNames = newHeads.split(',').map(s => s.trim()).filter(Boolean);
-  const headIds = [];
-  for (const nm of headNames) {
-    const m = (data.members || []).find(x => x.name === nm);
-    if (m) headIds.push(m.id);
-    else alert(`회원 명단에 "${nm}" 없음 — 건너뜀 (members.html에서 먼저 등록)`);
-  }
-  a.name = name; a.memo = memo; a.villageHeadIds = headIds;
-  saveData(data); refreshAll();
+  openFormModal('📍 거점 수정', [
+    { key: 'name', label: '거점 이름', value: a.name },
+    { key: 'memo', label: '메모', value: a.memo || '' },
+    { key: 'heads', label: '담당 이장님', value: villageHeads, placeholder: '콤마로 여러 명 (예: 김이장, 박이장)', hint: '빈칸 = 없음 · 회원에 등록된 이름만 가능' }
+  ], r => {
+    const headNames = (r.heads || '').split(',').map(s => s.trim()).filter(Boolean);
+    const headIds = [];
+    for (const nm of headNames) {
+      const m = (data.members || []).find(x => x.name === nm);
+      if (m) headIds.push(m.id);
+      else alert(`회원 명단에 "${nm}" 없음 — 건너뜀 (members.html에서 먼저 등록)`);
+    }
+    a.name = r.name.trim() || a.name;
+    a.memo = (r.memo || '').trim();
+    a.villageHeadIds = headIds;
+    saveData(data); refreshAll();
+  });
 }
 function deleteAnchor(id) {
   if (!confirm('이 거점을 삭제할까요?')) return;
@@ -1551,24 +1604,22 @@ function startAddComplaint() {
 function addComplaintAt(lat, lng, areaHint = '') {
   const eventId = document.getElementById('complaintEventSel').value;
   if (!eventId) { alert('대상 행사 미선택'); return; }
-  const phone = prompt('민원인 연락처 (예: 010-1234-5678)', '');
-  if (phone === null) return;
-  const content = prompt('민원 내용', areaHint || '');
-  if (content === null) return;
-  const data = loadData();
-  if (!Array.isArray(data.complaints)) data.complaints = [];
-  data.complaints.push({
-    id: uid(),
-    eventId,
-    lat, lng,
-    phone: (phone || '').trim(),
-    content: (content || '').trim(),
-    area: areaHint || '',
-    status: 'pending',
-    createdAt: Date.now()
+  openFormModal('📞 민원 추가', [
+    { key: 'phone', label: '민원인 연락처', type: 'tel', placeholder: '예: 010-1234-5678' },
+    { key: 'content', label: '민원 내용', type: 'textarea', value: areaHint || '', placeholder: '민원 내용을 입력하세요' }
+  ], r => {
+    const data = loadData();
+    if (!Array.isArray(data.complaints)) data.complaints = [];
+    data.complaints.push({
+      id: uid(), eventId, lat, lng,
+      phone: (r.phone || '').trim(),
+      content: (r.content || '').trim(),
+      area: areaHint || '',
+      status: 'pending',
+      createdAt: Date.now()
+    });
+    saveData(data); refreshAll();
   });
-  saveData(data);
-  refreshAll();
 }
 
 function renderComplaints() {
@@ -1635,13 +1686,14 @@ function editComplaint(id) {
   const data = loadData();
   const c = (data.complaints || []).find(x => x.id === id);
   if (!c) return;
-  const newPhone = prompt('연락처', c.phone || '');
-  if (newPhone === null) return;
-  const newContent = prompt('민원 내용', c.content || '');
-  if (newContent === null) return;
-  c.phone = newPhone.trim();
-  c.content = newContent.trim();
-  saveData(data); refreshAll();
+  openFormModal('📞 민원 수정', [
+    { key: 'phone', label: '연락처', type: 'tel', value: c.phone || '' },
+    { key: 'content', label: '민원 내용', type: 'textarea', value: c.content || '' }
+  ], r => {
+    c.phone = (r.phone || '').trim();
+    c.content = (r.content || '').trim();
+    saveData(data); refreshAll();
+  });
 }
 
 function convertComplaintToAnchor(id) {
