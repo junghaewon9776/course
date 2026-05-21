@@ -70,7 +70,6 @@
           운영 중인 차량의 실시간 위치 (갱신 주기 선택 가능, 5분 무업데이트면 자동 숨김)
         </p>
         <button id="monGpsBtn" class="small" onclick="toggleMonitorGPS()" style="white-space:nowrap;">📍 내 위치</button>
-        <button class="small" onclick="fitAllLiveMarkers()" style="white-space:nowrap;background:#e67e22;color:#fff;">🗺 전체보기</button>
       </div>
       <div id="liveList" style="max-height:320px;overflow-y:auto;"></div>
     </div>
@@ -129,7 +128,10 @@
     <div class="col" style="flex:2;min-width:400px;">
       <div class="card">
         <h2>지도 (선택한 운행 궤적 / 운영 중 차량)</h2>
-        <div id="map" class="map"></div>
+        <div style="position:relative;">
+          <div id="map" class="map"></div>
+          <button onclick="fitAllLiveMarkers()" style="position:absolute;bottom:12px;right:12px;z-index:10;background:#e67e22;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🗺 전체</button>
+        </div>
         <div id="logInfo" class="muted" style="margin-top:8px;"></div>
       </div>
     </div>
@@ -1068,10 +1070,12 @@ function renderLive(live) {
         : `<div style="background:${it.color};color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">${(it.driver||'?').slice(0,1)}</div>`;
       return `
         <div style="display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid #eee;${isFollowing ? 'background:#e8f8f5;' : ''}">
-          ${leftBadge}
-          <div style="flex:1;min-width:0;">
-            <div class="name" style="font-weight:600;color:#2c3e50;">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')} · ${escapeHtml(it.driver)}</div>
-            <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}</div>
+          <div onclick="focusLiveMarker('${safeKey}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+            ${leftBadge}
+            <div style="flex:1;min-width:0;">
+              <div class="name" style="font-weight:600;color:#2c3e50;">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')} · ${escapeHtml(it.driver)}</div>
+              <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}</div>
+            </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex:none;">
             <button onclick="toggleFollowDriver('${safeKey}')" style="background:${followBg};color:#fff;border:none;padding:6px 10px;border-radius:5px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">${followLabel}</button>
@@ -1463,6 +1467,23 @@ function toggleMonitorGPS() {
   btn.style.background = '#3498db';
   btn.style.color = '#fff';
 }
+// 리스트 항목 클릭 → 지도로 스크롤 + 해당 마커 포커스
+function focusLiveMarker(key) {
+  const m = liveMarkers[key];
+  if (!m) return;
+  document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  map.setCenter(m.getPosition());
+  map.setLevel(Math.min(map.getLevel(), 4));
+  // InfoWindow 열기
+  Object.values(liveMarkers).forEach(om => { try { om.setZIndex(50); } catch(e){} });
+  m.setZIndex(999);
+  if (m.__iw) {
+    if (window.__monIw && window.__monIw !== m.__iw) try { window.__monIw.close(); } catch(e){}
+    m.__iw.open(map, m);
+    window.__monIw = m.__iw;
+  }
+}
+
 // 전체보기 — 모든 라이브 마커 + 내 위치가 보이게 지도 줌/위치 조정
 function fitAllLiveMarkers() {
   const points = [];
