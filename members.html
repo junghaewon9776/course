@@ -791,8 +791,38 @@ async function makeAllMemberAccounts() {
 async function resetMemberPin(memberId) {
   const data = loadData();
   const m = getMember(data, memberId);
-  if (!m) return;
-  alert('PIN 재설정은 아직 지원되지 않아요.\nFirebase 콘솔 → Authentication → Users 에서 비밀번호 재설정 가능합니다.\n또는 계정 삭제 후 새로 생성하세요.');
+  if (!m || !m.phone) return;
+  if (!confirm(`${m.name}님의 PIN을 ${DEFAULT_PIN}(기본)으로 초기화할까요?`)) return;
+
+  const email = memberEmail(m.phone);
+  const newPw = pinToPassword(DEFAULT_PIN);
+  const secAuth = getSecondaryAuth();
+
+  // 여러 비번 후보로 로그인 시도
+  const candidates = [newPw, pinToPassword('123456'), pinToPassword('1234')];
+  // 중복 제거
+  const unique = [...new Set(candidates)];
+
+  let done = false;
+  for (const tryPw of unique) {
+    try {
+      const cred = await secAuth.signInWithEmailAndPassword(email, tryPw);
+      if (tryPw !== newPw) await cred.user.updatePassword(newPw);
+      const uid = cred.user.uid;
+      await secAuth.signOut();
+      // 기본 PIN 플래그 설정
+      const fresh = loadData();
+      if (fresh.memberPinFlags) { fresh.memberPinFlags[uid] = true; saveData(fresh); }
+      done = true;
+      break;
+    } catch (ex) { /* 다음 후보 */ }
+  }
+
+  if (done) {
+    alert(`✅ ${m.name}님 PIN → ${DEFAULT_PIN} 초기화 완료\n\n본인에게 안내해주세요.`);
+  } else {
+    alert(`❌ PIN 초기화 실패\n\n비밀번호를 알 수 없습니다.\n[계정] 버튼으로 새로 생성하면 자동으로 기본 PIN이 적용됩니다.`);
+  }
 }
 
 // ────── 양식 / 엑셀 다운로드/업로드 ──────
