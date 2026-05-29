@@ -697,7 +697,28 @@ async function doLogin() {
   }
 
   try {
-    await adminSignIn(email, password);
+    // 회원(전화번호) 로그인 — 입력 PIN 실패 시 이전 기본 PIN들도 시도
+    let loggedIn = false;
+    if (isPhone) {
+      const candidates = [password];
+      if (pinToPassword('123456') !== password) candidates.push(pinToPassword('123456'));
+      if (pinToPassword('1234') !== password) candidates.push(pinToPassword('1234'));
+      for (const tryPw of candidates) {
+        try {
+          await adminSignIn(email, tryPw);
+          loggedIn = true;
+          // 비번이 입력한 것과 다르면 업데이트
+          if (tryPw !== password) {
+            try { await fbAuth.currentUser.updatePassword(password); } catch(ue){}
+          }
+          break;
+        } catch (ex) { /* 다음 후보 */ }
+      }
+      if (!loggedIn) throw new Error('ID/비번 확인');
+    } else {
+      await adminSignIn(email, password);
+    }
+
     localStorage.setItem('lastAdminId', id);
     document.getElementById('loginGate').remove();
     initFirebaseSync();
@@ -707,13 +728,13 @@ async function doLogin() {
       const u = (loadData().users || {})[fbAuth.currentUser?.uid] || {};
       getClientIP().then(ip => {
         const dev = getDeviceType();
-        sendTelegram(`🔐 <b>관리자 로그인</b>\nID: ${id}\n이름: ${u.name || '-'}\n시각: ${new Date().toLocaleString('ko-KR')}\n접속: ${dev} · IP ${ip}`);
+        sendTelegram(`🔐 <b>로그인</b>\nID: ${id}\n이름: ${u.name || '-'}\n시각: ${new Date().toLocaleString('ko-KR')}\n접속: ${dev} · IP ${ip}`);
       });
     });
     // 초기비번 123456면 변경 강제
-    if (pw === '123456') setTimeout(promptPasswordChange, 600);
+    if (!isPhone && pw === '123456') setTimeout(promptPasswordChange, 600);
   } catch (e) {
-    err.textContent = '로그인 실패: ' + (e.message.includes('password') || e.message.includes('user') ? 'ID/비번 확인' : e.message);
+    err.textContent = '로그인 실패: ID/비번 확인';
     document.getElementById('loginPw').value = '';
   }
 }
