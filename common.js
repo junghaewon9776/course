@@ -578,6 +578,39 @@ function getCurrentMember() {
   return getMemberByUid(loadData(), u.uid);
 }
 
+// ───────── 회원/관리자 구분 + 접근 제어 ─────────
+// 현재 로그인 사용자가 일반 회원인지 (전화번호+PIN 로그인)
+function isMemberUser() {
+  const u = fbAuth.currentUser;
+  if (!u || !u.email) return false;
+  return /@bsp\.local$/i.test(u.email);
+}
+
+// 회원이 접근 가능한 페이지 (파일명)
+const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor.html', 'monitor-public.html', 'stats.html', 'print.html'];
+
+// 네비게이션에서 관리자 전용 링크 숨기기
+function applyMemberNav() {
+  if (!isMemberUser()) return;
+  document.querySelectorAll('nav a').forEach(a => {
+    const href = (a.getAttribute('href') || '').split('?')[0];
+    if (['admin.html', 'members.html', 'accounts.html'].includes(href)) {
+      a.style.display = 'none';
+    }
+  });
+}
+
+// 관리자 전용 페이지에서 회원 차단
+function blockMemberAccess() {
+  const page = location.pathname.split('/').pop() || 'index.html';
+  if (isMemberUser() && !MEMBER_ALLOWED_PAGES.includes(page)) {
+    alert('관리자만 접근 가능한 페이지입니다.');
+    location.href = 'index.html';
+    return true;
+  }
+  return false;
+}
+
 function checkAdminAuth() {
   return new Promise((resolve) => {
     let resolved = false;
@@ -601,6 +634,11 @@ function checkAdminAuth() {
             });
           });
         }
+        // 회원 접근 제어
+        onDataReady(() => {
+          if (blockMemberAccess()) return;
+          applyMemberNav();
+        });
         resolve(true);
       } else {
         resolved = true;
@@ -722,6 +760,11 @@ async function doLogin() {
     localStorage.setItem('lastAdminId', id);
     document.getElementById('loginGate').remove();
     initFirebaseSync();
+    // 회원 접근 제어
+    onDataReady(() => {
+      if (blockMemberAccess()) return;
+      applyMemberNav();
+    });
     if (window.onAuthSuccess) window.onAuthSuccess();
     // 텔레그램: 로그인 알림 (Firebase 데이터 도착 후, 기기+IP 포함)
     onDataReady(() => {
