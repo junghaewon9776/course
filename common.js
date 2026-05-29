@@ -483,7 +483,7 @@ function memberEmail(phone) {
 function pinToPassword(pin) {
   return String(pin).padStart(4, '0') + 'bsp';
 }
-const DEFAULT_PIN = '123456';
+const DEFAULT_PIN = '1234';
 
 async function memberLogin(phone, pin) {
   return fbAuth.signInWithEmailAndPassword(memberEmail(phone), pinToPassword(pin));
@@ -501,15 +501,42 @@ function getSecondaryAuth() {
 
 async function createMemberAccount(memberId, phone, pin) {
   const secAuth = getSecondaryAuth();
-  const cred = await secAuth.createUserWithEmailAndPassword(memberEmail(phone), pinToPassword(pin));
-  const uid = cred.user.uid;
-  await secAuth.signOut();
+  const email = memberEmail(phone);
+  const pw = pinToPassword(pin);
+  let uid;
+
+  // 전략: 로그인 먼저 → 없으면 생성 (email-already-in-use 에러 회피)
+  const passwords = [pw];
+  if (pinToPassword(DEFAULT_PIN) !== pw) passwords.push(pinToPassword(DEFAULT_PIN));
+  if (pinToPassword('123456') !== pw && pinToPassword('123456') !== pinToPassword(DEFAULT_PIN))
+    passwords.push(pinToPassword('123456'));
+
+  // 1) 기존 계정 로그인 시도
+  for (const tryPw of passwords) {
+    try {
+      const cred = await secAuth.signInWithEmailAndPassword(email, tryPw);
+      uid = cred.user.uid;
+      if (tryPw !== pw) { try { await cred.user.updatePassword(pw); } catch(e){} }
+      await secAuth.signOut();
+      break;
+    } catch (ex) { /* 다음 후보 */ }
+  }
+
+  // 2) 로그인 실패 → 신규 생성
+  if (!uid) {
+    try {
+      const cred = await secAuth.createUserWithEmailAndPassword(email, pw);
+      uid = cred.user.uid;
+      await secAuth.signOut();
+    } catch (e) {
+      throw new Error(phone + ' 계정 생성 실패: ' + (e.message || e.code));
+    }
+  }
 
   // memberId ↔ uid 매핑 저장
   const data = loadData();
   if (!data.memberAuth) data.memberAuth = {};
   data.memberAuth[uid] = memberId;
-  // 기본 PIN 사용 시 변경 필요 플래그
   if (!data.memberPinFlags) data.memberPinFlags = {};
   data.memberPinFlags[uid] = (pin === DEFAULT_PIN);
   saveData(data);
@@ -559,6 +586,21 @@ function checkAdminAuth() {
       if (user && user.email) {
         resolved = true;
         initFirebaseSync();
+        // 캐시 자동로그인 알림 (세션당 1회만)
+        if (!sessionStorage.getItem('_loginNotified')) {
+          sessionStorage.setItem('_loginNotified', '1');
+          const page = location.pathname.split('/').pop() || 'index.html';
+          onDataReady(() => {
+            const ui = (loadData().users || {})[user.uid] || {};
+            const member = getMemberByUid(loadData(), user.uid);
+            const name = ui.name || (member && member.name) || user.email;
+            const role = ui.role || (member ? '회원' : '-');
+            getClientIP().then(ip => {
+              const dev = getDeviceType();
+              sendTelegram(`🔓 <b>자동접속</b>\n이름: ${name}\nID: ${user.email}\n권한: ${role}\n페이지: ${page}\n시각: ${new Date().toLocaleString('ko-KR')}\n접속: ${dev} · IP ${ip}`);
+            });
+          });
+        }
         resolve(true);
       } else {
         resolved = true;

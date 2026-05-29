@@ -98,7 +98,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260512v"></script>
+<script src="common.js?v=20260529d"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -704,10 +704,18 @@ async function makeMemberAccount(memberId) {
   const pin = m.pin || DEFAULT_PIN;
   if (!confirm(`${m.name}님 계정 생성?\n\n로그인 ID: ${m.phone}\nPIN: ${pin}\n\n(첫 로그인 후 변경 안내됨)`)) return;
 
+  // 로딩 표시
+  const modal = document.createElement('div');
+  modal.id = 'singleModal';
+  modal.innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;"><div style="background:#fff;border-radius:10px;padding:24px;text-align:center;"><div style="font-size:30px;">⏳</div><p style="margin:8px 0 0;color:#555;">'+m.name+'님 계정 생성 중...</p></div></div>';
+  document.body.appendChild(modal);
+
   try {
     await createMemberAccount(memberId, m.phone, pin);
+    modal.remove();
     alert(`✅ 계정 생성 완료\n\n${m.name}님께 안내:\n• 로그인: ${m.phone}\n• PIN: ${pin}`);
   } catch (e) {
+    modal.remove();
     alert('생성 실패: ' + e.message);
   }
 }
@@ -719,21 +727,65 @@ async function makeAllMemberAccounts() {
   const existingMemberIds = new Set(Object.values(memberAuth));
   const target = members.filter(m => m.phone && !existingMemberIds.has(m.id));
   if (!target.length) { alert('새로 만들 계정이 없습니다.\n(전화번호가 있고 아직 계정 없는 회원이 없음)'); return; }
-  if (!confirm(`${target.length}명의 계정을 일괄 생성합니다.\n각자 PIN: 1234 (기본)\n\n계속할까요?`)) return;
+  if (!confirm(`${target.length}명의 계정을 일괄 생성합니다.\n각자 PIN: ${DEFAULT_PIN} (기본)\n\n계속할까요?`)) return;
+
+  // 진행 모달
+  const modal = document.createElement('div');
+  modal.id = 'bulkModal';
+  modal.innerHTML = `
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:12px;padding:28px 24px;width:340px;max-width:92vw;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+        <div style="font-size:36px;margin-bottom:10px;">⏳</div>
+        <h3 style="margin:0 0 6px;color:#2c3e50;" id="bulkTitle">계정 일괄 생성 중...</h3>
+        <p style="color:#555;font-size:13px;margin-bottom:14px;">브라우저를 닫지 마세요</p>
+        <div style="background:#ecf0f1;border-radius:8px;height:22px;overflow:hidden;margin-bottom:10px;">
+          <div id="bulkBar" style="height:100%;background:linear-gradient(90deg,#3498db,#2ecc71);border-radius:8px;width:0%;transition:width 0.3s;"></div>
+        </div>
+        <div id="bulkStatus" style="font-size:13px;color:#666;">0 / ${target.length}</div>
+        <div id="bulkDetail" style="font-size:11px;color:#999;margin-top:4px;min-height:16px;"></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  const bar = document.getElementById('bulkBar');
+  const status = document.getElementById('bulkStatus');
+  const detail = document.getElementById('bulkDetail');
+  const title = document.getElementById('bulkTitle');
 
   let ok = 0, fail = 0;
   const errors = [];
-  for (const m of target) {
+  for (let i = 0; i < target.length; i++) {
+    const m = target[i];
+    detail.textContent = m.name + ' (' + m.phone + ')';
     try {
       const pin = m.pin || DEFAULT_PIN;
       await createMemberAccount(m.id, m.phone, pin);
       ok++;
     } catch (e) {
       fail++;
-      errors.push(`${m.name}(${m.phone}): ${e.message}`);
+      errors.push(m.name + '(' + m.phone + '): ' + e.message);
     }
+    const pct = Math.round(((i + 1) / target.length) * 100);
+    bar.style.width = pct + '%';
+    status.textContent = (i + 1) + ' / ' + target.length + '  (✅' + ok + ' ❌' + fail + ')';
   }
-  alert(`✅ ${ok}명 생성\n❌ ${fail}명 실패\n\n${errors.slice(0,5).join('\n')}${errors.length>5?'\n...':''}`);
+
+  // 완료 표시
+  title.textContent = '계정 생성 완료';
+  detail.textContent = '';
+  modal.querySelector('div > div > div:first-child').textContent = fail > 0 ? '⚠️' : '✅';
+  status.innerHTML = '<b>✅ ' + ok + '명 성공</b>' + (fail > 0 ? ' · <span style="color:#e74c3c;">❌ ' + fail + '명 실패</span>' : '');
+  if (errors.length) {
+    detail.innerHTML = '<div style="text-align:left;max-height:120px;overflow-y:auto;margin-top:8px;padding:8px;background:#fef5f5;border-radius:6px;font-size:11px;color:#c0392b;">'
+      + errors.map(e => '• ' + e).join('<br>') + '</div>';
+  }
+  // 닫기 버튼
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '닫기';
+  closeBtn.style.cssText = 'margin-top:14px;padding:8px 28px;';
+  closeBtn.onclick = () => { modal.remove(); renderMembers(); };
+  modal.querySelector('div > div').appendChild(closeBtn);
 }
 
 async function resetMemberPin(memberId) {
