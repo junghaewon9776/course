@@ -589,24 +589,56 @@ function isMemberUser() {
 // 회원이 접근 가능한 페이지 (파일명)
 const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor.html', 'monitor-public.html', 'stats.html', 'print.html'];
 
-// 네비게이션에서 관리자 전용 링크 숨기기
+// 네비게이션 접근 제어
 function applyMemberNav() {
-  if (!isMemberUser()) return;
+  const u = fbAuth.currentUser;
+  const isMember = isMemberUser();
+  const data = loadData();
+  const myRole = (data.users || {})[u?.uid]?.role || '';
+
   document.querySelectorAll('nav a').forEach(a => {
     const href = (a.getAttribute('href') || '').split('?')[0];
-    if (['admin.html', 'members.html', 'accounts.html'].includes(href)) {
+    // 회원: 관리/인원/계정 숨김
+    if (isMember && ['admin.html', 'members.html', 'accounts.html'].includes(href)) {
+      a.style.display = 'none';
+    }
+    // 계정관리: super만
+    if (!isMember && href === 'accounts.html' && myRole !== 'super') {
       a.style.display = 'none';
     }
   });
+
+  // 인쇄 링크 추가 (없으면)
+  const nav = document.querySelector('nav');
+  if (nav && !nav.querySelector('a[href="print.html"]')) {
+    const logoutLink = nav.querySelector('a[onclick*="Logout"]');
+    const printLink = document.createElement('a');
+    printLink.href = 'print.html';
+    printLink.textContent = '인쇄';
+    if (logoutLink) nav.insertBefore(printLink, logoutLink);
+    else nav.appendChild(printLink);
+  }
 }
 
 // 관리자 전용 페이지에서 회원 차단
 function blockMemberAccess() {
   const page = location.pathname.split('/').pop() || 'index.html';
+  // 회원 → 허용 페이지만
   if (isMemberUser() && !MEMBER_ALLOWED_PAGES.includes(page)) {
     alert('관리자만 접근 가능한 페이지입니다.');
     location.href = 'index.html';
     return true;
+  }
+  // 계정관리 → super만
+  if (page === 'accounts.html' && !isMemberUser()) {
+    const data = loadData();
+    const u = fbAuth.currentUser;
+    const myRole = (data.users || {})[u?.uid]?.role || '';
+    if (myRole !== 'super') {
+      alert('계정관리는 super 권한만 접근 가능합니다.');
+      location.href = 'index.html';
+      return true;
+    }
   }
   return false;
 }
