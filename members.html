@@ -812,9 +812,10 @@ async function resetMemberPin(memberId) {
   const newPw = pinToPassword(DEFAULT_PIN);
   const secAuth = getSecondaryAuth();
 
-  // 여러 비번 후보로 로그인 시도
-  const candidates = [newPw, pinToPassword('123456'), pinToPassword('1234')];
-  // 중복 제거
+  // 여러 비번 후보로 로그인 시도 (DB에 저장된 PIN 우선)
+  const candidates = [newPw];
+  if (m.pin) candidates.push(pinToPassword(m.pin));
+  candidates.push(pinToPassword('123456'), pinToPassword('1234'));
   const unique = [...new Set(candidates)];
 
   let done = false;
