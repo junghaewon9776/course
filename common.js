@@ -334,25 +334,50 @@ async function getClientIP() {
 // 사이트 URL (GitHub Pages)
 const __siteUrl = location.origin + location.pathname.replace(/[^/]*$/, '');
 
-// 현재 사용자 + IP + IP별명 텍스트
+// 기기 이름 (localStorage 기반)
+const __deviceNameKey = 'bsp_device_name';
+function getDeviceName() { return localStorage.getItem(__deviceNameKey) || ''; }
+function setDeviceName(name) { localStorage.setItem(__deviceNameKey, name); }
+
+// 새 기기 감지 바 표시
+function showDeviceNameBar() {
+  if (getDeviceName()) return; // 이미 등록됨
+  if (document.getElementById('deviceNameBar')) return; // 이미 떠있음
+  const bar = document.createElement('div');
+  bar.id = 'deviceNameBar';
+  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fff3cd;border-bottom:2px solid #ffc107;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.15);';
+  bar.innerHTML = `<span style="font-weight:bold;">🆕 새 기기 감지</span>
+    <span>이 기기 이름:</span>
+    <input id="deviceNameInput" type="text" placeholder="예: 홍길동 폰, 사무실PC" style="flex:1;min-width:120px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+    <button onclick="registerDeviceName()" style="padding:6px 16px;background:#28a745;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">등록</button>
+    <button onclick="this.parentElement.remove()" style="padding:6px 12px;background:#eee;border:none;border-radius:6px;cursor:pointer;">닫기</button>`;
+  document.body.prepend(bar);
+  setTimeout(() => { const inp = document.getElementById('deviceNameInput'); if (inp) inp.focus(); }, 100);
+}
+function registerDeviceName() {
+  const inp = document.getElementById('deviceNameInput');
+  const name = (inp?.value || '').trim();
+  if (!name) { alert('이름을 입력하세요'); return; }
+  setDeviceName(name);
+  const bar = document.getElementById('deviceNameBar');
+  if (bar) bar.remove();
+}
+
+// 현재 사용자 + 기기이름 텍스트
 async function getTgSender() {
   const u = typeof fbAuth !== 'undefined' && fbAuth.currentUser;
   const data = (typeof _cache !== 'undefined' && _cache) || {};
-  // 사용자 이름
   let who = '익명';
   if (u && u.uid) {
     const ui = (data.users || {})[u.uid];
     who = ui?.name || u.email || u.uid;
   }
-  // IP + 별명
   const ip = await getClientIP();
-  const ipNames = data.ipNames || {};
-  const ipLabel = ipNames[ip.replace(/\./g, '_')];
-  const isNew = !ipLabel && !Object.keys(ipNames).some(k => k === ip.replace(/\./g, '_'));
-  let ipText = ip;
-  if (ipLabel) ipText = `${ip} (${ipLabel})`;
-  else if (isNew) ipText = `${ip} (🆕 새 IP)`;
+  const devName = getDeviceName();
   const dev = getDeviceType();
+  let ipText = ip;
+  if (devName) ipText = `${ip} (${devName})`;
+  else ipText = `${ip} (🆕 미등록 기기)`;
   return `\n👤 ${who} · ${dev}\n🌐 ${ipText}`;
 }
 
@@ -657,6 +682,8 @@ function applyMemberNav() {
     if (logoutLink) nav.insertBefore(printLink, logoutLink);
     else nav.appendChild(printLink);
   }
+  // 새 기기 이름 등록 바
+  showDeviceNameBar();
 }
 
 // 관리자 전용 페이지에서 회원 차단

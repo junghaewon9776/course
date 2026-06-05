@@ -208,20 +208,6 @@
         </div>
       </div>
 
-      <!-- IP 별명 관리 -->
-      <div class="card super-only" style="border-left:4px solid #8e44ad;">
-        <h2>🌐 IP 별명 관리</h2>
-        <p class="muted" style="font-size:11px;margin-bottom:6px;">
-          텔레그램 알림에 IP 대신 이름 표시. 새 IP는 🆕로 알림됩니다.
-        </p>
-        <div id="ipNameList" style="margin-bottom:8px;"></div>
-        <div style="display:flex;gap:6px;">
-          <input id="ipNameIp" type="text" placeholder="IP (예: 123.456.78.90)" style="flex:1;">
-          <input id="ipNameLabel" type="text" placeholder="별명 (예: 홍길동)" style="flex:1;">
-          <button class="small success" onclick="addIpName()">추가</button>
-        </div>
-      </div>
-
       <!-- 네이버 SENS SMS -->
       <div class="card super-only" style="border-left:4px solid #03c75a;">
         <h2>📲 네이버 SMS (SENS)</h2>
@@ -916,7 +902,6 @@ function refreshAll() {
   renderEvtAssign();
   renderSchedules();
   renderTelegramConfig();
-  renderIpNames();
   renderMap();
   // 모드 버튼 시각 동기화 (현재 모드 표시)
   document.querySelectorAll('.mode-btn').forEach(btn => {
@@ -942,38 +927,6 @@ function renderTelegramConfig() {
   renderPublicMonitorConfig();
   // Drive 사진 설정
   renderDrivePhotoConfig();
-}
-
-function renderIpNames() {
-  const el = document.getElementById('ipNameList');
-  if (!el) return;
-  const data = loadData();
-  const ipNames = data.ipNames || {};
-  const keys = Object.keys(ipNames);
-  if (!keys.length) { el.innerHTML = '<div class="empty" style="font-size:12px;">등록된 IP 없음</div>'; return; }
-  el.innerHTML = keys.map(k => {
-    const ip = k.replace(/_/g, '.');
-    return `<div class="list-item" style="padding:4px 0;">
-      <div class="info"><span class="sub">${ip}</span> → <b>${ipNames[k]}</b></div>
-      <button class="small danger" onclick="removeIpName('${k}')">삭제</button>
-    </div>`;
-  }).join('');
-}
-function addIpName() {
-  const ip = (document.getElementById('ipNameIp').value || '').trim();
-  const label = (document.getElementById('ipNameLabel').value || '').trim();
-  if (!ip || !label) { alert('IP와 별명을 입력하세요'); return; }
-  const data = loadData();
-  if (!data.ipNames) data.ipNames = {};
-  data.ipNames[ip.replace(/\./g, '_')] = label;
-  saveData(data); refreshAll();
-  document.getElementById('ipNameIp').value = '';
-  document.getElementById('ipNameLabel').value = '';
-}
-function removeIpName(key) {
-  const data = loadData();
-  if (data.ipNames) delete data.ipNames[key];
-  saveData(data); refreshAll();
 }
 
 function renderDrivePhotoConfig() {
