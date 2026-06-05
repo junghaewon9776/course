@@ -941,7 +941,7 @@ function renderAnchorRows() {
     return `
       <div class="anchor-row ${isDone ? 'done' : ''}">
         <div class="num">${i+1}</div>
-        <div style="flex:1;min-width:0;">
+        <div style="flex:1;min-width:0;cursor:pointer;" onclick="focusAnchor(${i})">
           <div class="name">${a.name}</div>
           ${a.memo ? `<div class="sub">${a.memo}</div>` : ''}
         </div>
@@ -1151,6 +1151,20 @@ function renderMapForSession() {
       strokeOpacity: 0.8, strokeStyle: 'shortdash', map
     });
   }
+}
+
+// 거점 이름 클릭 → 지도에서 해당 위치로 이동 + InfoWindow 열기
+function focusAnchor(idx) {
+  if (!map || !anchorMarkers[idx]) return;
+  const marker = anchorMarkers[idx];
+  map.setLevel(3);
+  map.panTo(marker.getPosition());
+  setTimeout(() => map.panBy(0, -100), 250);
+  // 마커 클릭 이벤트 트리거 (InfoWindow 열기)
+  kakao.maps.event.trigger(marker, 'click');
+  // 지도 영역으로 스크롤
+  const mapEl = document.getElementById('map');
+  if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function navTo(anchorId) {
