@@ -23,6 +23,7 @@
     .fm-footer button{padding:10px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;}
     .fm-save{background:#3498db;color:#fff;} .fm-save:hover{background:#2980b9;}
     .fm-cancel{background:#eee;color:#333;} .fm-cancel:hover{background:#ddd;}
+    .super-only{display:none;}
   </style>
 </head>
 <body>
@@ -188,7 +189,7 @@
       </div>
 
       <!-- 텔레그램 알림 -->
-      <div class="card" style="border-left:4px solid #0088cc;">
+      <div class="card super-only" style="border-left:4px solid #0088cc;">
         <h2>📱 텔레그램 알림</h2>
         <p class="muted" style="font-size:11px;margin-bottom:6px;">
           로그인 / 시작 / 거점추가 / 종료 시 텔레그램으로 알림 받기
@@ -208,7 +209,7 @@
       </div>
 
       <!-- 네이버 SENS SMS -->
-      <div class="card" style="border-left:4px solid #03c75a;">
+      <div class="card super-only" style="border-left:4px solid #03c75a;">
         <h2>📲 네이버 SMS (SENS)</h2>
         <p class="muted" style="font-size:11px;margin-bottom:6px;">
           이장님께 자동 SMS 발송 (서버 프록시 URL 필요 — 자세한 셋업은 별도)
@@ -238,7 +239,7 @@
       </div>
 
       <!-- Google Drive 사진 저장 -->
-      <div class="card" style="border-left:4px solid #34a853;">
+      <div class="card super-only" style="border-left:4px solid #34a853;">
         <h2>📷 Google Drive 사진 저장</h2>
         <p class="muted" style="font-size:11px;margin-bottom:6px;">
           현장사진/영수증을 Google Drive에 저장. 로그인한 사용자만 열람 가능.
@@ -872,6 +873,11 @@ function pickSearchResult(r) {
 }
 
 function refreshAll() {
+  // super 전용 카드 표시
+  const myRole = getMyRole();
+  document.querySelectorAll('.super-only').forEach(el => {
+    el.style.display = myRole === 'super' ? '' : 'none';
+  });
   renderRequests();
   renderEvents();
   renderEventSelect('viewSelect', true);
