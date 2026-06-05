@@ -819,6 +819,7 @@ async function resetMemberPin(memberId) {
   const unique = [...new Set(candidates)];
 
   let done = false;
+  let lastErr = '';
   for (const tryPw of unique) {
     try {
       const cred = await secAuth.signInWithEmailAndPassword(email, tryPw);
@@ -830,13 +831,26 @@ async function resetMemberPin(memberId) {
       if (fresh.memberPinFlags) { fresh.memberPinFlags[uid] = true; saveData(fresh); }
       done = true;
       break;
-    } catch (ex) { /* 다음 후보 */ }
+    } catch (ex) { lastErr = ex.code || ex.message; }
   }
 
   if (done) {
+    // DB의 pin 필드도 동기화
+    m.pin = DEFAULT_PIN;
+    saveData(loadData());
     alert(`✅ ${m.name}님 PIN → ${DEFAULT_PIN} 초기화 완료\n\n본인에게 안내해주세요.`);
+  } else if (lastErr.includes('user-not-found')) {
+    // Firebase Auth 계정이 없음 → 새로 생성
+    if (confirm(`${m.name}님의 Firebase 계정이 없습니다.\n자동으로 새로 생성할까요? (PIN: ${DEFAULT_PIN})`)) {
+      try {
+        await createMemberAccount(memberId, m.phone, DEFAULT_PIN);
+        alert(`✅ 계정 새로 생성 완료 (PIN: ${DEFAULT_PIN})`);
+      } catch (e2) {
+        alert(`❌ 계정 생성 실패: ${e2.message}`);
+      }
+    }
   } else {
-    alert(`❌ PIN 초기화 실패\n\n비밀번호를 알 수 없습니다.\n[계정] 버튼으로 새로 생성하면 자동으로 기본 PIN이 적용됩니다.`);
+    alert(`❌ PIN 초기화 실패\n\n원인: ${lastErr}\n이메일: ${email}\n시도 PIN: ${unique.map(p=>p.replace('bsp','')).join(', ')}`);
   }
 }
 
