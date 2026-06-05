@@ -40,6 +40,30 @@
     <div id="acctList"></div>
   </div>
 
+  <!-- 활동 로그 -->
+  <div class="card">
+    <div class="flex-between">
+      <h2>📋 활동 로그</h2>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select id="logFilter" onchange="renderLogs()" style="width:auto;font-size:12px;padding:4px;">
+          <option value="all">전체</option>
+          <option value="거점">거점</option>
+          <option value="민원">민원</option>
+          <option value="행사">행사</option>
+          <option value="코스">코스</option>
+          <option value="방역불가">방역불가</option>
+          <option value="로그인">로그인</option>
+          <option value="시작">시작/완료</option>
+        </select>
+        <button class="small gray" onclick="clearLogs()">🗑 전체삭제</button>
+      </div>
+    </div>
+    <div id="logList" style="max-height:500px;overflow-y:auto;"></div>
+    <div style="text-align:center;margin-top:8px;">
+      <button class="small gray" id="logMoreBtn" onclick="loadMoreLogs()" style="display:none;">더보기</button>
+    </div>
+  </div>
+
   <!-- 추가 폼 -->
   <div id="addCard" class="card" style="display:none;border:2px solid #3498db;">
     <h2>+ 새 계정 추가</h2>
@@ -83,9 +107,11 @@ window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
 checkAdminAuth().then(ok => { if (ok) onDataReady(refreshAll); });
 
+let __logInit = false;
 function refreshAll() {
   renderMe();
   renderAccounts();
+  if (!__logInit) { __logInit = true; initLogListener(); }
 }
 
 function renderMe() {
@@ -236,6 +262,68 @@ function toggleDisabled(uid) {
   if (willDisable && !confirm('이 계정을 비활성화하시겠습니까?\n(로그인 가능하지만 데이터 접근 차단)')) return;
   data.users[uid].disabled = willDisable;
   saveData(data);
+}
+
+// ────── 활동 로그 ──────
+let __allLogs = [];
+let __logShowCount = 50;
+
+function renderLogs() {
+  const el = document.getElementById('logList');
+  if (!el) return;
+  const filter = document.getElementById('logFilter')?.value || 'all';
+  let logs = __allLogs;
+  if (filter !== 'all') {
+    logs = logs.filter(l => (l.text || '').includes(filter));
+  }
+  const show = logs.slice(0, __logShowCount);
+  if (!show.length) { el.innerHTML = '<div class="empty">로그 없음</div>'; return; }
+  el.innerHTML = show.map(l => {
+    const d = new Date(l.ts);
+    const time = d.toLocaleDateString('ko-KR', {month:'short',day:'numeric'}) + ' ' + d.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'});
+    const icon = getLogIcon(l.text);
+    return `<div style="padding:6px 0;border-bottom:1px solid #f0f0f0;font-size:13px;line-height:1.5;">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div><span style="font-size:15px;">${icon}</span> ${escHtml(l.text)}</div>
+        <span class="sub" style="white-space:nowrap;margin-left:8px;font-size:11px;">${time}</span>
+      </div>
+      <div class="sub" style="font-size:11px;">👤 ${escHtml(l.who || '?')} · ${escHtml(l.device || '')} · ${l.page || ''}</div>
+    </div>`;
+  }).join('');
+  const moreBtn = document.getElementById('logMoreBtn');
+  if (moreBtn) moreBtn.style.display = logs.length > __logShowCount ? '' : 'none';
+}
+function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function getLogIcon(text) {
+  if (!text) return '📝';
+  if (text.includes('거점 추가')) return '📍';
+  if (text.includes('거점 수정')) return '✏️';
+  if (text.includes('거점 삭제')) return '🗑';
+  if (text.includes('거점요청 승인')) return '✅';
+  if (text.includes('거점요청 거절')) return '❌';
+  if (text.includes('민원')) return '📞';
+  if (text.includes('행사')) return '📋';
+  if (text.includes('코스')) return '📋';
+  if (text.includes('방역불가')) return '🚫';
+  if (text.includes('로그인') || text.includes('자동접속')) return '🔐';
+  if (text.includes('시작')) return '▶';
+  if (text.includes('완료')) return '✅';
+  if (text.includes('모니터링')) return '🌐';
+  return '📝';
+}
+function loadMoreLogs() { __logShowCount += 50; renderLogs(); }
+function clearLogs() {
+  if (!confirm('전체 활동 로그를 삭제할까요? 복구할 수 없습니다.')) return;
+  fbDb.ref('/logs').remove();
+  __allLogs = [];
+  renderLogs();
+}
+function initLogListener() {
+  fbDb.ref('/logs').orderByChild('ts').limitToLast(500).on('value', snap => {
+    const val = snap.val() || {};
+    __allLogs = Object.values(val).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    renderLogs();
+  });
 }
 
 function removeAccount(uid) {

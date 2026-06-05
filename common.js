@@ -381,20 +381,39 @@ async function getTgSender() {
   return `\n👤 ${who} · ${dev}\n🌐 ${ipText}`;
 }
 
+// Firebase에 활동 로그 저장 (텔레그램 여부와 무관)
+function addLog(text) {
+  try {
+    if (typeof fbDb === 'undefined') return;
+    const u = typeof fbAuth !== 'undefined' && fbAuth.currentUser;
+    const plainText = text.replace(/<[^>]+>/g, '');
+    const entry = {
+      text: plainText,
+      who: u?.email || '익명',
+      device: getDeviceName() || getDeviceType(),
+      page: location.pathname.split('/').pop() || '',
+      ts: Date.now()
+    };
+    fbDb.ref('/logs').push(entry);
+  } catch (e) { console.warn('로그 저장 실패:', e); }
+}
+
 async function sendTelegram(text, opts) {
+  // 로그는 항상 저장 (텔레그램 꺼져있어도)
+  addLog(text);
   try {
     const data = (typeof _cache !== 'undefined' && _cache) || loadData();
     const cfg = data.telegram || {};
     if (!cfg.enabled || !cfg.botToken || !cfg.chatId) return;
     const url = `https://api.telegram.org/bot${cfg.botToken}/sendMessage`;
-    // 발신자 정보 자동 추가 (opts.noSender로 끌 수 있음)
+    // 발신자 정보 자동 추가
     let fullText = text;
     if (!opts?.noSender) {
       try { fullText += await getTgSender(); } catch(e) {}
     }
     // 사이트 링크 + 복사 버튼
     const siteLink = opts?.link || __siteUrl;
-    const copyText = fullText.replace(/<[^>]+>/g, ''); // HTML 태그 제거
+    const copyText = fullText.replace(/<[^>]+>/g, '');
     const buttons = [
       [{ text: '🔗 사이트 열기', url: siteLink }],
       [{ text: '📋 내용 복사', copy_text: { text: copyText } }]
