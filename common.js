@@ -331,19 +331,58 @@ async function getClientIP() {
 }
 
 // ───────── 텔레그램 알림 ─────────
-async function sendTelegram(text) {
+// 사이트 URL (GitHub Pages)
+const __siteUrl = location.origin + location.pathname.replace(/[^/]*$/, '');
+
+// 현재 사용자 + IP + IP별명 텍스트
+async function getTgSender() {
+  const u = typeof fbAuth !== 'undefined' && fbAuth.currentUser;
+  const data = (typeof _cache !== 'undefined' && _cache) || {};
+  // 사용자 이름
+  let who = '익명';
+  if (u && u.uid) {
+    const ui = (data.users || {})[u.uid];
+    who = ui?.name || u.email || u.uid;
+  }
+  // IP + 별명
+  const ip = await getClientIP();
+  const ipNames = data.ipNames || {};
+  const ipLabel = ipNames[ip.replace(/\./g, '_')];
+  const isNew = !ipLabel && !Object.keys(ipNames).some(k => k === ip.replace(/\./g, '_'));
+  let ipText = ip;
+  if (ipLabel) ipText = `${ip} (${ipLabel})`;
+  else if (isNew) ipText = `${ip} (🆕 새 IP)`;
+  const dev = getDeviceType();
+  return `\n👤 ${who} · ${dev}\n🌐 ${ipText}`;
+}
+
+async function sendTelegram(text, opts) {
   try {
     const data = (typeof _cache !== 'undefined' && _cache) || loadData();
     const cfg = data.telegram || {};
     if (!cfg.enabled || !cfg.botToken || !cfg.chatId) return;
     const url = `https://api.telegram.org/bot${cfg.botToken}/sendMessage`;
-    // 콤마/공백/줄바꿈으로 여러 대상 분리
+    // 발신자 정보 자동 추가 (opts.noSender로 끌 수 있음)
+    let fullText = text;
+    if (!opts?.noSender) {
+      try { fullText += await getTgSender(); } catch(e) {}
+    }
+    // 사이트 링크 + 복사 버튼
+    const siteLink = opts?.link || __siteUrl;
+    const copyText = fullText.replace(/<[^>]+>/g, ''); // HTML 태그 제거
+    const buttons = [
+      [{ text: '🔗 사이트 열기', url: siteLink }],
+      [{ text: '📋 내용 복사', copy_text: { text: copyText } }]
+    ];
     const chatIds = String(cfg.chatId).split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
     await Promise.all(chatIds.map(chatId =>
       fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' })
+        body: JSON.stringify({
+          chat_id: chatId, text: fullText, parse_mode: 'HTML',
+          reply_markup: { inline_keyboard: buttons }
+        })
       })
     ));
   } catch (e) {
