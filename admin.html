@@ -476,14 +476,17 @@ function addNoSprayAt(lat, lng, areaHint = '') {
       createdAt: Date.now()
     });
     saveData(data); refreshAll();
+    sendTelegram(`🚫 <b>방역불가 추가</b>\n이름: ${r.name.trim()}\n반경: ${radius}m`);
   });
 }
 
 function deleteNoSprayZone(id) {
   if (!confirm('이 방역불가 지역을 삭제할까요?')) return;
   const data = loadData();
+  const zName = (data.noSprayZones || []).find(z => z.id === id)?.name || id;
   data.noSprayZones = (data.noSprayZones || []).filter(z => z.id !== id);
   saveData(data); refreshAll();
+  sendTelegram(`🗑 <b>방역불가 삭제</b>\n이름: ${zName}`);
 }
 
 function editNoSprayZone(id) {
@@ -500,6 +503,7 @@ function editNoSprayZone(id) {
     const radius = parseInt(r.radius, 10);
     if (!isNaN(radius) && radius > 0) z.radius = radius;
     saveData(data); refreshAll();
+    sendTelegram(`✏️ <b>방역불가 수정</b>\n이름: ${z.name}`);
   });
 }
 
@@ -535,8 +539,11 @@ function handleMapClick(lat, lng) {
     if (!d.anchors) d.anchors = [];
     const order = d.anchors.filter(a => a.courseId === courseId).length + 1;
     const eventId = getCourseEventId(d, courseId);
-    d.anchors.push({ id: uid(), name: r.name.trim(), lat, lng, memo: (r.memo || '').trim(), eventId, courseId, order });
+    const anchorName = r.name.trim();
+    d.anchors.push({ id: uid(), name: anchorName, lat, lng, memo: (r.memo || '').trim(), eventId, courseId, order });
     saveData(d); refreshAll();
+    const crs = getCourse(d, courseId);
+    sendTelegram(`📍 <b>거점 추가</b>\n코스: ${crs?.name || ''}\n거점: ${anchorName}`);
   });
 }
 
@@ -865,10 +872,13 @@ function pickSearchResult(r) {
     if (!data.anchors) data.anchors = [];
     const order = data.anchors.filter(a => a.courseId === courseId).length + 1;
     const eventId = getCourseEventId(data, courseId);
-    data.anchors.push({ id: uid(), name: res.name.trim(), lat: r.lat, lng: r.lng, memo: (res.memo || '').trim(), eventId, courseId, order });
+    const aName = res.name.trim();
+    data.anchors.push({ id: uid(), name: aName, lat: r.lat, lng: r.lng, memo: (res.memo || '').trim(), eventId, courseId, order });
     saveData(data);
     document.getElementById('searchInput').value = '';
     refreshAll();
+    const crs = getCourse(data, courseId);
+    sendTelegram(`📍 <b>거점 추가</b>\n코스: ${crs?.name || ''}\n거점: ${aName}\n(검색: ${r.address || r.name})`);
   });
 }
 
@@ -1231,13 +1241,17 @@ function approveRequest(id) {
   r.status = 'approved';
   data.requests = (data.requests || []).filter(x => x.id !== id);
   saveData(data); refreshAll();
+  sendTelegram(`✅ <b>거점요청 승인</b>\n거점: ${r.name}\n코스: ${course.name}`);
 }
 
 function rejectRequest(id) {
   if (!confirm('이 요청을 거절(삭제)할까요?')) return;
   const data = loadData();
+  const r = (data.requests || []).find(x => x.id === id);
+  const rName = r?.name || id;
   data.requests = data.requests.filter(x => x.id !== id);
   saveData(data); refreshAll();
+  sendTelegram(`❌ <b>거점요청 거절</b>\n거점: ${rName}`);
 }
 
 function moveRequestCourse(id) {
@@ -1306,13 +1320,14 @@ function addEvent() {
   data.events.push({ id: uid(), name, courses: [] });
   saveData(data);
   refreshAll();
+  sendTelegram(`📋 <b>행사 추가</b>\n이름: ${name}`);
 }
 function renameEvent(id) {
   const data = loadData();
   const e = (data.events || []).find(x => x.id === id);
   if (!e) return;
   const name = prompt('행사 이름', e.name);
-  if (name) { e.name = name; saveData(data); refreshAll(); }
+  if (name) { const old = e.name; e.name = name; saveData(data); refreshAll(); sendTelegram(`✏️ <b>행사 수정</b>\n${old} → ${name}`); }
 }
 function deleteEvent(id) {
   if (!confirm('행사 + 소속 코스/거점이 모두 삭제됩니다')) return;
@@ -1323,6 +1338,7 @@ function deleteEvent(id) {
   data.anchors = (data.anchors || []).filter(a => !courseIds.includes(a.courseId));
   data.schedules = (data.schedules || []).filter(s => s.eventId !== id);
   saveData(data); refreshAll();
+  sendTelegram(`🗑 <b>행사 삭제</b>\n이름: ${event?.name || id}\n(소속 코스·거점 포함 삭제)`);
 }
 
 function renderEventSelect(id, includeAll) {
@@ -1382,12 +1398,13 @@ function addCourse() {
   event.courses.push({ id: uid(), name, color: colors[event.courses.length % colors.length] });
   saveData(data);
   refreshAll();
+  sendTelegram(`📋 <b>코스 추가</b>\n행사: ${event.name}\n코스: ${name}`);
 }
 function renameCourse(id) {
   const data = loadData();
   const c = getCourse(data, id);
   const name = prompt('코스 이름', c.name);
-  if (name) { c.name = name; saveData(data); refreshAll(); }
+  if (name) { const old = c.name; c.name = name; saveData(data); refreshAll(); sendTelegram(`✏️ <b>코스 수정</b>\n${old} → ${name}`); }
 }
 function setCourseColor(id, color) {
   const data = loadData();
@@ -1397,9 +1414,11 @@ function setCourseColor(id, color) {
 function deleteCourse(id) {
   if (!confirm('코스 + 소속 거점이 모두 삭제됩니다')) return;
   const data = loadData();
+  const cName = getCourse(data, id)?.name || id;
   for (const e of (data.events || [])) e.courses = (e.courses || []).filter(c => c.id !== id);
   data.anchors = (data.anchors || []).filter(a => a.courseId !== id);
   saveData(data); refreshAll();
+  sendTelegram(`🗑 <b>코스 삭제</b>\n코스: ${cName}\n(소속 거점 포함 삭제)`);
 }
 
 // ────── 거점 ──────
@@ -1590,17 +1609,21 @@ function editAnchor(id) {
       if (m) headIds.push(m.id);
       else alert(`회원 명단에 "${nm}" 없음 — 건너뜀 (members.html에서 먼저 등록)`);
     }
-    a.name = r.name.trim() || a.name;
+    const newName = r.name.trim() || a.name;
+    a.name = newName;
     a.memo = (r.memo || '').trim();
     a.villageHeadIds = headIds;
     saveData(data); refreshAll();
+    sendTelegram(`✏️ <b>거점 수정</b>\n거점: ${newName}`);
   });
 }
 function deleteAnchor(id) {
   if (!confirm('이 거점을 삭제할까요?')) return;
   const data = loadData();
+  const aName = (data.anchors || []).find(a => a.id === id)?.name || id;
   data.anchors = data.anchors.filter(a => a.id !== id);
   saveData(data); refreshAll();
+  sendTelegram(`🗑 <b>거점 삭제</b>\n거점: ${aName}`);
 }
 
 // ────── 민원 ──────
@@ -1629,6 +1652,7 @@ function addComplaintAt(lat, lng, areaHint = '') {
       createdAt: Date.now()
     });
     saveData(data); refreshAll();
+    sendTelegram(`📞 <b>민원 추가</b> (관리자)\n연락처: ${(r.phone || '-')}\n내용: ${(r.content || '-').slice(0, 50)}`);
   });
 }
 
@@ -1683,13 +1707,17 @@ function toggleComplaintStatus(id) {
   if (!c) return;
   c.status = c.status === 'resolved' ? 'pending' : 'resolved';
   saveData(data); refreshAll();
+  const label = c.status === 'resolved' ? '처리완료' : '대기복원';
+  sendTelegram(`📞 <b>민원 ${label}</b>\n내용: ${(c.content || '-').slice(0, 50)}\n연락처: ${c.phone || '-'}`);
 }
 
 function deleteComplaint(id) {
   if (!confirm('이 민원을 삭제할까요?')) return;
   const data = loadData();
+  const c = (data.complaints || []).find(x => x.id === id);
   data.complaints = (data.complaints || []).filter(c => c.id !== id);
   saveData(data); refreshAll();
+  sendTelegram(`🗑 <b>민원 삭제</b>\n내용: ${(c?.content || '-').slice(0, 50)}`);
 }
 
 function editComplaint(id) {
@@ -1703,6 +1731,7 @@ function editComplaint(id) {
     c.phone = (r.phone || '').trim();
     c.content = (r.content || '').trim();
     saveData(data); refreshAll();
+    sendTelegram(`✏️ <b>민원 수정</b>\n내용: ${(c.content || '-').slice(0, 50)}`);
   });
 }
 
@@ -1732,6 +1761,7 @@ function convertComplaintToAnchor(id) {
   c.status = 'resolved';
   saveData(data); refreshAll();
   alert(`✅ ${course.name}의 거점으로 추가됨`);
+  sendTelegram(`🔄 <b>민원→거점 전환</b>\n민원: ${(c.content || '-').slice(0, 30)}\n→ 거점: ${name}\n코스: ${course.name}`);
 }
 
 function downloadComplaintTemplate() {
