@@ -42,7 +42,7 @@
       <div class="title">통계</div>
       <div class="desc">회원별 방역 횟수·차트</div>
     </a>
-    <a href="accounts.html" class="menu-card">
+    <a href="accounts.html" class="menu-card" id="accountsCard" style="display:none;">
       <div class="icon">🔐</div>
       <div class="title">계정관리</div>
       <div class="desc">관리자 계정 추가·권한</div>
@@ -78,6 +78,9 @@
     initFirebaseSync();
     onDataReady(() => {
       document.getElementById('syncStatus').textContent = '✅ 연결됨';
+      // 계정관리: super만 표시
+      const ac = document.getElementById('accountsCard');
+      if (ac && getMyRole() === 'super') ac.style.display = '';
     });
   });
 </script>
