@@ -136,14 +136,14 @@
       </div>
     </div>
     <div class="col" style="flex:1;min-width:300px;">
-      <div class="card">
+      <div class="card admin-only">
         <h2>요약</h2>
         <div id="summary"></div>
       </div>
-      <div class="card">
+      <div class="card admin-only">
         <div class="flex-between">
           <h2>운행 목록</h2>
-          <button class="small danger" onclick="clearLogs()">🗑 전체삭제</button>
+          <span class="super-only"><button class="small danger" onclick="clearLogs()">🗑 전체삭제</button></span>
         </div>
         <div id="logList"></div>
       </div>
@@ -1242,6 +1242,12 @@ function renderEventFilterOptions() {
 }
 
 function render() {
+  // 권한별 UI 표시
+  const role = getMyRole();
+  const isAdmin = role === 'admin' || role === 'super';
+  document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
+  document.querySelectorAll('.super-only').forEach(el => el.style.display = role === 'super' ? '' : 'none');
+
   renderEventFilterOptions();
   const data = loadData();
   const logs = getFilteredLogs();
@@ -1284,7 +1290,7 @@ function render() {
           <div class="sub">${l.date} · ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}</div>
           ${driver || assist ? `<div class="sub">운전: ${driver || '-'}${assist ? ' · 보조: ' + assist : ''}</div>` : ''}
         </div>
-        <button class="small danger" onclick="event.stopPropagation();deleteLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑</button>
+        ${getMyRole() === 'super' ? `<button class="small danger" onclick="event.stopPropagation();deleteLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑</button>` : ''}
       </div>
     `;
   }).join('');
@@ -1396,6 +1402,7 @@ function formatDuration(ms) {
   return h ? `${h}시간 ${m%60}분` : `${m}분`;
 }
 function clearLogs() {
+  if (getMyRole() !== 'super') { alert('super 권한만 삭제할 수 있습니다.'); return; }
   if (!confirm('필터 무시하고 모든 운행 기록을 영구 삭제할까요?')) return;
   const data = loadData();
   data.logs = [];
@@ -1405,6 +1412,7 @@ function clearLogs() {
 }
 
 function deleteLog(key) {
+  if (getMyRole() !== 'super') { alert('super 권한만 삭제할 수 있습니다.'); return; }
   if (!key) { alert('이 기록은 삭제 식별자가 없습니다 (이전 버전 데이터)'); return; }
   if (!confirm('이 운행 기록 한 건만 삭제할까요?')) return;
   const data = loadData();
