@@ -54,16 +54,14 @@
     </a>
   </div>
 
-  <div class="card" style="max-width:600px;margin:0 auto;">
-    <h2>🔥 Firebase 연동됨</h2>
-    <p style="font-size:13px;line-height:1.6;">
-      이제 모든 기기에서 <b>실시간 동기화</b>됩니다.<br>
-      JSON 복사·붙여넣기 필요 없음. PC에서 추가하면 폰에 즉시 반영.
-    </p>
-    <p class="muted" style="margin-top:8px;">
-      관리자/모니터링/인원관리/통계 = 로그인 필요<br>
-      오늘의 운영 = 누구나 접근 가능
-    </p>
+  <div id="userInfo" class="card" style="max-width:600px;margin:0 auto;display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <span id="userLabel" style="font-size:14px;font-weight:700;"></span>
+        <span id="userRole" class="tag" style="font-size:11px;margin-left:6px;"></span>
+      </div>
+      <button onclick="doLogout()" style="background:#e74c3c;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">로그아웃</button>
+    </div>
   </div>
 </div>
 
@@ -81,8 +79,34 @@
       // 계정관리: super만 표시
       const ac = document.getElementById('accountsCard');
       if (ac && getMyRole() === 'super') ac.style.display = '';
+      // 로그인 정보 표시
+      const u = fbAuth.currentUser;
+      if (u && !u.isAnonymous) {
+        const data = loadData();
+        const info = (data.users || {})[u.uid];
+        const memberId = (data.memberAuth || {})[u.uid];
+        const member = memberId ? (data.members || []).find(m => m.id === memberId) : null;
+        const name = info?.name || member?.name || u.email;
+        const role = info?.role || (member ? '회원' : '');
+        document.getElementById('userLabel').textContent = '👤 ' + name;
+        const roleEl = document.getElementById('userRole');
+        if (role) {
+          roleEl.textContent = role;
+          roleEl.style.background = role === 'super' ? '#9b59b6' : role === 'admin' ? '#3498db' : '#27ae60';
+          roleEl.style.color = '#fff';
+        }
+        document.getElementById('userInfo').style.display = '';
+      }
     });
   });
+
+  function doLogout() {
+    if (!confirm('로그아웃 하시겠습니까?')) return;
+    fbAuth.signOut().then(() => {
+      localStorage.removeItem('lastAdminId');
+      location.reload();
+    });
+  }
 </script>
 </body>
 </html>
