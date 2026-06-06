@@ -634,12 +634,18 @@ async function changeMemberPin(currentPin, newPin) {
   const cred = firebase.auth.EmailAuthProvider.credential(u.email, pinToPassword(currentPin));
   await u.reauthenticateWithCredential(cred);
   await u.updatePassword(pinToPassword(newPin));
-  // 기본 PIN 플래그 해제
+  // DB의 m.pin도 동기화 (관리자 PIN 초기화 시 현재 비번을 알아야 하므로)
   const data = loadData();
+  const memberId = (data.memberAuth || {})[u.uid];
+  if (memberId) {
+    const m = (data.members || []).find(x => x.id === memberId);
+    if (m) m.pin = newPin;
+  }
+  // 기본 PIN 플래그 해제
   if (data.memberPinFlags) {
     data.memberPinFlags[u.uid] = false;
-    saveData(data);
   }
+  saveData(data);
 }
 
 function isUsingDefaultPin() {
