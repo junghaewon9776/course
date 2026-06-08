@@ -214,6 +214,20 @@ function initMonitorMap() {
     const zmCtl = new kakao.maps.ZoomControl();
     map.addControl(zmCtl, kakao.maps.ControlPosition.RIGHT);
   } catch (e) { console.warn('지도 컨트롤 추가 실패', e); }
+  // 사용자 지도 조작 감지 → 따라가기 일시정지 5초
+  let __monUserInteracting = false;
+  kakao.maps.event.addListener(map, 'dragstart', () => { __monUserInteracting = true; });
+  kakao.maps.event.addListener(map, 'dragend', () => {
+    __monUserInteracting = false;
+    if (__followKey) {
+      __followPauseUntil = Date.now() + 5000;
+    }
+  });
+  kakao.maps.event.addListener(map, 'zoom_changed', () => {
+    if (__followKey) {
+      __followPauseUntil = Date.now() + 5000;
+    }
+  });
   render();
   subscribeLive();
   renderCourseQuickList();
@@ -920,9 +934,11 @@ function showCourseOnMap(courseId) {
 
 // ─── 따라가기 모드 (특정 차량을 자동 추적) ───
 let __followKey = null;
+let __followPauseUntil = 0;
 function stopFollow(reason) {
   if (!__followKey) return;
   __followKey = null;
+  __followPauseUntil = 0;
   __followResumeTimer = null;
   // 버튼 라벨 갱신
   if (window.__liveCache) renderLive(window.__liveCache);
@@ -1216,7 +1232,7 @@ function renderLive(live) {
     }).join('');
   }
   // 따라가기 중이면 그 차량으로 지도 자동 이동 (일시중지 상태면 스킵)
-  if (__followKey && liveMarkers[__followKey]) {
+  if (__followKey && liveMarkers[__followKey] && Date.now() >= __followPauseUntil) {
     map.setCenter(liveMarkers[__followKey].getPosition());
   }
 }
