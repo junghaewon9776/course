@@ -208,9 +208,21 @@ function initMonitorMap() {
   updateAllCoursesBtn();
   const cb2 = document.getElementById('cnsAlwaysOn');
   if (cb2) cb2.checked = localStorage.getItem('hideComplaintNoSpray') !== '1';
-  // 사용자가 지도 직접 만지면 따라가기 자동 해제
-  kakao.maps.event.addListener(map, 'dragstart', () => stopFollow('manual-drag'));
-  kakao.maps.event.addListener(map, 'zoom_start', () => stopFollow('manual-zoom'));
+  // 사용자가 지도 직접 만지면 따라가기 일시 중지 (5초 후 자동 복귀)
+  kakao.maps.event.addListener(map, 'dragstart', () => {
+    if (__followKey) {
+      __followPaused = true;
+      clearTimeout(__followResumeTimer);
+      __followResumeTimer = setTimeout(() => { __followPaused = false; }, 5000);
+    }
+  });
+  kakao.maps.event.addListener(map, 'zoom_start', () => {
+    if (__followKey) {
+      __followPaused = true;
+      clearTimeout(__followResumeTimer);
+      __followResumeTimer = setTimeout(() => { __followPaused = false; }, 5000);
+    }
+  });
 }
 
 // 라이브 세션에서 courseId로 운영중인 호차 찾기
@@ -793,10 +805,14 @@ function showCourseOnMap(courseId) {
 
 // ─── 따라가기 모드 (특정 차량을 자동 추적) ───
 let __followKey = null;
+let __followPaused = false;
+let __followResumeTimer = null;
 function stopFollow(reason) {
   if (!__followKey) return;
   __followKey = null;
-  const data = loadData();
+  __followPaused = false;
+  clearTimeout(__followResumeTimer);
+  __followResumeTimer = null;
   // 버튼 라벨 갱신
   if (window.__liveCache) renderLive(window.__liveCache);
 }
@@ -1073,7 +1089,7 @@ function renderLive(live) {
           <div onclick="focusLiveMarker('${safeKey}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
             ${leftBadge}
             <div style="flex:1;min-width:0;">
-              <div class="name" style="font-weight:600;color:#2c3e50;">${escapeHtml(it.event?.name || '?')} · ${escapeHtml(it.course?.name || '?')} · ${escapeHtml(it.driver)}</div>
+              <div class="name" style="font-weight:600;color:#2c3e50;">${(it.event && it.course) ? escapeHtml(it.event.name) + ' · ' + escapeHtml(it.course.name) + ' · ' + escapeHtml(it.driver) : escapeHtml(it.driver)}</div>
               <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}</div>
             </div>
           </div>
@@ -1085,8 +1101,8 @@ function renderLive(live) {
       `;
     }).join('');
   }
-  // 따라가기 중이면 그 차량으로 지도 자동 이동
-  if (__followKey && liveMarkers[__followKey]) {
+  // 따라가기 중이면 그 차량으로 지도 자동 이동 (일시중지 상태면 스킵)
+  if (__followKey && liveMarkers[__followKey] && !__followPaused) {
     map.setCenter(liveMarkers[__followKey].getPosition());
   }
 }
@@ -1461,9 +1477,12 @@ function toggleMonitorGPS() {
         __monMarker.setPosition(p);
       }
       // Firebase에도 본부 위치 publish → 운영 중인 사람들 지도에도 표시
+      const __u = fbAuth.currentUser;
+      const __uInfo = (loadData().users || {})[__u?.uid];
+      const __myName = __uInfo?.name || __u?.email || '본부';
       publishLiveSession(__monLiveKey, {
         lat, lng, heading: pos.coords.heading,
-        crew: { driver: '📊 본부', vehicleName: '본부' },
+        crew: { driver: '📊 ' + __myName, vehicleName: '본부' },
         completedCount: 0, totalCount: 0,
         startedAt: Date.now()
       });

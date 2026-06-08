@@ -384,13 +384,16 @@ function renderAssignments() {
   el.innerHTML = `
     <h3 style="margin:0 0 8px;color:#555;">코스를 선택하세요</h3>
   ` + items.map(({event, course, anchorCount}) => `
-      <div class="anchor-row" onclick="startCourse('${event.id}','${course.id}')" style="cursor:pointer;">
+      <div class="anchor-row" style="cursor:default;">
         <div class="num" style="background:${course.color}">${course.name[0]}</div>
         <div style="flex:1;">
           <div><b>${event.name}</b> · <span style="color:${course.color}">${course.name}</span></div>
           <div class="sub">거점 ${anchorCount}개</div>
         </div>
-        <button class="success">코스보기 ▶</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="previewCourse('${event.id}','${course.id}')" style="background:#3498db;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">📋 코스보기</button>
+          <button onclick="startCourse('${event.id}','${course.id}')" style="background:#27ae60;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">▶ 코스시작</button>
+        </div>
       </div>
     `).join('');
 }
@@ -400,6 +403,146 @@ let assistList = [];
 function startCourse(eventId, courseId) {
   // 항상 운전자/보조자 선택 폼 띄움
   openStartForm(eventId, courseId);
+}
+
+// ─── 코스 미리보기 (거점 목록 + 지도) ───
+function previewCourse(eventId, courseId) {
+  const data = loadData();
+  const event = getEvent(data, eventId);
+  const course = getCourse(data, courseId);
+  const anchors = getCourseAnchors(data, courseId);
+
+  const el = document.getElementById('assignmentList');
+  let html = `
+    <div style="margin-bottom:10px;">
+      <h3 style="margin:0 0 6px;color:${course.color};">📋 ${event.name} · ${course.name}</h3>
+      <div class="sub" style="margin-bottom:10px;">거점 ${anchors.length}개</div>
+  `;
+  if (anchors.length) {
+    html += anchors.map((a, i) => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
+        <div style="background:${course.color};color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none;">${i+1}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;">${(a.name||'').replace(/</g,'&lt;')}</div>
+          ${a.memo ? '<div class="sub" style="white-space:pre-wrap;">' + a.memo.replace(/</g,'&lt;') + '</div>' : ''}
+        </div>
+      </div>
+    `).join('');
+  } else {
+    html += '<div class="empty">거점이 없습니다</div>';
+  }
+  html += `
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+        <button onclick="previewCourseMap('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#3498db;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">🗺 코스 지도 보기</button>
+        <button onclick="startCourse('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#27ae60;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">▶ 코스시작</button>
+      </div>
+      <button onclick="renderAssignments()" style="margin-top:8px;background:none;border:1px solid #bbb;padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;width:100%;">← 돌아가기</button>
+    </div>
+  `;
+  el.innerHTML = html;
+}
+
+function previewCourseMap(eventId, courseId) {
+  const data = loadData();
+  const course = getCourse(data, courseId);
+  const anchors = getCourseAnchors(data, courseId);
+  if (!anchors.length) { alert('이 코스에 거점이 없습니다'); return; }
+
+  // 지도 초기화 (없으면)
+  if (!map) {
+    loadKakaoMap();
+    // 맵 로드 후 재시도
+    const waitMap = setInterval(() => {
+      if (map) { clearInterval(waitMap); previewCourseMap(eventId, courseId); }
+    }, 100);
+    return;
+  }
+
+  // 기존 마커/라인 정리
+  anchorMarkers.forEach(m => m.setMap(null)); anchorMarkers = [];
+  if (courseLine) { courseLine.setMap(null); courseLine = null; }
+
+  // assignmentCard 숨기고 opPanel 보이기 (지도 포함)
+  document.getElementById('assignmentCard').style.display = 'none';
+  document.getElementById('startFormCard').style.display = 'none';
+  document.getElementById('opPanel').style.display = 'block';
+  // 불필요한 운영 UI 숨기기
+  const toolbar = document.querySelector('.op-toolbar');
+  if (toolbar) toolbar.style.display = 'none';
+  const anchorRows = document.getElementById('anchorRows');
+  if (anchorRows) anchorRows.parentElement.style.display = 'none';
+
+  map.relayout();
+
+  const path = [];
+  const bounds = new kakao.maps.LatLngBounds();
+
+  anchors.forEach((a, i) => {
+    const pos = new kakao.maps.LatLng(a.lat, a.lng);
+    bounds.extend(pos); path.push(pos);
+    const marker = new kakao.maps.Marker({
+      position: pos, map,
+      title: `${i+1}. ${a.name}`,
+      image: numberedMarkerImage(i+1, course.color, false),
+      zIndex: 10
+    });
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:10px;font-size:12px;max-width:240px;">
+        <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')}</div>
+        ${a.memo ? '<div style="color:#444;white-space:pre-wrap;">' + a.memo.replace(/</g,'&lt;') + '</div>' : ''}
+      </div>`
+    });
+    kakao.maps.event.addListener(marker, 'click', () => toggleInfoWindow(iw, marker, map));
+    anchorMarkers.push(marker);
+  });
+
+  if (path.length >= 2) {
+    courseLine = new kakao.maps.Polyline({
+      path, strokeWeight: 4, strokeColor: course.color,
+      strokeOpacity: 0.6, map
+    });
+    for (let i = 0; i < path.length - 1; i++) {
+      anchorMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
+    }
+  }
+
+  map.setBounds(bounds);
+
+  // opTitle/opSubtitle 설정
+  const opTitle = document.getElementById('opTitle');
+  const opSubtitle = document.getElementById('opSubtitle');
+  if (opTitle) opTitle.textContent = `📋 ${data.events?.find(e=>e.id===eventId)?.name||''} · ${course.name} (미리보기)`;
+  if (opSubtitle) opSubtitle.textContent = `거점 ${anchors.length}개`;
+
+  // nextInfo 영역에 미리보기 안내 + 버튼
+  const nextInfo = document.getElementById('nextInfo');
+  if (nextInfo) {
+    nextInfo.innerHTML = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        <button onclick="startCourse('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#27ae60;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">▶ 코스시작</button>
+        <button onclick="closePreviewMap()" style="flex:1;min-width:120px;background:none;border:1px solid #bbb;padding:10px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer;">← 돌아가기</button>
+      </div>
+    `;
+  }
+}
+
+function closePreviewMap() {
+  // 마커/라인 정리
+  anchorMarkers.forEach(m => m.setMap(null)); anchorMarkers = [];
+  if (courseLine) { courseLine.setMap(null); courseLine = null; }
+  // nextInfo 초기화
+  const nextInfo = document.getElementById('nextInfo');
+  if (nextInfo) nextInfo.innerHTML = '';
+  // opPanel 숨기기
+  document.getElementById('opPanel').style.display = 'none';
+  // 숨겼던 UI 복원
+  const toolbar = document.querySelector('.op-toolbar');
+  if (toolbar) toolbar.style.display = '';
+  const anchorRows = document.getElementById('anchorRows');
+  if (anchorRows) anchorRows.parentElement.style.display = '';
+  // 코스 선택 화면 복귀
+  document.getElementById('assignmentCard').style.display = 'block';
+  renderAssignments();
 }
 
 function openStartForm(eventId, courseId) {
