@@ -1448,7 +1448,7 @@ function renderTeams() {
   const memberOpts = (data.members || []).map(m => `<option value="${m.id}">${m.name}</option>`).join('');
   // 이미 어느 조에든 배정된 회원 ID 집합
   const assignedIds = new Set();
-  const reserveIds = new Set(data.reserveMemberIds || []);
+  const reserveSet = new Set(data.reserveMemberIds || []);
   teams.forEach(t => {
     if (t.leaderId) assignedIds.add(t.leaderId);
     if (t.viceLeaderId) assignedIds.add(t.viceLeaderId);
@@ -1456,7 +1456,7 @@ function renderTeams() {
   });
   // 미배정 회원만 (예비조 포함 제외)
   const unassignedOpts = (data.members || [])
-    .filter(m => !assignedIds.has(m.id) && !reserveIds.has(m.id))
+    .filter(m => !assignedIds.has(m.id) && !reserveSet.has(m.id))
     .map(m => `<option value="${m.id}">${m.name}</option>`).join('');
 
   const teamCards = teams.map(t => {
