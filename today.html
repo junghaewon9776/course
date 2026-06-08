@@ -47,8 +47,8 @@
           <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 데이터 전송 주기 (지도는 항상 실시간)">
             <option value="0">전송:실시간</option>
             <option value="3000">전송:3초</option>
-            <option value="10000" selected>전송:10초</option>
-            <option value="15000">전송:15초</option>
+            <option value="5000" selected>전송:5초</option>
+            <option value="7000">전송:7초</option>
           </select>
           <button class="small gray" id="naviToggle" onclick="toggleNavi()">🧭 내비모드</button>
           <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
@@ -1121,9 +1121,9 @@ async function removePhoto(id) {
 }
 
 let __lastLivePublish = 0;
-let __liveIntervalMs = 10000;
+let __liveIntervalMs = 5000;
 function setLiveInterval(ms) {
-  __liveIntervalMs = parseInt(ms, 10) || 10000;
+  __liveIntervalMs = parseInt(ms, 10) || 5000;
 }
 function publishCurrentLive() {
   if (!currentSession || currentSession.finishedAt) return;
