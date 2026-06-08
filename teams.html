@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>조별 현황 - 코스 관리 시스템</title>
+  <link rel="stylesheet" href="style.css?v=20260512v">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    body { background: #f0f2f5; }
+    .top-bar {
+      display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+      flex-wrap: wrap; background: #fff; border-bottom: 1px solid #e0e0e0;
+    }
+    .top-bar a, .top-bar button { font-size: 13px; }
+    .top-bar .spacer { flex: 1; }
+    .orient-btns { display: flex; gap: 4px; }
+    .orient-btns button {
+      padding: 6px 14px; border: 2px solid #3498db; border-radius: 6px;
+      background: #fff; color: #3498db; font-weight: 700; cursor: pointer; font-size: 13px;
+    }
+    .orient-btns button.active { background: #3498db; color: #fff; }
+
+    /* 컨테이너 */
+    .teams-container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+
+    /* 조 카드 */
+    .team-card {
+      background: #fff; border-radius: 12px; overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;
+      border: 1px solid #e8e8e8;
+    }
+    .team-card-header {
+      padding: 14px 18px; font-size: 18px; font-weight: 800;
+      color: #fff; display: flex; align-items: center; gap: 10px;
+    }
+    .team-card-header .member-count {
+      font-size: 13px; font-weight: 500; opacity: 0.85;
+      background: rgba(255,255,255,0.25); padding: 2px 10px; border-radius: 12px;
+    }
+    .team-card-body { padding: 0; }
+
+    /* 멤버 리스트 */
+    .member-row {
+      display: flex; align-items: center; padding: 10px 18px;
+      border-bottom: 1px solid #f0f0f0; gap: 10px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .member-row:last-child { border-bottom: none; }
+    .member-row:hover { background: #f8f9fb; }
+    .member-role {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 3px 8px; border-radius: 4px; min-width: 42px; text-align: center;
+      color: #fff; flex-shrink: 0;
+    }
+    .role-leader { background: #e74c3c; }
+    .role-vice { background: #e67e22; }
+    .role-member { background: #95a5a6; }
+    .role-fixed { background: #8e44ad; }
+    .member-name { font-weight: 600; font-size: 15px; color: #2c3e50; flex: 1; }
+    .member-pos { font-size: 12px; color: #888; margin-left: 4px; }
+    .member-phone-icon { font-size: 18px; opacity: 0.5; }
+
+    /* 코스 배정 */
+    .team-course {
+      background: #f8f9fb; padding: 12px 18px; border-top: 1px solid #e8e8e8;
+    }
+    .team-course-title { font-size: 12px; color: #888; font-weight: 600; margin-bottom: 6px; }
+    .team-course-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .course-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 5px 12px; border-radius: 16px; font-size: 13px; font-weight: 600;
+      background: #ecf0f1; color: #2c3e50;
+    }
+    .course-chip .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+
+    /* 예비조 */
+    .reserve-card {
+      background: #fff3cd; border: 2px dashed #f0ad4e; border-radius: 12px;
+      padding: 14px 18px; margin-bottom: 20px; text-align: center;
+    }
+    .reserve-card b { color: #856404; }
+    .reserve-members { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+    .reserve-tag {
+      background: #fff; border: 1px solid #f0ad4e; border-radius: 8px;
+      padding: 5px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .reserve-tag:hover { background: #ffeeba; }
+
+    /* QR 영역 */
+    .qr-section {
+      text-align: center; margin: 20px 0; padding: 20px;
+      background: #fff; border-radius: 12px; border: 1px solid #e8e8e8;
+    }
+    .qr-row { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+    .qr-cell { text-align: center; }
+    .qr-cell img { display: block; margin: 0 auto 6px; border-radius: 8px; }
+    .qr-cell span { font-size: 12px; font-weight: 600; color: #555; }
+
+    /* 연락처 모달 */
+    .contact-modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+      z-index: 9999; display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .contact-modal {
+      background: #fff; border-radius: 16px; padding: 28px 24px;
+      max-width: 340px; width: 100%; text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .contact-modal .cm-name { font-size: 22px; font-weight: 800; color: #2c3e50; margin-bottom: 4px; }
+    .contact-modal .cm-role { font-size: 13px; color: #888; margin-bottom: 16px; }
+    .contact-modal .cm-phone {
+      display: inline-block; font-size: 20px; font-weight: 700;
+      color: #2c3e50; font-family: monospace; letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+    .contact-modal .cm-actions { display: flex; gap: 10px; justify-content: center; }
+    .contact-modal .cm-btn {
+      flex: 1; padding: 12px; border-radius: 10px; border: none;
+      font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: none;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+    }
+    .cm-btn-call { background: #27ae60; color: #fff; }
+    .cm-btn-sms { background: #3498db; color: #fff; }
+    .contact-modal .cm-close {
+      margin-top: 14px; border: none; background: none;
+      color: #999; font-size: 14px; cursor: pointer;
+    }
+
+    /* ── 인쇄 스타일 ── */
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .teams-container { max-width: none; padding: 0 8px; }
+      .team-card { box-shadow: none; border: 2px solid #333; margin-bottom: 10px; break-inside: avoid; }
+      .member-row { padding: 6px 12px; }
+      .qr-section { break-inside: avoid; }
+    }
+
+    /* A4 세로 */
+    body.print-portrait { }
+    @media print {
+      body.print-portrait { }
+    }
+    /* A4 가로 */
+    body.print-landscape .teams-grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* 화면 상에서 2열 레이아웃 (가로 모드) */
+    .teams-grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 700px) {
+      .teams-grid-2col { grid-template-columns: 1fr; }
+    }
+
+    /* 조 카드 색상 */
+    .tc-1 { background: #3498db; }
+    .tc-2 { background: #e67e22; }
+    .tc-3 { background: #e74c3c; }
+    .tc-4 { background: #9b59b6; }
+    .tc-5 { background: #27ae60; }
+    .tc-6 { background: #1abc9c; }
+    .tc-7 { background: #f39c12; }
+    .tc-8 { background: #2c3e50; }
+  </style>
+</head>
+<body>
+<div class="top-bar no-print">
+  <a href="index.html" style="text-decoration:none;font-weight:700;color:#2c3e50;">← 홈</a>
+  <span style="font-weight:700;font-size:15px;color:#2c3e50;">👥 조별 현황</span>
+  <span class="spacer"></span>
+  <div class="orient-btns">
+    <button id="btnPortrait" class="active" onclick="setLayout('portrait')">📄 세로</button>
+    <button id="btnLandscape" onclick="setLayout('landscape')">📄 가로</button>
+  </div>
+  <button onclick="window.print()" style="background:#2c3e50;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;">🖨 인쇄</button>
+  <button onclick="savePDF()" style="background:#8e44ad;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;">📥 PDF 저장</button>
+</div>
+
+<div class="teams-container" id="teamsContainer">
+  <div style="text-align:center;padding:60px;color:#999;">데이터 로딩 중...</div>
+</div>
+
+<!-- 연락처 모달 -->
+<div id="contactModal" class="contact-modal-overlay" style="display:none;" onclick="if(event.target===this)closeContact()">
+  <div class="contact-modal">
+    <div class="cm-name" id="cmName"></div>
+    <div class="cm-role" id="cmRole"></div>
+    <div class="cm-phone" id="cmPhone"></div>
+    <div class="cm-actions">
+      <a id="cmCall" href="#" class="cm-btn cm-btn-call">📞 전화</a>
+      <a id="cmSms" href="#" class="cm-btn cm-btn-sms">💬 문자</a>
+    </div>
+    <button class="cm-close" onclick="closeContact()">닫기</button>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js?v=20260512v"></script>
+<script src="common.js?v=20260608b"></script>
+<script>
+let currentLayout = 'portrait';
+
+ensureAnonAuth().then(() => {
+  initFirebaseSync();
+  onDataReady(render);
+});
+window.onDataChanged = () => render();
+
+function setLayout(mode) {
+  currentLayout = mode;
+  document.getElementById('btnPortrait').classList.toggle('active', mode === 'portrait');
+  document.getElementById('btnLandscape').classList.toggle('active', mode === 'landscape');
+
+  // 동적 @page 스타일
+  let ps = document.getElementById('pageStyle');
+  if (!ps) { ps = document.createElement('style'); ps.id = 'pageStyle'; document.head.appendChild(ps); }
+  if (mode === 'landscape') {
+    ps.textContent = '@page { size: A4 landscape; margin: 8mm; }';
+    document.body.classList.add('print-landscape');
+    document.body.classList.remove('print-portrait');
+  } else {
+    ps.textContent = '@page { size: A4 portrait; margin: 10mm; }';
+    document.body.classList.remove('print-landscape');
+    document.body.classList.add('print-portrait');
+  }
+  render();
+}
+
+// 초기: 세로
+setLayout('portrait');
+
+function render() {
+  const data = loadData();
+  const teams = data.teams || [];
+  const members = data.members || [];
+  if (!teams.length) {
+    document.getElementById('teamsContainer').innerHTML =
+      '<div style="text-align:center;padding:60px;color:#999;">등록된 조가 없습니다.</div>';
+    return;
+  }
+
+  const colors = ['tc-1','tc-2','tc-3','tc-4','tc-5','tc-6','tc-7','tc-8'];
+  const isLandscape = currentLayout === 'landscape';
+
+  // 코스 배정 정보 수집: teamId → [{eventName, courseName, color}]
+  const teamCourses = {};
+  for (const ev of (data.events || [])) {
+    const schedules = data.schedules || [];
+    const sched = schedules.find(s => s.eventId === ev.id);
+    if (!sched || !sched.rotation?.length) continue;
+    const courses = ev.courses || [];
+    for (let ci = 0; ci < courses.length; ci++) {
+      const teamId = sched.rotation[ci % sched.rotation.length];
+      if (!teamId) continue;
+      if (!teamCourses[teamId]) teamCourses[teamId] = [];
+      teamCourses[teamId].push({
+        eventName: ev.name,
+        courseName: courses[ci].name,
+        color: courses[ci].color || '#95a5a6'
+      });
+    }
+  }
+
+  // 조 카드 생성
+  const teamCards = teams.map((t, idx) => {
+    const colorClass = colors[idx % colors.length];
+    const leader = getMember(data, t.leaderId);
+    const vice = getMember(data, t.viceLeaderId);
+    const memberIds = t.memberIds || [];
+    const fixedIds = t.fixedMemberIds || [];
+    const allIds = [];
+    if (t.leaderId) allIds.push(t.leaderId);
+    if (t.viceLeaderId) allIds.push(t.viceLeaderId);
+    allIds.push(...memberIds);
+    const totalCount = allIds.length + fixedIds.length;
+
+    // 멤버 행
+    const rows = [];
+    if (leader) rows.push(memberRow(leader, '조장', 'role-leader'));
+    if (vice) rows.push(memberRow(vice, '부조장', 'role-vice'));
+    memberIds.forEach(id => {
+      const m = getMember(data, id);
+      if (m) rows.push(memberRow(m, '팀원', 'role-member'));
+    });
+    fixedIds.forEach(id => {
+      const m = getMember(data, id);
+      if (m) rows.push(memberRow(m, '고정', 'role-fixed'));
+    });
+
+    // 코스 배정
+    const courses = teamCourses[t.id] || [];
+    const courseHtml = courses.length ? `
+      <div class="team-course">
+        <div class="team-course-title">📍 배정 코스</div>
+        <div class="team-course-list">
+          ${courses.map(c => `
+            <span class="course-chip">
+              <span class="dot" style="background:${c.color}"></span>
+              ${esc(c.courseName)}
+            </span>
+          `).join('')}
+        </div>
+      </div>
+    ` : '';
+
+    return `
+      <div class="team-card">
+        <div class="team-card-header ${colorClass}">
+          ${esc(t.name)}
+          <span class="member-count">${totalCount}명</span>
+        </div>
+        <div class="team-card-body">
+          ${rows.join('')}
+        </div>
+        ${courseHtml}
+      </div>
+    `;
+  }).join('');
+
+  // 예비조
+  const reserveIds = data.reserveMemberIds || [];
+  let reserveHtml = '';
+  if (reserveIds.length) {
+    const tags = reserveIds.map(id => {
+      const m = getMember(data, id);
+      if (!m) return '';
+      return `<span class="reserve-tag" onclick="showContact('${esc(m.name)}','${m.phone || ''}','예비')">${m.position ? m.position + ' ' : ''}${esc(m.name)}</span>`;
+    }).filter(Boolean).join('');
+    reserveHtml = `
+      <div class="reserve-card">
+        <b>🔁 예비조</b> <span style="color:#856404;font-size:13px;">(인원 부족 시 대리 방역)</span>
+        <div class="reserve-members">${tags}</div>
+      </div>
+    `;
+  }
+
+  // QR
+  const baseUrl = location.origin + location.pathname.replace(/teams\.html$/, '');
+  const todayUrl = baseUrl + 'today.html';
+  const teamsUrl = baseUrl + 'teams.html';
+  const qrApi = (url) => `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(url)}`;
+
+  const qrHtml = `
+    <div class="qr-section">
+      <div class="qr-row">
+        <div class="qr-cell">
+          <img src="${qrApi(todayUrl)}" alt="오늘운영 QR" width="120" height="120">
+          <span>🚐 오늘운영 (방역시작)</span>
+        </div>
+        <div class="qr-cell">
+          <img src="${qrApi(teamsUrl)}" alt="조별현황 QR" width="120" height="120">
+          <span>👥 조별 현황</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const gridClass = isLandscape ? 'teams-grid-2col' : '';
+
+  document.getElementById('teamsContainer').innerHTML = `
+    ${reserveHtml}
+    <div class="${gridClass}">
+      ${teamCards}
+    </div>
+    ${qrHtml}
+  `;
+}
+
+function memberRow(m, roleLabel, roleClass) {
+  const phone = m.phone || '';
+  const pos = m.position ? `<span class="member-pos">(${esc(m.position)})</span>` : '';
+  return `
+    <div class="member-row" onclick="showContact('${esc(m.name)}','${esc(phone)}','${roleLabel}')">
+      <span class="member-role ${roleClass}">${roleLabel}</span>
+      <span class="member-name">${esc(m.name)}${pos}</span>
+      ${phone ? '<span class="member-phone-icon">📞</span>' : ''}
+    </div>
+  `;
+}
+
+function showContact(name, phone, role) {
+  if (!phone) {
+    alert(name + '님의 연락처가 등록되지 않았습니다.');
+    return;
+  }
+  document.getElementById('cmName').textContent = name;
+  document.getElementById('cmRole').textContent = role;
+  document.getElementById('cmPhone').textContent = formatPhone(phone);
+  document.getElementById('cmCall').href = 'tel:' + phone.replace(/\D/g, '');
+  document.getElementById('cmSms').href = 'sms:' + phone.replace(/\D/g, '');
+  document.getElementById('contactModal').style.display = '';
+}
+
+function closeContact() {
+  document.getElementById('contactModal').style.display = 'none';
+}
+
+function formatPhone(p) {
+  const d = String(p).replace(/\D/g, '');
+  if (d.length === 11) return d.slice(0,3) + '-' + d.slice(3,7) + '-' + d.slice(7);
+  if (d.length === 10) return d.slice(0,3) + '-' + d.slice(3,6) + '-' + d.slice(6);
+  return p;
+}
+
+function esc(s) { return String(s || '').replace(/</g, '&lt;').replace(/'/g, "\\'"); }
+
+// PDF 저장 (html2canvas → 다운로드)
+async function savePDF() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ 생성 중...';
+  try {
+    const container = document.getElementById('teamsContainer');
+    const canvas = await html2canvas(container, {
+      scale: 2, useCORS: true, backgroundColor: '#fff', logging: false
+    });
+    const link = document.createElement('a');
+    link.download = '조별현황_' + new Date().toISOString().slice(0,10) + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    alert('이미지(PNG)로 저장되었습니다.\n\n📌 PDF가 필요하시면:\n• PC: 인쇄(Ctrl+P) → PDF로 저장\n• 모바일: 인쇄 → PDF');
+  } catch (e) {
+    console.error(e);
+    alert('저장 실패: ' + e.message + '\n\n인쇄(Ctrl+P) → PDF로 저장해 주세요.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📥 PDF 저장';
+  }
+}
+</script>
+</body>
+</html>
