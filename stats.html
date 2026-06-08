@@ -236,7 +236,7 @@ function render() {
     if (!isEventVisibleForViewer(e.id, data)) continue;
     visibleEventIds.add(e.id);
     if (eventFilter && e.id !== eventFilter) continue;
-    for (const c of e.courses) courses.push({ id: c.id, label: `${e.name}-${c.name}`, color: c.color });
+    for (const c of e.courses) courses.push({ id: c.id, label: c.name, color: c.color });
   }
 
   // matrix[key][courseId] = count

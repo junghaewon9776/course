@@ -1405,18 +1405,15 @@ function renderCourses() {
   }
   el.innerHTML = courses.map(c => {
     const vis = isCourseVisible(c.id);
-    const featured = !!c.featured;
+    const anchorCount = (data.anchors || []).filter(a => a.courseId === c.id).length;
     return `
-    <div class="list-item">
-      <button class="small ${vis ? '' : 'gray'}" onclick="toggleCourseVisible('${c.id}')" title="지도 표시">${vis ? '👁' : '🚫'}</button>
-      <button class="small ${featured ? 'success' : 'gray'}" onclick="toggleCourseFeatured('${c.id}')" title="대표 코스 (인쇄 시 표시)">${featured ? '⭐' : '☆'}</button>
+    <div class="list-item" style="cursor:pointer;" onclick="openCourseDetail('${c.id}')">
+      <button class="small ${vis ? '' : 'gray'}" onclick="event.stopPropagation();toggleCourseVisible('${c.id}')" title="지도 표시">${vis ? '👁' : '🚫'}</button>
       <div class="info">
         <span class="tag" style="background:${c.color}">${c.name}</span>
-        <span class="sub">${(data.anchors || []).filter(a => a.courseId === c.id).length}개 거점</span>
+        <span class="sub">${anchorCount}개 거점</span>
       </div>
-      <input type="color" value="${c.color}" style="width:32px;padding:0;border:none;" onchange="setCourseColor('${c.id}', this.value)">
-      <button class="small" onclick="renameCourse('${c.id}')">수정</button>
-      <button class="small danger" onclick="deleteCourse('${c.id}')">삭제</button>
+      <span style="font-size:18px;color:#aaa;">›</span>
     </div>
   `;}).join('');
 }
@@ -1460,6 +1457,74 @@ function deleteCourse(id) {
   data.anchors = (data.anchors || []).filter(a => a.courseId !== id);
   saveData(data); refreshAll();
   sendTelegram(`🗑 <b>코스 삭제</b>\n코스: ${cName}\n(소속 거점 포함 삭제)`);
+}
+
+// ────── 코스 상세 모달 ──────
+function openCourseDetail(id) {
+  const data = loadData();
+  const c = getCourse(data, id);
+  if (!c) return;
+  // 소속 행사 찾기
+  let eventName = '';
+  for (const e of (data.events || [])) {
+    if ((e.courses || []).find(cc => cc.id === id)) { eventName = e.name; break; }
+  }
+  const anchors = (data.anchors || []).filter(a => a.courseId === id);
+  const featured = !!c.featured;
+
+  const ov = document.createElement('div');
+  ov.className = 'fm-overlay';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `
+  <div class="fm-box" style="max-width:480px;">
+    <div class="fm-header">
+      <span><span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${c.color};vertical-align:middle;margin-right:6px;"></span>${c.name}</span>
+      <button onclick="this.closest('.fm-overlay').remove()">&times;</button>
+    </div>
+    <div class="fm-body" style="padding:16px 20px 8px;">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;">
+        <span class="tag" style="background:${c.color};font-size:14px;padding:4px 12px;">${c.name}</span>
+        ${featured ? '<span style="color:#f39c12;font-size:16px;">⭐ 대표코스</span>' : '<span class="sub">일반 코스</span>'}
+      </div>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <tr><td style="padding:8px 4px;color:#888;width:80px;">행사</td><td style="padding:8px 4px;font-weight:600;">${eventName}</td></tr>
+        <tr><td style="padding:8px 4px;color:#888;">색상</td><td style="padding:8px 4px;"><span style="display:inline-block;width:20px;height:20px;border-radius:4px;background:${c.color};border:1px solid #ddd;vertical-align:middle;margin-right:6px;"></span>${c.color}</td></tr>
+        <tr><td style="padding:8px 4px;color:#888;">거점 수</td><td style="padding:8px 4px;font-weight:600;">${anchors.length}개</td></tr>
+      </table>
+      ${anchors.length ? `
+      <div style="margin-top:14px;">
+        <div style="font-size:12px;color:#888;margin-bottom:6px;">📍 거점 목록</div>
+        <div style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:6px;">
+          ${anchors.sort((a,b)=>(a.order||0)-(b.order||0)).map((a,i) => `
+            <div style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;display:flex;gap:8px;align-items:center;">
+              <span style="background:#34495e;color:#fff;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${i+1}</span>
+              <div>
+                <div style="font-weight:600;">${a.name}</div>
+                ${a.address ? `<div style="font-size:11px;color:#888;">${a.address}</div>` : ''}
+                ${a.memo ? `<div style="font-size:11px;color:#aaa;">${a.memo}</div>` : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>` : '<div class="empty" style="margin-top:14px;">거점이 없습니다</div>'}
+    </div>
+    <div class="fm-footer" style="flex-wrap:wrap;gap:6px;">
+      <button class="small ${featured ? 'gray' : 'success'}" onclick="toggleCourseFeatured('${id}');this.closest('.fm-overlay').remove();">${featured ? '☆ 대표 해제' : '⭐ 대표 지정'}</button>
+      <div style="flex:1;"></div>
+      <button class="fm-cancel" onclick="this.closest('.fm-overlay').remove();">닫기</button>
+      <button class="small" style="background:#8e44ad;color:#fff;padding:10px 16px;border-radius:8px;" onclick="this.closest('.fm-overlay').remove();renameCourse('${id}')">✏️ 이름 수정</button>
+      <button class="small" style="padding:10px 16px;border-radius:8px;" onclick="this.closest('.fm-overlay').remove();promptCourseColor('${id}')">🎨 색상</button>
+      <button class="small danger" style="padding:10px 16px;border-radius:8px;" onclick="this.closest('.fm-overlay').remove();deleteCourse('${id}')">🗑 삭제</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function promptCourseColor(id) {
+  const inp = document.createElement('input');
+  inp.type = 'color';
+  inp.value = getCourse(loadData(), id)?.color || '#3498db';
+  inp.onchange = () => setCourseColor(id, inp.value);
+  inp.click();
 }
 
 // ────── 거점 ──────
