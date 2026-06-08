@@ -334,10 +334,50 @@ async function getClientIP() {
 // 사이트 URL (GitHub Pages)
 const __siteUrl = location.origin + location.pathname.replace(/[^/]*$/, '');
 
-// 기기 이름 (localStorage 기반)
+// 기기 이름 (localStorage + Firebase 동기화)
 const __deviceNameKey = 'bsp_device_name';
+const __deviceIdKey = 'bsp_device_id';
+function getDeviceId() {
+  let id = localStorage.getItem(__deviceIdKey);
+  if (!id) {
+    id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem(__deviceIdKey, id);
+  }
+  return id;
+}
 function getDeviceName() { return localStorage.getItem(__deviceNameKey) || ''; }
 function setDeviceName(name) { localStorage.setItem(__deviceNameKey, name); }
+
+// Firebase에 기기 이름 저장
+function saveDeviceNameToFirebase(name) {
+  if (typeof fbDb === 'undefined') return;
+  const deviceId = getDeviceId();
+  const u = (typeof fbAuth !== 'undefined' && fbAuth.currentUser) || {};
+  fbDb.ref('/deviceNames/' + deviceId).set({
+    name: name,
+    uid: u.uid || '',
+    email: u.email || '',
+    deviceType: getDeviceType(),
+    registeredAt: Date.now(),
+    updatedAt: Date.now()
+  }).catch(e => console.warn('기기이름 Firebase 저장 실패:', e));
+}
+
+// Firebase에서 기기이름 삭제 여부 확인 (super가 삭제했으면 로컬도 초기화)
+function checkDeviceNameSync() {
+  if (typeof fbDb === 'undefined') return;
+  const deviceId = getDeviceId();
+  const localName = getDeviceName();
+  if (!localName) return; // 로컬에 없으면 어차피 모달 뜸
+  fbDb.ref('/deviceNames/' + deviceId).once('value').then(snap => {
+    const val = snap.val();
+    if (!val) {
+      // Firebase에서 삭제됨 → 로컬도 초기화 → 재등록 모달
+      localStorage.removeItem(__deviceNameKey);
+      showDeviceNameBar();
+    }
+  }).catch(() => {});
+}
 
 // 새 기기 감지 — 모달로 등록 강제
 function showDeviceNameBar() {
@@ -370,8 +410,44 @@ function registerDeviceName() {
   const name = (inp?.value || '').trim();
   if (!name) { inp.style.borderColor = '#e74c3c'; inp.placeholder = '이름을 살짝 적어주세요 🙏'; inp.focus(); return; }
   setDeviceName(name);
+  saveDeviceNameToFirebase(name);
   const modal = document.getElementById('deviceNameModal');
   if (modal) modal.remove();
+}
+
+// 기기이름 변경 프롬프트
+function changeDeviceNamePrompt() {
+  const cur = getDeviceName();
+  const newName = prompt('기기 이름 변경', cur);
+  if (newName === null) return;
+  const trimmed = newName.trim();
+  if (!trimmed) { alert('이름을 입력해주세요'); return; }
+  setDeviceName(trimmed);
+  saveDeviceNameToFirebase(trimmed);
+  alert('✅ 기기 이름이 "' + trimmed + '"(으)로 변경되었습니다');
+}
+
+// 비밀번호 변경 (본인)
+async function changeMyPassword() {
+  const u = typeof fbAuth !== 'undefined' && fbAuth.currentUser;
+  if (!u || !u.email) { alert('로그인 상태가 아닙니다'); return; }
+  const curPw = prompt('현재 비밀번호를 입력하세요');
+  if (!curPw) return;
+  const newPw = prompt('새 비밀번호를 입력하세요 (6자 이상)');
+  if (!newPw) return;
+  if (newPw.length < 6) { alert('비밀번호는 6자 이상이어야 합니다'); return; }
+  const confirmPw = prompt('새 비밀번호를 한번 더 입력하세요');
+  if (newPw !== confirmPw) { alert('비밀번호가 일치하지 않습니다'); return; }
+  try {
+    // 현재 비밀번호로 재인증
+    const cred = firebase.auth.EmailAuthProvider.credential(u.email, curPw);
+    await u.reauthenticateWithCredential(cred);
+    await u.updatePassword(newPw);
+    alert('✅ 비밀번호가 변경되었습니다');
+  } catch (e) {
+    if (e.code === 'auth/wrong-password') alert('현재 비밀번호가 틀렸습니다');
+    else alert('비밀번호 변경 실패: ' + e.message);
+  }
 }
 
 // 현재 사용자 + 기기이름 텍스트
@@ -702,7 +778,7 @@ function isMemberUser() {
 }
 
 // 회원이 접근 가능한 페이지 (파일명)
-const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor-public.html', 'print.html', 'inquiry.html', 'teams.html'];
+const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor-public.html', 'print.html', 'inquiry.html', 'teams.html', 'stats.html'];
 
 // 네비게이션 접근 제어
 function applyMemberNav() {
@@ -712,7 +788,7 @@ function applyMemberNav() {
   const myRole = (data.users || {})[u?.uid]?.role || '';
 
   // 회원이 nav에서 볼 수 있는 페이지
-  const MEMBER_NAV_PAGES = ['index.html', 'today.html', 'inquiry.html', 'teams.html', 'print.html'];
+  const MEMBER_NAV_PAGES = ['index.html', 'today.html', 'inquiry.html', 'teams.html', 'print.html', 'stats.html'];
 
   document.querySelectorAll('nav a').forEach(a => {
     const href = (a.getAttribute('href') || '').split('?')[0];
@@ -748,6 +824,8 @@ function applyMemberNav() {
   }
   // 새 기기 이름 등록 바
   showDeviceNameBar();
+  // super가 기기이름 삭제했으면 재등록 유도
+  checkDeviceNameSync();
 }
 
 // 관리자 전용 페이지에서 회원 차단

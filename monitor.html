@@ -169,9 +169,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260608d"></script>
+<script src="common.js?v=20260608e"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
+let __replayTimer = null, __replayMarker = null, __replayIdx = 0;
+let __directionOverlays = [], __startEndMarkers = [];
 
 window.onAuthSuccess = () => onDataReady(loadKakaoMap);
 window.onDataChanged = () => { if (map) { render(); renderCourseQuickList(); renderPubMonConfig(); renderAllAnchorsAlwaysOn(); renderComplaintsAndNoSpray(); renderMonComplaintList(); renderMonRequestList(); } };
@@ -327,7 +329,7 @@ function renderAllAnchorsAlwaysOn() {
       if (!anchors.length) continue;
       // 작고 반투명한 핑 — 라이브 차량과 안 부딪히게
       const __aScale = getMarkerScale(map.getLevel());
-      const __aw = Math.round(14 * __aScale), __ah = Math.round(18 * __aScale);
+      const __aw = Math.round(10 * __aScale), __ah = Math.round(13 * __aScale);
       const dotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${__aw}" height="${__ah}" viewBox="0 0 14 18">
         <path d="M7 0 C3 0 0 3 0 7 C0 11 7 18 7 18 C7 18 14 11 14 7 C14 3 11 0 7 0 Z" fill="${c.color}" stroke="white" stroke-width="1" opacity="0.85"/>
       </svg>`;
@@ -1437,10 +1439,120 @@ function selectLog(idx) {
   if (log) drawLog(log);
 }
 
+function clearDirectionMarkers() {
+  __directionOverlays.forEach(o => o.setMap(null));
+  __directionOverlays = [];
+  __startEndMarkers.forEach(m => m.setMap(null));
+  __startEndMarkers = [];
+  stopReplay();
+}
+function addStartEndMarkers(track) {
+  if (!track || track.length < 2) return;
+  // 시작 마커 (초록)
+  const startSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" fill="#27ae60" stroke="#fff" stroke-width="2"/>
+    <text x="12" y="16" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">S</text>
+  </svg>`;
+  const startImg = new kakao.maps.MarkerImage(
+    'data:image/svg+xml;utf8,' + encodeURIComponent(startSvg),
+    new kakao.maps.Size(24, 24), { offset: new kakao.maps.Point(12, 12) }
+  );
+  const sm = new kakao.maps.Marker({
+    position: new kakao.maps.LatLng(track[0][0], track[0][1]),
+    map, image: startImg, title: '출발', zIndex: 40
+  });
+  __startEndMarkers.push(sm);
+  // 끝 마커 (빨강)
+  const last = track[track.length - 1];
+  const endSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" fill="#e74c3c" stroke="#fff" stroke-width="2"/>
+    <text x="12" y="16" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">E</text>
+  </svg>`;
+  const endImg = new kakao.maps.MarkerImage(
+    'data:image/svg+xml;utf8,' + encodeURIComponent(endSvg),
+    new kakao.maps.Size(24, 24), { offset: new kakao.maps.Point(12, 12) }
+  );
+  const em = new kakao.maps.Marker({
+    position: new kakao.maps.LatLng(last[0], last[1]),
+    map, image: endImg, title: '도착', zIndex: 40
+  });
+  __startEndMarkers.push(em);
+}
+function addDirectionArrows(track) {
+  if (!track || track.length < 4) return;
+  // 일정 간격마다 화살표 오버레이 추가
+  const step = Math.max(3, Math.floor(track.length / 12));
+  for (let i = step; i < track.length - 1; i += step) {
+    const lat1 = track[i-1][0], lng1 = track[i-1][1];
+    const lat2 = track[i][0], lng2 = track[i][1];
+    const bearing = calcBearing(lat1, lng1, lat2, lng2);
+    const arrowSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+      <g transform="rotate(${bearing} 8 8)">
+        <path d="M8 2 L12 10 L8 8 L4 10 Z" fill="#2980b9" stroke="#fff" stroke-width="0.8" opacity="0.85"/>
+      </g>
+    </svg>`;
+    const div = document.createElement('div');
+    div.innerHTML = arrowSvg;
+    div.style.pointerEvents = 'none';
+    const ov = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(lat2, lng2),
+      content: div, xAnchor: 0.5, yAnchor: 0.5, zIndex: 35
+    });
+    ov.setMap(map);
+    __directionOverlays.push(ov);
+  }
+}
+function startReplay(track) {
+  if (!track || track.length < 2) return;
+  stopReplay();
+  const replaySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+    <circle cx="10" cy="10" r="8" fill="#e67e22" stroke="#fff" stroke-width="2"/>
+    <circle cx="10" cy="10" r="3" fill="#fff"/>
+  </svg>`;
+  const replayImg = new kakao.maps.MarkerImage(
+    'data:image/svg+xml;utf8,' + encodeURIComponent(replaySvg),
+    new kakao.maps.Size(20, 20), { offset: new kakao.maps.Point(10, 10) }
+  );
+  __replayIdx = 0;
+  __replayMarker = new kakao.maps.Marker({
+    position: new kakao.maps.LatLng(track[0][0], track[0][1]),
+    map, image: replayImg, zIndex: 60
+  });
+  const replayBtn = document.getElementById('replayBtn');
+  if (replayBtn) { replayBtn.textContent = '⏹ 정지'; replayBtn.style.background = '#e74c3c'; }
+  const speed = Math.max(30, Math.min(200, Math.round(8000 / track.length)));
+  __replayTimer = setInterval(() => {
+    __replayIdx++;
+    if (__replayIdx >= track.length) {
+      stopReplay();
+      return;
+    }
+    const p = new kakao.maps.LatLng(track[__replayIdx][0], track[__replayIdx][1]);
+    __replayMarker.setPosition(p);
+    map.setCenter(p);
+  }, speed);
+}
+function stopReplay() {
+  if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
+  if (__replayMarker) { __replayMarker.setMap(null); __replayMarker = null; }
+  __replayIdx = 0;
+  const replayBtn = document.getElementById('replayBtn');
+  if (replayBtn) { replayBtn.textContent = '▶ 재생'; replayBtn.style.background = '#e67e22'; }
+}
+function toggleReplay() {
+  if (__replayTimer) { stopReplay(); return; }
+  const logs = getFilteredLogs();
+  if (selectedLogIdx === null || !logs[selectedLogIdx]) return;
+  const log = logs[selectedLogIdx];
+  if (!log.track || log.track.length < 2) { alert('이동 궤적이 없는 기록입니다'); return; }
+  startReplay(log.track);
+}
+
 function drawLog(log) {
   if (!map) return;
   logMarkers.forEach(m => m.setMap(null)); logMarkers = [];
   if (logTrack) logTrack.setMap(null);
+  clearDirectionMarkers();
 
   const data = loadData();
   const anchors = getCourseAnchors(data, log.courseId);
@@ -1467,6 +1579,8 @@ function drawLog(log) {
       path, strokeWeight: 3, strokeColor: '#3498db',
       strokeOpacity: 0.8, map
     });
+    addStartEndMarkers(log.track);
+    addDirectionArrows(log.track);
   }
   if (anchors.length || (log.track || []).length) map.setBounds(bounds);
 
@@ -1479,12 +1593,20 @@ function drawLog(log) {
   const photoHtml = photoIds.length
     ? `<div style="margin-top:8px;"><b>📷 현장사진 (${photoIds.length}장)</b><div id="logPhotos" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div></div>`
     : '';
+  const hasTrack = log.track && log.track.length >= 2;
+  const replayHtml = hasTrack
+    ? `<button id="replayBtn" onclick="toggleReplay()" style="background:#e67e22;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;margin-left:8px;">▶ 재생</button>`
+    : '';
   document.getElementById('logInfo').innerHTML = `
-    <b>${event?.name} · ${course?.name}</b>${team ? ' · ' + team.name : ''}<br>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
+      <span><b>${event?.name} · ${course?.name}</b>${team ? ' · ' + team.name : ''}</span>
+      ${replayHtml}
+    </div>
     ${driver || assist ? `운전: <b>${driver || '-'}</b>${assist ? ' · 보조: <b>' + assist + '</b>' : ''}<br>` : ''}
     완료 ${(log.completions||[]).length}/${anchors.length} ·
     이동 ${(trackDistance(log.track || []) / 1000).toFixed(2)}km ·
     소요 ${log.finishedAt ? formatDuration(log.finishedAt - log.startedAt) : '진행중'}
+    ${hasTrack ? `<br><span style="font-size:11px;color:#27ae60;">🟢 출발</span> → <span style="font-size:11px;color:#2980b9;">▶ 방향</span> → <span style="font-size:11px;color:#e74c3c;">🔴 도착</span>` : ''}
     ${photoHtml}
   `;
   if (photoIds.length) {
@@ -1504,21 +1626,66 @@ function drawLog(log) {
     });
   }
 }
+let __photoViewerIds = [], __photoViewerIdx = 0, __photoViewerEl = null;
 async function viewLogPhoto(id) {
-  var p = await loadPhoto(id);
-  if (!p) { alert('사진을 불러올 수 없습니다'); return; }
-  var dataUrl = await getPhotoDataUrl(id);
-  if (!dataUrl) { alert('사진 데이터를 가져올 수 없습니다'); return; }
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;cursor:pointer;';
-  var ts = new Date(p.takenAt).toLocaleString('ko-KR');
-  overlay.innerHTML = '<div style="position:relative;max-width:100%;max-height:100%;text-align:center;">'
-    + '<img src="' + dataUrl + '" style="max-width:100%;max-height:85vh;border-radius:8px;">'
-    + '<div style="color:#fff;margin-top:8px;font-size:13px;">' + ts + (p.lat ? ' · 📍 ' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) : '') + '</div>'
-    + '</div>';
-  overlay.onclick = function() { overlay.remove(); };
-  document.body.appendChild(overlay);
+  // 현재 logInfo에 있는 사진 목록에서 인덱스 찾기
+  const logs = getFilteredLogs();
+  const log = selectedLogIdx !== null ? logs[selectedLogIdx] : null;
+  __photoViewerIds = log?.photos || [id];
+  __photoViewerIdx = __photoViewerIds.indexOf(id);
+  if (__photoViewerIdx < 0) __photoViewerIdx = 0;
+  showPhotoViewer();
 }
+async function showPhotoViewer() {
+  const id = __photoViewerIds[__photoViewerIdx];
+  if (!id) return;
+  var p = await loadPhoto(id);
+  var dataUrl = await getPhotoDataUrl(id);
+  if (!dataUrl) { alert('사진을 불러올 수 없습니다'); return; }
+  var ts = p ? new Date(p.takenAt).toLocaleString('ko-KR') : '';
+  var locInfo = (p && p.lat) ? ' · 📍 ' + p.lat.toFixed(5) + ', ' + p.lng.toFixed(5) : '';
+  var total = __photoViewerIds.length;
+  var cur = __photoViewerIdx + 1;
+  var hasPrev = __photoViewerIdx > 0;
+  var hasNext = __photoViewerIdx < total - 1;
+
+  if (__photoViewerEl) __photoViewerEl.remove();
+  var overlay = document.createElement('div');
+  overlay.id = '__photoViewer';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `
+    <button onclick="closePhotoViewer()" style="position:absolute;top:16px;right:16px;background:#e74c3c;color:#fff;border:none;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;font-weight:700;z-index:100001;">✕</button>
+    ${hasPrev ? `<button onclick="photoViewerPrev()" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.2);color:#fff;border:none;width:44px;height:60px;border-radius:8px;font-size:24px;cursor:pointer;font-weight:700;z-index:100001;">◀</button>` : ''}
+    ${hasNext ? `<button onclick="photoViewerNext()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:rgba(255,255,255,0.2);color:#fff;border:none;width:44px;height:60px;border-radius:8px;font-size:24px;cursor:pointer;font-weight:700;z-index:100001;">▶</button>` : ''}
+    <div style="position:relative;max-width:90%;max-height:90%;text-align:center;">
+      <img src="${dataUrl}" style="max-width:100%;max-height:80vh;border-radius:8px;">
+      <div style="color:#fff;margin-top:10px;font-size:13px;">
+        <span style="background:rgba(255,255,255,0.15);padding:3px 10px;border-radius:12px;font-weight:700;">${cur} / ${total}</span>
+        <span style="margin-left:8px;">${ts}${locInfo}</span>
+      </div>
+    </div>
+  `;
+  // 배경 클릭 시 닫기 (버튼/이미지 클릭은 제외)
+  overlay.addEventListener('click', function(e) { if (e.target === overlay) closePhotoViewer(); });
+  document.body.appendChild(overlay);
+  __photoViewerEl = overlay;
+}
+function closePhotoViewer() {
+  if (__photoViewerEl) { __photoViewerEl.remove(); __photoViewerEl = null; }
+}
+function photoViewerPrev() {
+  if (__photoViewerIdx > 0) { __photoViewerIdx--; showPhotoViewer(); }
+}
+function photoViewerNext() {
+  if (__photoViewerIdx < __photoViewerIds.length - 1) { __photoViewerIdx++; showPhotoViewer(); }
+}
+// 키보드: ← → ESC
+document.addEventListener('keydown', function(e) {
+  if (!__photoViewerEl) return;
+  if (e.key === 'Escape') closePhotoViewer();
+  else if (e.key === 'ArrowLeft') photoViewerPrev();
+  else if (e.key === 'ArrowRight') photoViewerNext();
+});
 
 function trackDistance(track) {
   let d = 0;

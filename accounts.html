@@ -40,6 +40,16 @@
     <div id="acctList"></div>
   </div>
 
+  <!-- 기기 관리 -->
+  <div class="card">
+    <div class="flex-between">
+      <h2>📱 등록 기기 <span id="deviceCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
+      <button class="small gray" onclick="refreshDeviceList()">🔄 새로고침</button>
+    </div>
+    <p class="muted" style="font-size:11px;margin-bottom:8px;">회원/관리자 기기 목록. 기기 삭제 시 해당 기기에서 다시 등록 모달이 뜹니다.</p>
+    <div id="deviceList" style="max-height:400px;overflow-y:auto;"></div>
+  </div>
+
   <!-- 활동 로그 -->
   <div class="card">
     <div class="flex-between">
@@ -92,7 +102,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260608d"></script>
+<script src="common.js?v=20260608e"></script>
 <script>
 // 계정 생성용 보조 Firebase 앱 (현재 로그인 유지하기 위함)
 let secondaryApp = null;
@@ -334,6 +344,67 @@ function removeAccount(uid) {
     saveData(data);
   }
 }
+
+// ────── 기기 관리 ──────
+let __deviceListCache = {};
+function refreshDeviceList() {
+  fbDb.ref('/deviceNames').once('value').then(snap => {
+    __deviceListCache = snap.val() || {};
+    renderDeviceList();
+  });
+}
+function renderDeviceList() {
+  const el = document.getElementById('deviceList');
+  const countEl = document.getElementById('deviceCount');
+  if (!el) return;
+  const entries = Object.entries(__deviceListCache);
+  if (countEl) countEl.textContent = `(${entries.length}대)`;
+  if (!entries.length) {
+    el.innerHTML = '<div class="empty">등록된 기기 없음</div>';
+    return;
+  }
+  // 최신 등록순
+  entries.sort((a, b) => (b[1].updatedAt || b[1].registeredAt || 0) - (a[1].updatedAt || a[1].registeredAt || 0));
+  el.innerHTML = entries.map(([devId, d]) => {
+    const when = d.registeredAt ? new Date(d.registeredAt).toLocaleDateString('ko-KR', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+    const updated = d.updatedAt && d.updatedAt !== d.registeredAt ? ' (수정 ' + new Date(d.updatedAt).toLocaleDateString('ko-KR', {month:'short', day:'numeric'}) + ')' : '';
+    const safeId = devId.replace(/'/g, "\\'");
+    return `
+      <div class="list-item" style="padding:8px 4px;">
+        <div class="info" style="flex:1;min-width:0;">
+          <div class="name">📱 ${escHtml(d.name || '(이름없음)')}</div>
+          <div class="sub">${escHtml(d.deviceType || '')} · ${escHtml(d.email || '익명')} · ${when}${updated}</div>
+        </div>
+        <button class="small danger" onclick="deleteDevice('${safeId}')">삭제</button>
+      </div>
+    `;
+  }).join('');
+}
+function deleteDevice(devId) {
+  const d = __deviceListCache[devId];
+  if (!confirm('기기 "' + (d?.name || devId) + '"을 삭제할까요?\n\n해당 기기에서 다음 접속 시 기기이름 재등록 모달이 나타납니다.')) return;
+  fbDb.ref('/deviceNames/' + devId).remove().then(() => {
+    delete __deviceListCache[devId];
+    renderDeviceList();
+    alert('✅ 기기 삭제됨');
+  }).catch(e => alert('삭제 실패: ' + e.message));
+}
+// 초기 로드 시 기기 목록도 가져오기
+function initDeviceList() {
+  fbDb.ref('/deviceNames').on('value', snap => {
+    __deviceListCache = snap.val() || {};
+    renderDeviceList();
+  });
+}
+// refreshAll에 기기 목록도 추가
+const __origRefreshAll = refreshAll;
+refreshAll = function() {
+  __origRefreshAll();
+  if (!window.__deviceListInit) {
+    window.__deviceListInit = true;
+    initDeviceList();
+  }
+};
 </script>
 </body>
 </html>

@@ -47,7 +47,7 @@
       <div class="title">회원민원</div>
       <div class="desc" style="color:#fde8e8;">장비·차량·음료·결제 등 민원 접수</div>
     </a>
-    <a href="stats.html" class="menu-card admin-only" style="display:none;">
+    <a href="stats.html" class="menu-card">
       <div class="icon">📈</div>
       <div class="title">통계</div>
       <div class="desc">회원별 방역 횟수·차트</div>
@@ -77,7 +77,10 @@
         <span id="userLabel" style="font-size:14px;font-weight:700;"></span>
         <span id="userRole" class="tag" style="font-size:11px;margin-left:6px;"></span>
       </div>
-      <button onclick="doLogout()" style="background:#e74c3c;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">로그아웃</button>
+      <div style="display:flex;gap:6px;">
+        <button onclick="showSettingsMenu()" style="background:#7f8c8d;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">⚙️</button>
+        <button onclick="doLogout()" style="background:#e74c3c;color:#fff;border:none;padding:8px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">로그아웃</button>
+      </div>
     </div>
   </div>
 </div>
@@ -87,7 +90,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260608d"></script>
+<script src="common.js?v=20260608e"></script>
 <script>
   ensureAnonAuth().then(() => {
     initFirebaseSync();
@@ -133,6 +136,28 @@
       document.getElementById('userInfo').style.display = 'none';
       document.getElementById('loginPrompt').style.display = '';
     }
+  }
+
+  function showSettingsMenu() {
+    if (document.getElementById('settingsMenu')) { document.getElementById('settingsMenu').remove(); return; }
+    const devName = getDeviceName() || '(미등록)';
+    const overlay = document.createElement('div');
+    overlay.id = 'settingsMenu';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;padding:20px;';
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:14px;padding:24px 20px;max-width:340px;width:100%;box-shadow:0 8px 30px rgba(0,0,0,0.2);">
+        <h3 style="margin:0 0 16px;color:#2c3e50;font-size:17px;">⚙️ 설정</h3>
+        <div style="margin-bottom:10px;font-size:13px;color:#555;">📱 기기이름: <b>${devName.replace(/</g,'&lt;')}</b></div>
+        <button onclick="changeDeviceNamePrompt();document.getElementById('settingsMenu')?.remove();"
+          style="width:100%;padding:11px;background:#3498db;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;">📱 기기이름 변경</button>
+        <button onclick="changeMyPassword();document.getElementById('settingsMenu')?.remove();"
+          style="width:100%;padding:11px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;">🔑 비밀번호 변경</button>
+        <button onclick="document.getElementById('settingsMenu').remove();"
+          style="width:100%;padding:11px;background:#ecf0f1;color:#7f8c8d;border:none;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">닫기</button>
+      </div>
+    `;
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
   }
 
   function doLogout() {
