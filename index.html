@@ -32,7 +32,7 @@
       <div class="title">인원관리</div>
       <div class="desc">회원·조 편성·팀짜기</div>
     </a>
-    <a href="monitor.html" class="menu-card">
+    <a href="monitor.html" class="menu-card" id="monitorCard" style="display:none;">
       <div class="icon">📊</div>
       <div class="title">본부 모니터링</div>
       <div class="desc">실시간 차량 + 운행기록</div>
@@ -79,6 +79,10 @@
       // 계정관리: super만 표시
       const ac = document.getElementById('accountsCard');
       if (ac && getMyRole() === 'super') ac.style.display = '';
+      // 모니터링: admin 이상만
+      const mc = document.getElementById('monitorCard');
+      const role2 = getMyRole();
+      if (mc && (role2 === 'admin' || role2 === 'super')) mc.style.display = '';
       // 로그인 정보 표시
       const u = fbAuth.currentUser;
       if (u && !u.isAnonymous) {
