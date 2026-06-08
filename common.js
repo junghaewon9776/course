@@ -451,6 +451,7 @@ let _cacheReady = false;
 const _readyCallbacks = [];
 
 let _syncInitialized = false;
+let _signingOut = false;   // 로그아웃 중 flag — DB 에러 무시용
 function initFirebaseSync() {
   if (_syncInitialized) return;
   if (typeof fbDb === 'undefined') {
@@ -480,9 +481,18 @@ function initFirebaseSync() {
     }
     if (window.onDataChanged) window.onDataChanged();
   }, (err) => {
+    // 로그아웃 중이면 무시 (signOut → signInAnonymously 사이에 발생)
+    if (_signingOut) return;
     console.error('Firebase 읽기 오류:', err);
     alert('Firebase 연결 실패: ' + err.message);
   });
+}
+function stopFirebaseSync() {
+  if (_syncInitialized && typeof fbDb !== 'undefined') {
+    fbDb.ref('/').off('value');
+  }
+  _syncInitialized = false;
+  _cacheReady = false;
 }
 
 function loadData() {
@@ -553,6 +563,8 @@ async function adminSignIn(email, password) {
 
 async function adminSignOut() {
   // lastAdminId는 유지 (다음 로그인 시 ID 자동 입력)
+  _signingOut = true;
+  stopFirebaseSync();
   await fbAuth.signOut();
   // 익명 로그인 후 이동 (DB 접근 권한 유지, permission_denied 방지)
   try { await fbAuth.signInAnonymously(); } catch(e) {}

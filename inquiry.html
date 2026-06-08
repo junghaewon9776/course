@@ -204,6 +204,8 @@ window.onDataChanged = () => {
 
 function inqLogout() {
   if (!confirm('로그아웃 하시겠습니까?')) return;
+  _signingOut = true;
+  stopFirebaseSync();
   fbAuth.signOut().then(() => {
     return fbAuth.signInAnonymously();
   }).then(() => {

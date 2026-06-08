@@ -134,8 +134,9 @@
 
   function doLogout() {
     if (!confirm('로그아웃 하시겠습니까?')) return;
+    _signingOut = true;
+    stopFirebaseSync();
     fbAuth.signOut().then(() => {
-      // lastAdminId 유지 (다음 로그인 시 자동 입력)
       return fbAuth.signInAnonymously();
     }).then(() => {
       location.reload();

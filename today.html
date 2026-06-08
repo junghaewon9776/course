@@ -234,6 +234,8 @@ function updateMeIndicator() {
     loginLink.onclick = async (e) => {
       e.preventDefault();
       if (!confirm('로그아웃 하시겠습니까?')) return;
+      _signingOut = true;
+      stopFirebaseSync();
       await fbAuth.signOut();
       try { await fbAuth.signInAnonymously(); } catch(ex){}
       location.reload();
