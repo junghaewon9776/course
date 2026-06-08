@@ -372,22 +372,19 @@ function initMap() {
     minLevel: 3, // 너무 가까이 못 가게
     maxLevel: 9
   });
-  // 사용자가 지도 만지면 → 마지막 만진 시점에서 5초 후 따라가기 재개
-  kakao.maps.event.addListener(map, 'dragstart', () => { isUserInteracting = true; });
-  kakao.maps.event.addListener(map, 'zoom_start', () => { isUserInteracting = true; });
-  kakao.maps.event.addListener(map, 'idle', () => {
-    if (isUserInteracting && followMode) {
-      followPauseUntil = Date.now() + 5000;
+  // 사용자가 지도 드래그하면 따라가기 해제 (줌은 무관)
+  kakao.maps.event.addListener(map, 'dragend', () => {
+    if (followMode) {
+      followMode = false;
+      followPauseUntil = 0;
       updateFollowBtn();
     }
-    isUserInteracting = false;
   });
   // 줌 레벨별 마커 크기 자동 조절
   setupMarkerZoomScale(map, () => anchorMarkers);
 }
 
-let followPauseUntil = 0;
-let isUserInteracting = false;
+let followPauseUntil = 0; // 레거시 (사용 안 함)
 
 function renderAssignments() {
   const data = loadData();
@@ -1594,12 +1591,7 @@ function fitBoundsWithMe() {
 function updateFollowBtn() {
   const btn = document.getElementById('followToggle');
   if (!btn) return;
-  const remain = followPauseUntil - Date.now();
-  if (followMode && remain > 0) {
-    btn.textContent = `고정해제 ${Math.ceil(remain/1000)}s`;
-    btn.style.background = '#f39c12';
-    btn.style.color = '#fff';
-  } else if (followMode) {
+  if (followMode) {
     btn.textContent = '따라가기ON';
     btn.style.background = '#27ae60';
     btn.style.color = '#fff';
@@ -1609,18 +1601,6 @@ function updateFollowBtn() {
     btn.style.color = '';
   }
 }
-
-// 일시정지 카운트다운 표시 (1초마다) — 끝나면 따라가기ON 복원
-setInterval(() => {
-  if (followPauseUntil > Date.now()) {
-    updateFollowBtn();
-  } else if (followPauseUntil > 0 && followMode) {
-    // 카운트다운 방금 끝남 → 따라가기ON 복원 (줌 유지, 센터만 이동)
-    followPauseUntil = 0;
-    updateFollowBtn();
-    if (currentPos && map) map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
-  }
-}, 1000);
 
 function zoomIn() {
   if (!map) return;
@@ -1752,12 +1732,9 @@ function onGpsUpdate(pos) {
       myMarker.setPosition(p);
       myMarker.setImage(img);
     }
-    // 따라가기 모드 + 일시정지 아니면 지도 중심 이동
-    if (followMode && Date.now() >= followPauseUntil) {
+    // 따라가기 모드면 지도 중심 이동
+    if (followMode) {
       map.setCenter(p);
-    } else if (followMode) {
-      // 일시정지 끝났는지 주기적으로 버튼 갱신
-      updateFollowBtn();
     }
     // 내비모드면 진행방향 위로
     if (naviMode && heading !== null && !isNaN(heading)) {
