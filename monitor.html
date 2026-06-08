@@ -208,21 +208,7 @@ function initMonitorMap() {
   updateAllCoursesBtn();
   const cb2 = document.getElementById('cnsAlwaysOn');
   if (cb2) cb2.checked = localStorage.getItem('hideComplaintNoSpray') !== '1';
-  // 사용자가 지도 직접 만지면 따라가기 일시 중지 (5초 후 자동 복귀)
-  kakao.maps.event.addListener(map, 'dragstart', () => {
-    if (__followKey) {
-      __followPaused = true;
-      clearTimeout(__followResumeTimer);
-      __followResumeTimer = setTimeout(() => { __followPaused = false; }, 5000);
-    }
-  });
-  kakao.maps.event.addListener(map, 'zoom_start', () => {
-    if (__followKey) {
-      __followPaused = true;
-      clearTimeout(__followResumeTimer);
-      __followResumeTimer = setTimeout(() => { __followPaused = false; }, 5000);
-    }
-  });
+  // 지도 드래그/줌해도 따라가기는 계속 유지 (지도 center만 자동 이동, 화면 스크롤은 건드리지 않음)
 }
 
 // 라이브 세션에서 courseId로 운영중인 호차 찾기
@@ -805,13 +791,9 @@ function showCourseOnMap(courseId) {
 
 // ─── 따라가기 모드 (특정 차량을 자동 추적) ───
 let __followKey = null;
-let __followPaused = false;
-let __followResumeTimer = null;
 function stopFollow(reason) {
   if (!__followKey) return;
   __followKey = null;
-  __followPaused = false;
-  clearTimeout(__followResumeTimer);
   __followResumeTimer = null;
   // 버튼 라벨 갱신
   if (window.__liveCache) renderLive(window.__liveCache);
@@ -1102,7 +1084,7 @@ function renderLive(live) {
     }).join('');
   }
   // 따라가기 중이면 그 차량으로 지도 자동 이동 (일시중지 상태면 스킵)
-  if (__followKey && liveMarkers[__followKey] && !__followPaused) {
+  if (__followKey && liveMarkers[__followKey]) {
     map.setCenter(liveMarkers[__followKey].getPosition());
   }
 }
@@ -1112,6 +1094,8 @@ function toggleFollowDriver(key) {
     return;
   }
   __followKey = key;
+  // 지도 화면으로 스크롤
+  document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
   const m = liveMarkers[key];
   if (m && map) {
     map.setCenter(m.getPosition());
@@ -1455,6 +1439,8 @@ function toggleMonitorGPS() {
     return;
   }
   if (!navigator.geolocation) { alert('GPS 미지원 브라우저'); return; }
+  // 지도 화면으로 스크롤
+  document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
   __monWatchId = navigator.geolocation.watchPosition(
     pos => {
       const lat = pos.coords.latitude;
@@ -1477,9 +1463,7 @@ function toggleMonitorGPS() {
         __monMarker.setPosition(p);
       }
       // Firebase에도 본부 위치 publish → 운영 중인 사람들 지도에도 표시
-      const __u = fbAuth.currentUser;
-      const __uInfo = (loadData().users || {})[__u?.uid];
-      const __myName = __uInfo?.name || __u?.email || '본부';
+      const __myName = getDeviceName() || '본부';
       publishLiveSession(__monLiveKey, {
         lat, lng, heading: pos.coords.heading,
         crew: { driver: '📊 ' + __myName, vehicleName: '본부' },
