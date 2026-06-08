@@ -40,10 +40,6 @@
     <div class="flex-between" style="flex-wrap:wrap;gap:8px;">
       <h2>필터</h2>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-        <label style="display:inline;font-size:12px;">행사:</label>
-        <select id="eventFilter" onchange="render()" style="width:auto;display:inline-block;">
-          <option value="">전체 행사</option>
-        </select>
         <label style="display:inline;font-size:12px;">기간:</label>
         <select id="period" onchange="onPeriodChange()" style="width:auto;display:inline-block;">
           <option value="all">전체</option>
@@ -168,27 +164,16 @@ function getFilteredLogs() {
     if (s) from = new Date(s + 'T00:00:00').getTime();
     if (e) to = new Date(e + 'T23:59:59').getTime();
   }
-  const eventFilter = document.getElementById('eventFilter')?.value || '';
   return (data.logs || []).filter(l => {
     if (l.hidden) return false;
     const t = l.startedAt || 0;
     if (t < from || t > to) return false;
     if (!l.finishedAt) return false;
-    if (eventFilter && l.eventId !== eventFilter) return false;
     if (!isEventVisibleForViewer(l.eventId, data)) return false;
     return true;
   });
 }
 
-function renderEventFilterOptions() {
-  const sel = document.getElementById('eventFilter');
-  if (!sel) return;
-  const data = loadData();
-  const cur = sel.value;
-  const visible = (data.events || []).filter(e => isEventVisibleForViewer(e.id, data));
-  sel.innerHTML = '<option value="">전체 행사</option>' +
-    visible.map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
-}
 
 // 한 로그에서 그룹 키 뽑아내기 (groupBy에 따라)
 function logGroupKeys(log, groupBy, data) {
@@ -219,7 +204,6 @@ const GROUP_LABELS = {
 };
 
 function render() {
-  renderEventFilterOptions();
   const data = loadData();
   const logs = getFilteredLogs();
   const members = data.members || [];
@@ -228,15 +212,11 @@ function render() {
   const titleEl = document.getElementById('memberChartTitle');
   if (titleEl) titleEl.textContent = labels.title;
 
-  // 행사 필터에 맞는 코스만 (필터 없으면 전체) + 비관리자는 숨김 행사 제외
-  const eventFilter = document.getElementById('eventFilter')?.value || '';
+  // 전체 코스 (숨김 행사 제외)
   const courses = [];
-  const visibleEventIds = new Set();
   for (const e of data.events) {
     if (!isEventVisibleForViewer(e.id, data)) continue;
-    visibleEventIds.add(e.id);
-    if (eventFilter && e.id !== eventFilter) continue;
-    for (const c of e.courses) courses.push({ id: c.id, label: eventFilter ? c.name : `${e.name} - ${c.name}`, color: c.color });
+    for (const c of e.courses) courses.push({ id: c.id, label: c.name, color: c.color, eventName: e.name });
   }
 
   // matrix[key][courseId] = count
