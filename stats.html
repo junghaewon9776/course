@@ -78,6 +78,8 @@
       <option value="assist">보조자만</option>
       <option value="team">조별</option>
     </select>
+    <label style="font-size:12px;margin-left:8px;">상세:</label>
+    <button id="detailToggle" class="small" onclick="toggleDetail()" style="font-size:12px;">상세 켜기</button>
   </div>
 
   <div id="statsContainer"></div>
@@ -111,6 +113,18 @@ function renderEventFilterOptions() {
   const visible = (data.events || []).filter(e => isEventVisibleForViewer(e.id, data));
   sel.innerHTML = '<option value="">전체</option>' +
     visible.map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
+}
+
+let __showDetail = false;
+function toggleDetail() {
+  __showDetail = !__showDetail;
+  const btn = document.getElementById('detailToggle');
+  btn.textContent = __showDetail ? '상세 끄기' : '상세 켜기';
+  btn.className = __showDetail ? 'small success' : 'small';
+  render();
+}
+function detailSuffix(c) {
+  return (__showDetail && c.detail) ? ' (' + c.detail + ')' : '';
 }
 
 function onPeriodChange() {
@@ -276,7 +290,7 @@ function render() {
     // 일자별 운행 기록 표
     const sortedLogs = [...logs].sort((a,b) => (b.startedAt||0) - (a.startedAt||0));
     let dHead = `<tr><th>일자</th><th>운전자</th><th>보조자</th>` + courses.map(c =>
-      `<th style="background:${c.color};color:#fff;">${c.label}${c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.85;">('+c.detail+')</span>' : ''}</th>`
+      `<th style="background:${c.color};color:#fff;">${c.label}${__showDetail && c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.85;">('+c.detail+')</span>' : ''}</th>`
     ).join('') + '</tr>';
     let dBody = '';
     for (const log of sortedLogs) {
@@ -296,9 +310,9 @@ function render() {
     }
     document.getElementById('daily_' + uid).innerHTML = dHead + (dBody || '<tr><td colspan="99" class="empty">기록 없음</td></tr>');
 
-    // 표
+    // 회원 × 코스 표
     const sortedAll = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]);
-    let thead = `<tr><th>${labels.row}</th><th>총합</th>` + courses.map(c => `<th>${c.label}${c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.7;">('+c.detail+')</span>' : ''}</th>`).join('') + '</tr>';
+    let thead = `<tr><th>${labels.row}</th><th>총합</th>` + courses.map(c => `<th>${c.label}${__showDetail && c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.7;">('+c.detail+')</span>' : ''}</th>`).join('') + '</tr>';
     let tbody = '';
     for (const [name, total] of sortedAll) {
       if (total === 0) continue;
@@ -319,7 +333,7 @@ function render() {
       data: {
         labels: sortedNames,
         datasets: courses.map(c => ({
-          label: c.detail ? `${c.label}(${c.detail})` : c.label,
+          label: c.label + detailSuffix(c),
           data: sortedNames.map(n => matrix[n]?.[c.id] || 0),
           backgroundColor: c.color
         }))
@@ -338,7 +352,7 @@ function render() {
     const cc = new Chart(document.getElementById('cc_' + uid), {
       type: 'bar',
       data: {
-        labels: courses.map(c => c.detail ? `${c.label}(${c.detail})` : c.label),
+        labels: courses.map(c => c.label + detailSuffix(c)),
         datasets: [{ label: '방역 횟수', data: courses.map(c => courseTotals[c.id] || 0), backgroundColor: courses.map(c => c.color) }]
       },
       options: {
