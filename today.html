@@ -155,6 +155,8 @@ function _hasEvtCfg(eventId) {
 function startInit() {
   if (_initStarted) return;
   _initStarted = true;
+  // 로컬 이름 미등록이면 입력 바 표시
+  showDeviceNameBar();
   // 지도 SDK는 Firebase랑 병렬로 즉시 로드 (이어가기 속도 핵심)
   loadKakaoMap();
   initFirebaseSync();
