@@ -173,6 +173,16 @@
         <p class="muted" style="margin-top:6px;font-size:11px;">💡 민원은 운영(today) 지도에 빨간 핀으로 표시되고 클릭하면 전화걸기 가능</p>
       </div>
 
+      <!-- 방역금지구역 현황 -->
+      <div class="card" style="border-left:4px solid #922b21;">
+        <div class="flex-between">
+          <h2>⛔ 방역금지구역 현황</h2>
+          <button class="small" style="background:#e74c3c;" onclick="toggleMode('noSpray')">+ 금지구역 추가</button>
+        </div>
+        <div id="noSprayList" style="margin-top:8px;"></div>
+        <p class="muted" style="margin-top:6px;font-size:11px;">💡 금지구역은 지도에 빨간 ⛔ 핀 + 반경 원으로 표시됩니다. 추가는 지도 클릭 또는 검색으로 가능합니다.</p>
+      </div>
+
       <!-- 행사별 조/차량 선택 -->
       <div class="card" style="border-left:4px solid #7c3aed;">
         <h2>🏷 행사별 조 · 차량 선택</h2>
@@ -483,6 +493,7 @@ function addNoSprayAt(lat, lng, areaHint = '') {
 
 function deleteNoSprayZone(id) {
   if (!confirm('이 방역불가 지역을 삭제할까요?')) return;
+  if (window.__openIw) { try { window.__openIw.close(); } catch(e){} window.__openIw = null; }
   const data = loadData();
   const zName = (data.noSprayZones || []).find(z => z.id === id)?.name || id;
   data.noSprayZones = (data.noSprayZones || []).filter(z => z.id !== id);
@@ -914,6 +925,7 @@ function refreshAll() {
   renderAnchorCourseSelect();
   renderAnchors();
   renderComplaints();
+  renderNoSprayZones();
   renderTeams();
   renderEventSelect('evtAssignSel');
   renderEvtAssign();
@@ -1644,11 +1656,51 @@ function editAnchor(id) {
 }
 function deleteAnchor(id) {
   if (!confirm('이 거점을 삭제할까요?')) return;
+  // 열린 InfoWindow 닫기
+  if (window.__openIw) { try { window.__openIw.close(); } catch(e){} window.__openIw = null; }
   const data = loadData();
   const aName = (data.anchors || []).find(a => a.id === id)?.name || id;
   data.anchors = data.anchors.filter(a => a.id !== id);
   saveData(data); refreshAll();
   sendTelegram(`🗑 <b>거점 삭제</b>\n거점: ${aName}`);
+}
+
+// ────── 방역금지구역 현황 ──────
+function renderNoSprayZones() {
+  const el = document.getElementById('noSprayList');
+  if (!el) return;
+  const data = loadData();
+  const zones = data.noSprayZones || [];
+  if (!zones.length) {
+    el.innerHTML = '<div class="empty">등록된 금지구역 없음</div>';
+    return;
+  }
+  // 최신순
+  const sorted = [...zones].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  el.innerHTML = sorted.map(z => {
+    const when = z.createdAt ? new Date(z.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    return `
+      <div class="list-item" style="flex-direction:column;align-items:stretch;border-left:3px solid #e74c3c;">
+        <div class="flex-between">
+          <div><b>⛔ ${(z.name || '').replace(/</g,'&lt;')}</b> <span class="tag" style="background:#e74c3c;">반경 ${z.radius || 50}m</span></div>
+          <div style="display:flex;gap:4px;">
+            <button class="small gray" onclick="centerOnNoSpray('${z.id}')" title="지도에서 보기">📍</button>
+            <button class="small" onclick="editNoSprayZone('${z.id}')">수정</button>
+            <button class="small danger" onclick="deleteNoSprayZone('${z.id}')">삭제</button>
+          </div>
+        </div>
+        ${z.reason ? `<div class="sub" style="margin:4px 0;white-space:pre-wrap;">${z.reason.replace(/</g,'&lt;')}</div>` : ''}
+        <div class="sub">📍 ${z.lat.toFixed(5)}, ${z.lng.toFixed(5)}${when ? ' · 🕐 ' + when : ''}</div>
+      </div>`;
+  }).join('');
+}
+
+function centerOnNoSpray(id) {
+  const data = loadData();
+  const z = (data.noSprayZones || []).find(x => x.id === id);
+  if (!z || !map) return;
+  map.setCenter(new kakao.maps.LatLng(z.lat, z.lng));
+  map.setLevel(3);
 }
 
 // ────── 민원 ──────
@@ -1770,6 +1822,7 @@ function toggleComplaintStatus(id) {
 
 function deleteComplaint(id) {
   if (!confirm('이 민원을 삭제할까요?')) return;
+  if (window.__openIw) { try { window.__openIw.close(); } catch(e){} window.__openIw = null; }
   const data = loadData();
   const c = (data.complaints || []).find(x => x.id === id);
   data.complaints = (data.complaints || []).filter(c => c.id !== id);
