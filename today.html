@@ -1611,10 +1611,10 @@ setInterval(() => {
   if (followPauseUntil > Date.now()) {
     updateFollowBtn();
   } else if (followPauseUntil > 0 && followMode) {
-    // 카운트다운 방금 끝남 → 따라가기ON 복원 + fitBounds
+    // 카운트다운 방금 끝남 → 따라가기ON 복원 (줌 유지, 센터만 이동)
     followPauseUntil = 0;
     updateFollowBtn();
-    fitBoundsWithMe();
+    if (currentPos && map) map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
   }
 }, 1000);
 
