@@ -248,6 +248,10 @@ function render() {
       <div class="card" style="border-left:4px solid #2c3e50;margin-bottom:6px;">
         <h2 style="font-size:16px;">📋 ${event.name}</h2>
       </div>
+      <div class="card">
+        <h2>📅 일자별 운행 기록</h2>
+        <div class="scroll-x"><table id="daily_${uid}"></table></div>
+      </div>
       <div class="row">
         <div class="col" style="flex:1;min-width:320px;">
           <div class="card">
@@ -263,11 +267,34 @@ function render() {
         </div>
       </div>
       <div class="card">
-        <h2>회원 × 코스 표</h2>
+        <h2>회원 × 코스 누적</h2>
         <div class="scroll-x"><table id="tb_${uid}"></table></div>
       </div>
     `;
     container.appendChild(section);
+
+    // 일자별 운행 기록 표
+    const sortedLogs = [...logs].sort((a,b) => (b.startedAt||0) - (a.startedAt||0));
+    let dHead = `<tr><th>일자</th><th>운전자</th><th>보조자</th>` + courses.map(c =>
+      `<th style="background:${c.color};color:#fff;">${c.label}${c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.85;">('+c.detail+')</span>' : ''}</th>`
+    ).join('') + '</tr>';
+    let dBody = '';
+    for (const log of sortedLogs) {
+      const d = new Date(log.startedAt || 0);
+      const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
+      const driver = log.crew?.driver || '-';
+      const assist = log.crew?.assist || '-';
+      let row = `<tr><td style="white-space:nowrap;">${dateStr}</td><td>${driver}</td><td>${assist}</td>`;
+      for (const c of courses) {
+        if (log.courseId === c.id) {
+          row += `<td style="background:${c.color}22;font-weight:700;text-align:center;">✔</td>`;
+        } else {
+          row += `<td class="num-zero"></td>`;
+        }
+      }
+      dBody += row + '</tr>';
+    }
+    document.getElementById('daily_' + uid).innerHTML = dHead + (dBody || '<tr><td colspan="99" class="empty">기록 없음</td></tr>');
 
     // 표
     const sortedAll = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]);
