@@ -308,7 +308,19 @@ function render() {
       const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
       const driver = log.crew?.driver || '-';
       const assist = log.crew?.assist || '-';
-      const team = log.teamId ? (getTeam(data, log.teamId)?.name || '-') : '-';
+      let team = '-';
+      if (log.teamId) {
+        team = getTeam(data, log.teamId)?.name || '-';
+      } else if (driver !== '-') {
+        // teamId 없으면 운전자 이름으로 소속 조 추정
+        const driverMember = (data.members || []).find(m => (m.name||'').trim() === driver.trim());
+        if (driverMember) {
+          const found = (data.teams || []).find(t =>
+            t.leaderId === driverMember.id || t.viceLeaderId === driverMember.id || (t.memberIds || []).includes(driverMember.id)
+          );
+          if (found) team = found.name;
+        }
+      }
       let row = `<tr><td style="white-space:nowrap;">${dateStr}</td><td>${driver}</td><td>${assist}</td><td>${team}</td>`;
       let rowTotal = 0;
       for (const c of courses) {
