@@ -552,7 +552,7 @@ async function adminSignIn(email, password) {
 }
 
 async function adminSignOut() {
-  localStorage.removeItem('lastAdminId');
+  // lastAdminId는 유지 (다음 로그인 시 ID 자동 입력)
   await fbAuth.signOut();
   // 익명 로그인 후 이동 (DB 접근 권한 유지, permission_denied 방지)
   try { await fbAuth.signInAnonymously(); } catch(e) {}
@@ -705,9 +705,9 @@ function applyMemberNav() {
     if (isMember && ['admin.html', 'members.html', 'accounts.html'].includes(href)) {
       a.style.display = 'none';
     }
-    // 계정관리: super만
-    if (!isMember && href === 'accounts.html' && myRole !== 'super') {
-      a.style.display = 'none';
+    // 계정관리: super만 (super-nav 클래스로 초기 숨김, super면 표시)
+    if (href === 'accounts.html') {
+      a.style.display = (myRole === 'super') ? '' : 'none';
     }
   });
 

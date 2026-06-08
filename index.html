@@ -135,8 +135,7 @@
   function doLogout() {
     if (!confirm('로그아웃 하시겠습니까?')) return;
     fbAuth.signOut().then(() => {
-      localStorage.removeItem('lastAdminId');
-      // 익명 로그인 후 새로고침 (DB 접근 권한 유지)
+      // lastAdminId 유지 (다음 로그인 시 자동 입력)
       return fbAuth.signInAnonymously();
     }).then(() => {
       location.reload();

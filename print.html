@@ -29,7 +29,7 @@
     body.sz-l .warn-box { font-size: 22px; }
     body.sz-l .team-table th, body.sz-l .team-table td { padding: 8px 10px; }
 
-    .teams-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px; }
+    .teams-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
     .team-table { width: 100%; border-collapse: collapse; border: 2px solid #1f2937; }
     .team-table th, .team-table td { border: 1px solid #4b5563; padding: 6px 8px; }
     .team-header { background: #87ceeb; font-weight: 700; text-align: center; }
@@ -66,9 +66,17 @@
       .qr-row { page-break-inside: avoid; }
     }
 
-    /* 가로 인쇄 — 조 그리드 2열 */
+    /* 가로 인쇄 — 조 그리드 3열 (A4 가로 297mm) */
     body.orient-landscape .teams-grid {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+    body.orient-landscape .print-wrap {
+      max-width: none;
+    }
+    body.orient-landscape .team-table th,
+    body.orient-landscape .team-table td {
+      padding: 3px 5px;
+      font-size: 11px;
     }
 
     /* 호차 인쇄 모드 */

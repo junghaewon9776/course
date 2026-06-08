@@ -205,7 +205,6 @@ window.onDataChanged = () => {
 function inqLogout() {
   if (!confirm('로그아웃 하시겠습니까?')) return;
   fbAuth.signOut().then(() => {
-    localStorage.removeItem('lastAdminId');
     return fbAuth.signInAnonymously();
   }).then(() => {
     location.reload();
