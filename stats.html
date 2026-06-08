@@ -70,36 +70,17 @@
     </div>
   </div>
 
-  <div class="row">
-    <div class="col" style="flex:1;min-width:320px;">
-      <div class="card">
-        <div class="flex-between">
-          <h2 id="memberChartTitle">회원별 방역 횟수 (코스별 누적)</h2>
-          <select id="memberGroupBy" onchange="render()" style="width:auto;display:inline-block;">
-            <option value="member" selected>회원 전체</option>
-            <option value="driver">운전자만</option>
-            <option value="assist">보조자만</option>
-            <option value="team">조별</option>
-          </select>
-        </div>
-        <canvas id="memberChart" style="max-height:400px;"></canvas>
-      </div>
-    </div>
-    <div class="col" style="flex:1;min-width:320px;">
-      <div class="card">
-        <h2>코스별 방역 총 횟수</h2>
-        <canvas id="courseChart" style="max-height:400px;"></canvas>
-      </div>
-    </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+    <label style="font-size:12px;">그룹:</label>
+    <select id="memberGroupBy" onchange="render()" style="width:auto;display:inline-block;">
+      <option value="member" selected>회원 전체</option>
+      <option value="driver">운전자만</option>
+      <option value="assist">보조자만</option>
+      <option value="team">조별</option>
+    </select>
   </div>
 
-  <div class="card">
-    <h2>회원 × 코스 표</h2>
-    <p class="muted" style="font-size:12px;">행: 회원, 열: 코스, 칸: 방역 참여 횟수</p>
-    <div class="scroll-x">
-      <table id="statsTable"></table>
-    </div>
-  </div>
+  <div id="statsContainer"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -109,7 +90,7 @@
 <script src="firebase-config.js?v=20260512v"></script>
 <script src="common.js?v=20260608e"></script>
 <script>
-let memberChart, courseChart;
+let __charts = []; // 동적 차트 인스턴스 추적
 
 window.onAuthSuccess = () => onDataReady(render);
 window.onDataChanged = () => render();
@@ -222,102 +203,129 @@ const GROUP_LABELS = {
 function render() {
   renderEventFilterOptions();
   const data = loadData();
-  const logs = getFilteredLogs();
+  const allLogs = getFilteredLogs();
   const members = data.members || [];
   const groupBy = document.getElementById('memberGroupBy')?.value || 'member';
   const labels = GROUP_LABELS[groupBy] || GROUP_LABELS.member;
-  const titleEl = document.getElementById('memberChartTitle');
-  if (titleEl) titleEl.textContent = labels.title;
-
-  // 코스 목록 (행사 필터 + 숨김 제외)
   const eventFilter = document.getElementById('eventFilter')?.value || '';
-  const courses = [];
-  for (const e of (data.events || [])) {
-    if (!isEventVisibleForViewer(e.id, data)) continue;
-    if (eventFilter && e.id !== eventFilter) continue;
-    for (const c of (e.courses || [])) courses.push({ id: c.id, label: c.name, detail: c.detail || '', color: c.color, eventName: e.name });
-  }
 
-  // matrix[key][courseId] = count
-  const matrix = {};
-  const memberTotals = {};
-  const courseTotals = {};
+  // 이전 차트 정리
+  __charts.forEach(c => c.destroy());
+  __charts = [];
 
-  for (const log of logs) {
-    const courseId = log.courseId;
-    const keys = logGroupKeys(log, groupBy, data);
-    for (const name of keys) {
-      if (!matrix[name]) matrix[name] = {};
-      matrix[name][courseId] = (matrix[name][courseId] || 0) + 1;
-      memberTotals[name] = (memberTotals[name] || 0) + 1;
-    }
-    courseTotals[courseId] = (courseTotals[courseId] || 0) + 1;
-  }
-
-  // 표 그리기 (0회 제외, 많은 순)
-  const sortedAll = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]);
-  let thead = `<tr><th>${labels.row}</th><th>총합</th>` + courses.map(c => `<th>${c.label}${c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.7;">('+c.detail+')</span>' : ''}</th>`).join('') + '</tr>';
-  let tbody = '';
-  for (const [name, total] of sortedAll) {
-    if (total === 0) continue;
-    const isUnregistered = groupBy === 'member' && !members.find(m=>m.name===name);
-    let row = `<tr><td>${name}${isUnregistered ? ' <span class="sub">(미등록)</span>' : ''}</td>`;
-    row += `<td><b>${total}</b></td>`;
-    for (const c of courses) {
-      const v = matrix[name]?.[c.id] || 0;
-      row += `<td class="${v===0?'num-zero':v>=3?'num-high':''}">${v||''}</td>`;
-    }
-    row += '</tr>';
-    tbody += row;
-  }
-  document.getElementById('statsTable').innerHTML = thead + tbody;
-
-  // 회원별: 코스별 누적 막대 (각 코스 색깔, 총합 위에 표시)
-  // 0회는 memberTotals에 없으니 자동으로 제외됨, 횟수 많은 순
-  const sortedNames = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]).map(x => x[0]);
-  if (memberChart) memberChart.destroy();
-  memberChart = new Chart(document.getElementById('memberChart'), {
-    type: 'bar',
-    data: {
-      labels: sortedNames,
-      datasets: courses.map(c => ({
-        label: c.detail ? `${c.label}(${c.detail})` : c.label,
-        data: sortedNames.map(name => matrix[name]?.[c.id] || 0),
-        backgroundColor: c.color
-      }))
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: true, position: 'bottom', labels: { font: { size: 10 } } },
-        tooltip: { mode: 'index', intersect: false }
-      },
-      scales: {
-        x: { stacked: true, ticks: { font: { size: 10 } } },
-        y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
-      },
-      layout: { padding: { top: 24 } }  // 총합 라벨 공간
-    },
-    plugins: [stackTotalsPlugin]
+  // 표시할 행사 목록
+  const visibleEvents = (data.events || []).filter(e => {
+    if (!isEventVisibleForViewer(e.id, data)) return false;
+    if (eventFilter && e.id !== eventFilter) return false;
+    return true;
   });
 
-  // 코스별 (단일 막대)
-  if (courseChart) courseChart.destroy();
-  courseChart = new Chart(document.getElementById('courseChart'), {
-    type: 'bar',
-    data: {
-      labels: courses.map(c => c.detail ? `${c.label}(${c.detail})` : c.label),
-      datasets: [{ label: '방역 횟수', data: courses.map(c => courseTotals[c.id] || 0), backgroundColor: courses.map(c => c.color) }]
-    },
-    options: {
-      indexAxis: 'x',
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { beginAtZero: true, ticks: { precision: 0 } } }
+  const container = document.getElementById('statsContainer');
+  container.innerHTML = '';
+
+  visibleEvents.forEach(event => {
+    const courses = (event.courses || []).map(c => ({ id: c.id, label: c.name, detail: c.detail || '', color: c.color }));
+    if (!courses.length) return;
+    const logs = allLogs.filter(l => l.eventId === event.id);
+
+    // 집계
+    const matrix = {}, memberTotals = {}, courseTotals = {};
+    for (const log of logs) {
+      const courseId = log.courseId;
+      for (const name of logGroupKeys(log, groupBy, data)) {
+        if (!matrix[name]) matrix[name] = {};
+        matrix[name][courseId] = (matrix[name][courseId] || 0) + 1;
+        memberTotals[name] = (memberTotals[name] || 0) + 1;
+      }
+      courseTotals[courseId] = (courseTotals[courseId] || 0) + 1;
     }
+
+    const uid = 'ev_' + event.id.replace(/[^a-zA-Z0-9]/g,'');
+
+    // 섹션 HTML
+    const section = document.createElement('div');
+    section.innerHTML = `
+      <div class="card" style="border-left:4px solid #2c3e50;margin-bottom:6px;">
+        <h2 style="font-size:16px;">📋 ${event.name}</h2>
+      </div>
+      <div class="row">
+        <div class="col" style="flex:1;min-width:320px;">
+          <div class="card">
+            <h2>${labels.title}</h2>
+            <canvas id="mc_${uid}" style="max-height:400px;"></canvas>
+          </div>
+        </div>
+        <div class="col" style="flex:1;min-width:320px;">
+          <div class="card">
+            <h2>코스별 방역 총 횟수</h2>
+            <canvas id="cc_${uid}" style="max-height:400px;"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>회원 × 코스 표</h2>
+        <div class="scroll-x"><table id="tb_${uid}"></table></div>
+      </div>
+    `;
+    container.appendChild(section);
+
+    // 표
+    const sortedAll = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]);
+    let thead = `<tr><th>${labels.row}</th><th>총합</th>` + courses.map(c => `<th>${c.label}${c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.7;">('+c.detail+')</span>' : ''}</th>`).join('') + '</tr>';
+    let tbody = '';
+    for (const [name, total] of sortedAll) {
+      if (total === 0) continue;
+      const isUnregistered = groupBy === 'member' && !members.find(m=>m.name===name);
+      let row = `<tr><td>${name}${isUnregistered ? ' <span class="sub">(미등록)</span>' : ''}</td><td><b>${total}</b></td>`;
+      for (const c of courses) {
+        const v = matrix[name]?.[c.id] || 0;
+        row += `<td class="${v===0?'num-zero':v>=3?'num-high':''}">${v||''}</td>`;
+      }
+      tbody += row + '</tr>';
+    }
+    document.getElementById('tb_' + uid).innerHTML = thead + tbody;
+
+    // 회원별 누적 막대
+    const sortedNames = sortedAll.map(x => x[0]);
+    const mc = new Chart(document.getElementById('mc_' + uid), {
+      type: 'bar',
+      data: {
+        labels: sortedNames,
+        datasets: courses.map(c => ({
+          label: c.detail ? `${c.label}(${c.detail})` : c.label,
+          data: sortedNames.map(n => matrix[n]?.[c.id] || 0),
+          backgroundColor: c.color
+        }))
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 10 } } }, tooltip: { mode: 'index', intersect: false } },
+        scales: { x: { stacked: true, ticks: { font: { size: 10 } } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+        layout: { padding: { top: 24 } }
+      },
+      plugins: [stackTotalsPlugin]
+    });
+    __charts.push(mc);
+
+    // 코스별 막대
+    const cc = new Chart(document.getElementById('cc_' + uid), {
+      type: 'bar',
+      data: {
+        labels: courses.map(c => c.detail ? `${c.label}(${c.detail})` : c.label),
+        datasets: [{ label: '방역 횟수', data: courses.map(c => courseTotals[c.id] || 0), backgroundColor: courses.map(c => c.color) }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { precision: 0 } }, y: { beginAtZero: true, ticks: { precision: 0 } } }
+      }
+    });
+    __charts.push(cc);
   });
+
+  if (!container.children.length) {
+    container.innerHTML = '<div class="card empty">표시할 데이터가 없습니다</div>';
+  }
 }
 
 // 누적 막대: 각 세그먼트 안에 코스별 개수 + 막대 위에 총합
@@ -365,11 +373,22 @@ const stackTotalsPlugin = {
 };
 
 function exportStatsCSV() {
-  const table = document.getElementById('statsTable');
   let csv = '﻿';
-  for (const row of table.rows) {
-    csv += [...row.cells].map(c => `"${c.textContent.replace(/"/g, '""')}"`).join(',') + '\n';
-  }
+  const tables = document.querySelectorAll('#statsContainer table');
+  const headers = document.querySelectorAll('#statsContainer .card h2');
+  let hIdx = 0;
+  tables.forEach(table => {
+    // 행사 제목 찾기 (table 앞의 📋 헤더)
+    const section = table.closest('.card');
+    const prevCards = section?.parentElement?.querySelectorAll('.card');
+    csv += '\n';
+    // 행사명 헤더 삽입
+    const titleCard = table.closest('div')?.parentElement?.parentElement?.querySelector('h2');
+    if (titleCard) csv += `"${titleCard.textContent.replace(/"/g,'""')}"\n`;
+    for (const row of table.rows) {
+      csv += [...row.cells].map(c => `"${c.textContent.replace(/"/g, '""')}"`).join(',') + '\n';
+    }
+  });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
