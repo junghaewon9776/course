@@ -1709,12 +1709,15 @@ function applyNaviRotation(heading) {
   const el = document.getElementById('map');
   if (!el) return;
   if (naviMode) {
-    el.style.transition = 'transform 0.5s';
-    el.style.transform = `rotate(${-heading}deg)`;
+    el.style.transition = 'transform 1s ease-out';
+    el.style.transform = `scale(1.42) rotate(${-heading}deg)`;
     el.style.transformOrigin = 'center center';
   } else {
+    el.style.transition = 'transform 0.5s ease-out';
     el.style.transform = '';
   }
+  // 내비모드 전환 시 지도 relayout
+  if (map) setTimeout(() => map.relayout(), 600);
 }
 
 function onGpsUpdate(pos) {

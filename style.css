@@ -70,7 +70,7 @@ label { display: block; font-size: 12px; color: #666; margin: 6px 0 2px; }
 @media (max-width: 600px) { .map { height: 360px; } }
 
 /* 지도 컨테이너 + 오버레이 컨트롤 */
-.map-wrap { position: relative; }
+.map-wrap { position: relative; overflow: hidden; border-radius: 8px; }
 .map-ctrl {
   position: absolute;
   z-index: 5;
