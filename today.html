@@ -402,55 +402,20 @@ function startCourse(eventId, courseId) {
   openStartForm(eventId, courseId);
 }
 
-// ─── 코스 미리보기 (거점 목록 + 지도) ───
+// ─── 코스 미리보기 (바로 지도 + 아래 코스내역) ───
 function previewCourse(eventId, courseId) {
   const data = loadData();
   const event = getEvent(data, eventId);
   const course = getCourse(data, courseId);
   const anchors = getCourseAnchors(data, courseId);
 
-  const el = document.getElementById('assignmentList');
-  let html = `
-    <div style="margin-bottom:10px;">
-      <h3 style="margin:0 0 6px;color:${course.color};">📋 ${event.name} · ${course.name}</h3>
-      <div class="sub" style="margin-bottom:10px;">거점 ${anchors.length}개</div>
-  `;
-  if (anchors.length) {
-    html += anchors.map((a, i) => `
-      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;">
-        <div style="background:${course.color};color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex:none;">${i+1}</div>
-        <div style="flex:1;min-width:0;font-size:13px;">
-          <span style="font-weight:600;">${(a.name||'').replace(/</g,'&lt;')}</span>
-          ${a.memo ? '<span class="sub" style="margin-left:4px;font-size:11px;color:#888;">' + a.memo.replace(/</g,'&lt;') + '</span>' : ''}
-        </div>
-      </div>
-    `).join('');
-  } else {
-    html += '<div class="empty">거점이 없습니다</div>';
-  }
-  html += `
-      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-        <button onclick="previewCourseMap('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#3498db;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">🗺 코스 지도 보기</button>
-        <button onclick="startCourse('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#27ae60;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">▶ 코스시작</button>
-      </div>
-      <button onclick="renderAssignments()" style="margin-top:8px;background:#555;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer;width:100%;">← 돌아가기</button>
-    </div>
-  `;
-  el.innerHTML = html;
-}
-
-function previewCourseMap(eventId, courseId) {
-  const data = loadData();
-  const course = getCourse(data, courseId);
-  const anchors = getCourseAnchors(data, courseId);
   if (!anchors.length) { alert('이 코스에 거점이 없습니다'); return; }
 
   // 지도 초기화 (없으면)
   if (!map) {
     loadKakaoMap();
-    // 맵 로드 후 재시도
     const waitMap = setInterval(() => {
-      if (map) { clearInterval(waitMap); previewCourseMap(eventId, courseId); }
+      if (map) { clearInterval(waitMap); previewCourse(eventId, courseId); }
     }, 100);
     return;
   }
@@ -508,16 +473,30 @@ function previewCourseMap(eventId, courseId) {
   // opTitle/opSubtitle 설정
   const opTitle = document.getElementById('opTitle');
   const opSubtitle = document.getElementById('opSubtitle');
-  if (opTitle) opTitle.textContent = `📋 ${data.events?.find(e=>e.id===eventId)?.name||''} · ${course.name} (미리보기)`;
+  if (opTitle) opTitle.textContent = `📋 ${event.name} · ${course.name} (미리보기)`;
   if (opSubtitle) opSubtitle.textContent = `거점 ${anchors.length}개`;
 
-  // nextInfo 영역에 미리보기 안내 + 버튼
+  // nextInfo 영역: 버튼 + 코스 내역
   const nextInfo = document.getElementById('nextInfo');
   if (nextInfo) {
+    let anchorListHtml = anchors.map((a, i) => `
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;">
+        <div style="background:${course.color};color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex:none;">${i+1}</div>
+        <div style="flex:1;min-width:0;font-size:13px;">
+          <span style="font-weight:600;">${(a.name||'').replace(/</g,'&lt;')}</span>
+          ${a.memo ? '<span style="margin-left:4px;font-size:11px;color:#888;">' + a.memo.replace(/</g,'&lt;') + '</span>' : ''}
+        </div>
+      </div>
+    `).join('');
+
     nextInfo.innerHTML = `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
         <button onclick="startCourse('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#27ae60;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">▶ 코스시작</button>
         <button onclick="closePreviewMap()" style="flex:1;min-width:120px;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">← 돌아가기</button>
+      </div>
+      <div style="margin-top:12px;">
+        <div style="font-weight:700;font-size:13px;color:#555;margin-bottom:6px;">📋 코스 내역</div>
+        ${anchorListHtml}
       </div>
     `;
   }
