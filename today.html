@@ -433,7 +433,7 @@ function previewCourse(eventId, courseId) {
         <button onclick="previewCourseMap('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#3498db;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">🗺 코스 지도 보기</button>
         <button onclick="startCourse('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#27ae60;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">▶ 코스시작</button>
       </div>
-      <button onclick="renderAssignments()" style="margin-top:8px;background:none;border:1px solid #bbb;padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;width:100%;">← 돌아가기</button>
+      <button onclick="renderAssignments()" style="margin-top:8px;background:#555;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer;width:100%;">← 돌아가기</button>
     </div>
   `;
   el.innerHTML = html;
@@ -517,7 +517,7 @@ function previewCourseMap(eventId, courseId) {
     nextInfo.innerHTML = `
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
         <button onclick="startCourse('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#27ae60;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">▶ 코스시작</button>
-        <button onclick="closePreviewMap()" style="flex:1;min-width:120px;background:none;border:1px solid #bbb;padding:10px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer;">← 돌아가기</button>
+        <button onclick="closePreviewMap()" style="flex:1;min-width:120px;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">← 돌아가기</button>
       </div>
     `;
   }
