@@ -1257,7 +1257,7 @@ function renderMapForSession() {
     const aId = a.id;
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:10px;font-size:12px;max-width:260px;">
-        <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')} ${isDone?'<span style="font-size:10px;background:#27ae60;color:#fff;padding:1px 6px;border-radius:3px;">탑승완료</span>':''}</div>
+        <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')} ${isDone?'<span style="font-size:10px;background:#27ae60;color:#fff;padding:1px 6px;border-radius:3px;">거점완료</span>':''}</div>
         ${a.memo ? `<div style="color:#444;white-space:pre-wrap;margin-bottom:6px;">${a.memo.replace(/</g,'&lt;')}</div>` : ''}
         ${headInfoHtml}
         <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">
@@ -1475,7 +1475,7 @@ function toggleDone(anchorId) {
   renderMapForSession();
   updateNextInfo();
 
-  // 새로 탑승완료된 거점이면 텔레그램 알림
+  // 새로 거점완료된 거점이면 텔레그램 알림
   if (!wasDone) {
     const data = loadData();
     const a = (data.anchors || []).find(x => x.id === anchorId);
@@ -1483,7 +1483,7 @@ function toggleDone(anchorId) {
     const course = getCourse(data, currentSession.courseId);
     const vehInfo = [currentSession.crew?.vehicle, currentSession.crew?.vehicleColor].filter(Boolean).join(' / ');
     const idx = (data.anchors || []).filter(x => x.courseId === currentSession.courseId).sort((x,y)=>(x.order||0)-(y.order||0)).findIndex(x => x.id === anchorId) + 1;
-    sendTelegram(`🚐 <b>탑승완료</b>\n${event?.name || ''} · ${course?.name || ''}\n${idx}번 ${a?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시각: ${new Date().toLocaleTimeString('ko-KR')}`);
+    sendTelegram(`🚐 <b>거점완료</b>\n${event?.name || ''} · ${course?.name || ''}\n${idx}번 ${a?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시각: ${new Date().toLocaleTimeString('ko-KR')}`);
   }
 }
 
