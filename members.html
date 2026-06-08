@@ -86,6 +86,9 @@
             <button class="small success" onclick="setAllVehiclesActive(true)" title="차량 모두 활성화 → 오늘운영에서 차량 버튼만 표시 (조 입력 비활성화)">🚐 차량 활성화 <span style="opacity:0.85;font-weight:400;">(조 입력 OFF)</span></button>
             <button class="small gray" onclick="setAllVehiclesActive(false)" title="차량 모두 비활성화 → 오늘운영에서 조 입력 폼 표시 (차량 버튼 비활성화)">🧑 차량 비활성화 <span style="opacity:0.85;font-weight:400;">(조 입력 ON)</span></button>
             <button class="small" onclick="printAllVehicles()">🖨 전체 호차 인쇄</button>
+            <button onclick="exportVehiclesExcel()" class="small" style="background:#27ae60;color:#fff;">⬇ 차량 내보내기</button>
+            <button onclick="document.getElementById('vehUpload').click()" class="small" style="background:#3498db;color:#fff;">📤 차량 불러오기</button>
+            <input type="file" id="vehUpload" accept=".xlsx,.xls,.csv" style="display:none" onchange="importVehiclesExcel(event)">
             <button class="small success" onclick="addVehicle()">+ 차량 추가</button>
           </div>
         </div>
@@ -592,6 +595,125 @@ function openVehiclePrint(vehicles) {
   if (!win) { alert('팝업 차단됨 — 브라우저에서 팝업 허용 후 다시 시도'); return; }
   win.document.write(html);
   win.document.close();
+}
+
+// ────── 차량 엑셀 내보내기/불러오기 ──────
+function exportVehiclesExcel() {
+  const data = loadData();
+  const vehicles = (data.vehicles || []).slice().sort((a, b) => (a.order || 9999) - (b.order || 9999));
+  if (!vehicles.length) { alert('등록된 차량이 없습니다'); return; }
+  const members = data.members || [];
+  const getMem = id => members.find(m => m.id === id);
+  let activeIdx = 0;
+  const rows = vehicles.map(v => {
+    const isActive = v.active !== false && v.active !== 'false';
+    if (isActive) activeIdx++;
+    const drvM = getMem(v.defaultDriverId);
+    const astM = getMem(v.defaultAssistId);
+    return {
+      '호차': isActive ? activeIdx + '호차' : '비활성',
+      '상태': isActive ? '활성' : '비활성',
+      '색상': v.color || '',
+      '차번호': v.plate || '',
+      '소유주': v.owner || '',
+      '소유주연락처': v.ownerPhone || '',
+      '운전자': drvM?.name || v.defaultDriverName || '',
+      '운전자연락처': drvM?.phone || v.defaultDriverPhone || '',
+      '보조자': astM?.name || v.defaultAssistName || '',
+      '보조자연락처': astM?.phone || v.defaultAssistPhone || ''
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:8},{wch:6},{wch:14},{wch:12},{wch:14},{wch:14},{wch:10},{wch:14},{wch:10},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '차량등록');
+  XLSX.writeFile(wb, `차량등록-${todayStr()}.xlsx`);
+}
+
+function importVehiclesExcel(e) {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+      if (!rows.length) { alert('데이터가 없습니다'); return; }
+      const data = loadData();
+      if (!data.vehicles) data.vehicles = [];
+      const members = data.members || [];
+      const findMember = name => {
+        const n = String(name || '').trim();
+        if (!n) return null;
+        return members.find(m => (m.name || '').trim() === n);
+      };
+      let updated = 0, created = 0;
+      const maxOrder = data.vehicles.length ? Math.max(...data.vehicles.map(v => v.order || 0)) : 0;
+      rows.forEach((r, idx) => {
+        const color = String(r['색상'] || '').trim();
+        const plate = String(r['차번호'] || '').trim();
+        const owner = String(r['소유주'] || '').trim();
+        const ownerPhone = String(r['소유주연락처'] || '').trim();
+        const drvName = String(r['운전자'] || '').trim();
+        const drvPhone = String(r['운전자연락처'] || '').trim();
+        const astName = String(r['보조자'] || '').trim();
+        const astPhone = String(r['보조자연락처'] || '').trim();
+        const statusStr = String(r['상태'] || '').trim();
+        // 기존 차량 매칭: 차번호 일치 또는 같은 순번
+        let v = null;
+        if (plate) v = data.vehicles.find(x => x.plate === plate);
+        if (!v) {
+          // 순번(order)으로 매칭
+          const order = idx + 1;
+          v = data.vehicles.find(x => x.order === order);
+        }
+        if (v) {
+          // 기존 업데이트
+          if (color) v.color = color;
+          if (plate) v.plate = plate;
+          if (owner) v.owner = owner;
+          if (ownerPhone) v.ownerPhone = ownerPhone;
+          if (statusStr === '비활성') v.active = false;
+          else if (statusStr === '활성') v.active = true;
+          // 운전자
+          const drvM = findMember(drvName);
+          if (drvM) { v.defaultDriverId = drvM.id; v.defaultDriverName = ''; v.defaultDriverPhone = ''; }
+          else if (drvName) { v.defaultDriverId = ''; v.defaultDriverName = drvName; v.defaultDriverPhone = drvPhone; }
+          // 보조자
+          const astM = findMember(astName);
+          if (astM) { v.defaultAssistId = astM.id; v.defaultAssistName = ''; v.defaultAssistPhone = ''; }
+          else if (astName) { v.defaultAssistId = ''; v.defaultAssistName = astName; v.defaultAssistPhone = astPhone; }
+          updated++;
+        } else {
+          // 새 차량 생성
+          const newOrder = maxOrder + idx + 1;
+          const newV = {
+            id: uid(), order: newOrder, active: statusStr !== '비활성',
+            color, plate, owner, ownerPhone,
+            name: newOrder + '호차', memberIds: [],
+            defaultDriverId: '', defaultAssistId: '',
+            defaultDriverName: '', defaultDriverPhone: '',
+            defaultAssistName: '', defaultAssistPhone: ''
+          };
+          const drvM = findMember(drvName);
+          if (drvM) newV.defaultDriverId = drvM.id;
+          else if (drvName) { newV.defaultDriverName = drvName; newV.defaultDriverPhone = drvPhone; }
+          const astM = findMember(astName);
+          if (astM) newV.defaultAssistId = astM.id;
+          else if (astName) { newV.defaultAssistName = astName; newV.defaultAssistPhone = astPhone; }
+          data.vehicles.push(newV);
+          created++;
+        }
+      });
+      saveData(data); refreshAll();
+      alert(`✅ 차량 불러오기 완료\n업데이트: ${updated}대, 새로 추가: ${created}대`);
+    } catch (err) {
+      alert('파일 읽기 실패: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 // ────── 회원 ──────
