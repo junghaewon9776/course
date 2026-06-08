@@ -472,6 +472,59 @@ function previewCourse(eventId, courseId) {
 
   map.setBounds(bounds);
 
+  // 민원 핑 (미처리)
+  (data.complaints || []).filter(c => c.status !== 'resolved').forEach(c => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#f1c40f" stroke="white" stroke-width="2"/><path d="M11 9c-.5 0-1 .4-1 1 0 4 3 7 7 7 .6 0 1-.4 1-1v-2c0-.5-.4-1-1-1l-2 .3c-.4-.6-.8-1-1.3-1.3l.3-2c0-.6-.4-1-1-1H11z" fill="white"/></svg>`;
+    const m = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(c.lat, c.lng), map,
+      image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(28,28), {offset:new kakao.maps.Point(14,14)}),
+      title: '[민원] ' + (c.phone||''), zIndex: 8
+    });
+    const phoneTel = (c.phone||'').replace(/[^0-9+]/g,'');
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:10px;font-size:12px;max-width:240px;"><div style="font-weight:700;color:#b7950b;margin-bottom:4px;">📞 민원</div><div style="color:#444;">${(c.content||'').replace(/</g,'&lt;')}</div>${c.phone ? '<div style="margin-top:6px;"><a href="tel:'+phoneTel+'" style="color:#27ae60;">📞 '+c.phone+'</a></div>' : ''}</div>`
+    });
+    kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
+    anchorMarkers.push(m);
+  });
+
+  // 거점요청 핑 (pending)
+  (data.requests || []).filter(r => r.status === 'pending').forEach(r => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#e67e22" stroke="white" stroke-width="2"/><text x="14" y="19" text-anchor="middle" font-size="16" fill="white">📌</text></svg>`;
+    const m = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(r.lat, r.lng), map,
+      image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(28,28), {offset:new kakao.maps.Point(14,14)}),
+      title: '[요청] ' + (r.name||''), zIndex: 5
+    });
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:8px;font-size:12px;max-width:220px;"><div style="font-weight:700;color:#e67e22;">📌 거점요청</div><div>${(r.name||'').replace(/</g,'&lt;')}</div>${r.memo ? '<div style="color:#888;">'+r.memo.replace(/</g,'&lt;')+'</div>' : ''}</div>`
+    });
+    kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
+    anchorMarkers.push(m);
+  });
+
+  // 방역금지 구역 (원형 + 마커)
+  (data.noSprayZones || []).forEach(z => {
+    const radius = z.radius || 50;
+    const pos = new kakao.maps.LatLng(z.lat, z.lng);
+    const circle = new kakao.maps.Circle({
+      center: pos, radius, strokeWeight:2, strokeColor:'#e74c3c', strokeOpacity:0.7,
+      fillColor:'#e74c3c', fillOpacity:0.18, map
+    });
+    anchorMarkers.push({setMap: m => circle.setMap(m)});
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#e74c3c" stroke="white" stroke-width="2"/><path d="M5 14a9 9 0 0118 0 9 9 0 01-18 0zm3.5-6.5l13 13" stroke="white" stroke-width="2.5" fill="none"/></svg>`;
+    const m = new kakao.maps.Marker({
+      position: pos, map,
+      image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(28,28), {offset:new kakao.maps.Point(14,14)}),
+      title: '[방역금지] ' + (z.name||''), zIndex: 7
+    });
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:8px;font-size:12px;max-width:220px;"><div style="font-weight:700;color:#e74c3c;">⛔ 방역 금지</div><div>${(z.name||'').replace(/</g,'&lt;')}</div>${z.reason ? '<div style="color:#888;">'+z.reason.replace(/</g,'&lt;')+'</div>' : ''}<div style="font-size:11px;color:#aaa;">반경 ${radius}m</div></div>`
+    });
+    kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
+    anchorMarkers.push(m);
+  });
+
   // opTitle/opSubtitle 설정
   const opTitle = document.getElementById('opTitle');
   const opSubtitle = document.getElementById('opSubtitle');
