@@ -59,6 +59,13 @@
     </a>
   </div>
 
+  <!-- 로그인 안 됐을 때 -->
+  <div id="loginPrompt" class="card" style="max-width:600px;margin:0 auto;text-align:center;display:none;">
+    <p style="color:#666;font-size:14px;margin:0 0 10px;">간부·회원 로그인하면 더 많은 기능을 사용할 수 있어요</p>
+    <button onclick="showLoginGate()" style="background:#2980b9;color:#fff;border:none;padding:12px 32px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;">🔐 로그인</button>
+  </div>
+
+  <!-- 로그인 됐을 때 -->
   <div id="userInfo" class="card" style="max-width:600px;margin:0 auto;display:none;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
@@ -81,32 +88,44 @@
     initFirebaseSync();
     onDataReady(() => {
       document.getElementById('syncStatus').textContent = '✅ 연결됨';
-      // admin 이상만 보이는 메뉴 (모니터링, 계정관리)
-      const role2 = getMyRole();
-      const isAdmin = role2 === 'admin' || role2 === 'super';
-      document.querySelectorAll('.admin-only').forEach(el => {
-        el.style.display = isAdmin ? '' : 'none';
-      });
-      // 로그인 정보 표시
-      const u = fbAuth.currentUser;
-      if (u && !u.isAnonymous) {
-        const data = loadData();
-        const info = (data.users || {})[u.uid];
-        const memberId = (data.memberAuth || {})[u.uid];
-        const member = memberId ? (data.members || []).find(m => m.id === memberId) : null;
-        const name = info?.name || member?.name || u.email;
-        const role = info?.role || (member ? '회원' : '');
-        document.getElementById('userLabel').textContent = '👤 ' + name;
-        const roleEl = document.getElementById('userRole');
-        if (role) {
-          roleEl.textContent = role;
-          roleEl.style.background = role === 'super' ? '#9b59b6' : role === 'admin' ? '#3498db' : '#27ae60';
-          roleEl.style.color = '#fff';
-        }
-        document.getElementById('userInfo').style.display = '';
-      }
+      updateLoginUI();
     });
   });
+
+  window.onAuthSuccess = () => {
+    const gate = document.getElementById('loginGate');
+    if (gate) gate.remove();
+    onDataReady(updateLoginUI);
+  };
+
+  function updateLoginUI() {
+    const role2 = getMyRole();
+    const isAdmin = role2 === 'admin' || role2 === 'super';
+    document.querySelectorAll('.admin-only').forEach(el => {
+      el.style.display = isAdmin ? '' : 'none';
+    });
+    const u = fbAuth.currentUser;
+    if (u && !u.isAnonymous) {
+      const data = loadData();
+      const info = (data.users || {})[u.uid];
+      const memberId = (data.memberAuth || {})[u.uid];
+      const member = memberId ? (data.members || []).find(m => m.id === memberId) : null;
+      const name = info?.name || member?.name || u.email;
+      const role = info?.role || (member ? '회원' : '');
+      document.getElementById('userLabel').textContent = '👤 ' + name;
+      const roleEl = document.getElementById('userRole');
+      if (role) {
+        roleEl.textContent = role;
+        roleEl.style.background = role === 'super' ? '#9b59b6' : role === 'admin' ? '#3498db' : '#27ae60';
+        roleEl.style.color = '#fff';
+      }
+      document.getElementById('userInfo').style.display = '';
+      document.getElementById('loginPrompt').style.display = 'none';
+    } else {
+      document.getElementById('userInfo').style.display = 'none';
+      document.getElementById('loginPrompt').style.display = '';
+    }
+  }
 
   function doLogout() {
     if (!confirm('로그아웃 하시겠습니까?')) return;
