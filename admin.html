@@ -1949,20 +1949,26 @@ function renderSchedules() {
   const dayNames = ['일','월','화','수','목','금','토'];
   el.innerHTML = schedules.map((s, i) => {
     const event = getEvent(data, s.eventId);
-    const teams = s.rotation.map(id => getTeam(data, id)?.name || '?').join('→');
+    const courses = event?.courses || [];
     const days = s.weekdays.map(d => dayNames[d]).join(',');
+    // 코스별 현재 배정 조 표시
+    const assignLines = courses.map((c, ci) => {
+      const teamId = s.rotation[ci % s.rotation.length];
+      const team = getTeam(data, teamId);
+      return `<span style="display:inline-block;background:${c.color || '#555'};color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;margin:2px;">${c.name} → ${team?.name || '?'}</span>`;
+    }).join(' ');
     return `
       <div class="list-item" style="flex-direction:column;align-items:stretch;">
         <div class="flex-between">
           <div><b>${event?.name || '?'}</b> · ${days}요일</div>
-          <div>
+          <div style="display:flex;gap:4px;">
+            <button class="small" onclick="rotateSchedule(${i})" style="background:#e67e22;color:#fff;font-weight:700;">🔄 로테이션</button>
             <button class="small" onclick="editSchedule(${i})">수정</button>
             <button class="small danger" onclick="deleteSchedule(${i})">삭제</button>
           </div>
         </div>
-        <div class="sub" style="margin-top:4px;">
-          시작 ${s.startDate} · 로테이션 ${teams}
-        </div>
+        <div style="margin-top:6px;">${assignLines}</div>
+        <div class="sub" style="margin-top:4px;">시작 ${s.startDate}</div>
       </div>
     `;
   }).join('');
@@ -1998,6 +2004,29 @@ function editSchedule(idx) {
   else data.schedules.push(newSched);
   saveData(data); refreshAll();
 }
+function rotateSchedule(idx) {
+  const data = loadData();
+  const s = data.schedules[idx];
+  if (!s || s.rotation.length < 2) return;
+  const event = getEvent(data, s.eventId);
+  const courses = event?.courses || [];
+  // 현재 배정
+  const before = courses.map((c, ci) => {
+    const t = getTeam(data, s.rotation[ci % s.rotation.length]);
+    return `${c.name}→${t?.name || '?'}`;
+  }).join(', ');
+  // 한 칸 밀기: 첫번째를 맨 뒤로
+  const rotated = [...s.rotation.slice(1), s.rotation[0]];
+  const after = courses.map((c, ci) => {
+    const t = getTeam(data, rotated[ci % rotated.length]);
+    return `${c.name}→${t?.name || '?'}`;
+  }).join(', ');
+  if (!confirm(`🔄 로테이션 돌리기\n\n현재: ${before}\n변경: ${after}\n\n진행할까요?`)) return;
+  s.rotation = rotated;
+  saveData(data); refreshAll();
+  sendTelegram(`🔄 <b>조 로테이션</b>\n${event?.name || ''}\n${after}`);
+}
+
 function deleteSchedule(idx) {
   if (!confirm('이 스케줄을 삭제할까요?')) return;
   const data = loadData();

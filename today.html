@@ -142,6 +142,18 @@ window.onDataChanged = () => { if (!currentSession) renderAssignments(); updateM
 let __mapInitialFitDone = false;
 let _initStarted = false;
 
+// ────── 로테이션: 코스별 현재 배정 조 ──────
+function getRotationTeamForCourse(data, eventId, courseId) {
+  const schedules = data.schedules || [];
+  const sched = schedules.find(s => s.eventId === eventId);
+  if (!sched || !sched.rotation?.length) return null;
+  const event = getEvent(data, eventId);
+  if (!event || !event.courses?.length) return null;
+  const courseIdx = event.courses.findIndex(c => c.id === courseId);
+  if (courseIdx < 0) return null;
+  return sched.rotation[courseIdx % sched.rotation.length] || null;
+}
+
 // ────── 행사별 조/차량 선택 (eventConfig) ──────
 // _cache(전체 DB)에 이미 포함되므로 별도 리스너 불필요
 function _getEvtCfg(eventId) {
@@ -689,13 +701,16 @@ function openStartForm(eventId, courseId) {
   card.innerHTML = `
     <div class="card" style="border:2px solid #3498db;">
       <h2>📝 ${event.name} · ${course.name}</h2>
-      ${hasTeams ? `
-        <label style="font-weight:700;">🏷 조 선택</label>
+      ${hasTeams ? (() => {
+        const suggestedTeamId = getRotationTeamForCourse(data, eventId, courseId);
+        const suggestedTeam = suggestedTeamId ? allTeams.find(t => t.id === suggestedTeamId) : null;
+        return `
+        <label style="font-weight:700;">🏷 조 선택${suggestedTeam ? ' <span style="font-size:11px;color:#27ae60;font-weight:400;">(이번 회차 추천: ' + suggestedTeam.name + ')</span>' : ''}</label>
         <select id="fTeam" onchange="autoFillFromTeam()" style="margin-bottom:10px;">
           <option value="">-- 조 선택 --</option>
-          ${teamOpts}
-        </select>
-      ` : ''}
+          ${teams.map(t => '<option value="' + t.id + '"' + (t.id === suggestedTeamId ? ' selected' : '') + '>' + t.name + (t.id === suggestedTeamId ? ' ★추천' : '') + '</option>').join('')}
+        </select>`;
+      })() : ''}
 
       <label>운전자 *</label>
       <div style="position:relative;">
@@ -741,6 +756,11 @@ function openStartForm(eventId, courseId) {
   `;
   // 폼 영역으로 자동 스크롤
   setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+  // 추천 조가 자동 선택되었으면 조원 자동 채우기
+  setTimeout(() => {
+    const sel = document.getElementById('fTeam');
+    if (sel && sel.value) autoFillFromTeam();
+  }, 150);
 }
 
 function showSuggestions(inputId, listId) {
