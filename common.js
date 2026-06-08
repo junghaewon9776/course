@@ -687,7 +687,7 @@ function isMemberUser() {
 }
 
 // 회원이 접근 가능한 페이지 (파일명)
-const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor.html', 'monitor-public.html', 'stats.html', 'print.html'];
+const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor.html', 'monitor-public.html', 'stats.html', 'print.html', 'inquiry.html', 'teams.html'];
 
 // 네비게이션 접근 제어
 function applyMemberNav() {
@@ -708,15 +708,22 @@ function applyMemberNav() {
     }
   });
 
-  // 인쇄 링크 추가 (없으면)
+  // 공통 네비 링크 보충 (없으면 추가)
   const nav = document.querySelector('nav');
-  if (nav && !nav.querySelector('a[href="print.html"]')) {
+  if (nav) {
     const logoutLink = nav.querySelector('a[onclick*="Logout"]');
-    const printLink = document.createElement('a');
-    printLink.href = 'print.html';
-    printLink.textContent = '인쇄';
-    if (logoutLink) nav.insertBefore(printLink, logoutLink);
-    else nav.appendChild(printLink);
+    const addNavLink = (href, text) => {
+      if (!nav.querySelector(`a[href="${href}"]`)) {
+        const a = document.createElement('a');
+        a.href = href;
+        a.textContent = text;
+        if (logoutLink) nav.insertBefore(a, logoutLink);
+        else nav.appendChild(a);
+      }
+    };
+    addNavLink('inquiry.html', '민원');
+    addNavLink('teams.html', '조별');
+    addNavLink('print.html', '인쇄');
   }
   // 새 기기 이름 등록 바
   showDeviceNameBar();

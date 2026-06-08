@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <title>문의·민원</title>
+  <title>회원민원</title>
   <link rel="stylesheet" href="style.css?v=20260512v">
   <style>
     .cat-btn {
@@ -39,15 +39,31 @@
     .admin-board { display:none; }
     body.is-admin .admin-board { display:block; }
     body.is-admin .admin-only { display:initial !important; }
+
+    /* 게시판 (회원용) */
+    .member-board { display:none; }
+    body.is-member .member-board { display:block; }
+
+    /* 회원 답변 버튼 */
+    .reply-toggle {
+      display:inline-block;padding:5px 12px;border-radius:6px;border:1.5px solid #27ae60;
+      background:#fff;color:#27ae60;font-size:12px;font-weight:600;cursor:pointer;margin-top:8px;
+    }
+    .reply-toggle:hover { background:#eafaf1; }
   </style>
 </head>
 <body>
 <header>
-  <h1>📋 문의·민원</h1>
+  <h1>📋 회원민원</h1>
   <nav>
     <a href="index.html">홈</a>
+    <a href="admin.html">관리</a>
+    <a href="members.html">인원</a>
     <a href="today.html">오늘운영</a>
-    <a href="inquiry.html" class="active">문의·민원</a>
+    <a href="monitor.html">모니터링</a>
+    <a href="inquiry.html" class="active">민원</a>
+    <a href="teams.html">조별</a>
+    <a href="stats.html">통계</a>
     <a href="#" id="loginLink" onclick="showLoginGate();return false;">로그인</a>
     <a href="#" id="logoutLink" onclick="inqLogout();return false;" style="display:none;">로그아웃</a>
   </nav>
@@ -56,7 +72,7 @@
 <div class="container">
   <!-- ─── 접수 폼 ─── -->
   <div class="card" style="border-left:4px solid #3498db;">
-    <h2>✏️ 문의·민원 접수</h2>
+    <h2>✏️ 회원민원 접수</h2>
     <p class="muted" style="font-size:13px;margin-bottom:14px;">해당하는 분류를 선택하고 내용을 작성해주세요.</p>
 
     <label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block;">분류 선택</label>
@@ -84,10 +100,17 @@
     <div id="myInquiryList"></div>
   </div>
 
+  <!-- ─── 회원 게시판 (로그인 회원용) ─── -->
+  <div class="card member-board" style="border-left:4px solid #3498db;">
+    <h2>📋 민원 게시판</h2>
+    <p class="muted" style="font-size:12px;margin-bottom:10px;">전체 접수된 민원 현황을 확인할 수 있습니다.</p>
+    <div id="memberBoardList"></div>
+  </div>
+
   <!-- ─── 관리자 게시판 ─── -->
   <div class="card admin-board" style="border-left:4px solid #e67e22;">
     <div class="flex-between">
-      <h2>⚙️ 전체 문의 관리</h2>
+      <h2>⚙️ 전체 민원 관리</h2>
       <div style="display:flex;gap:4px;flex-wrap:wrap;">
         <select id="adminFilterCat" onchange="renderAdminBoard()" style="font-size:12px;padding:4px;">
           <option value="">전체 분류</option>
@@ -117,7 +140,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260608b"></script>
+<script src="common.js?v=20260608c"></script>
 <script>
 // ────── 기본 분류 데이터 ──────
 const DEFAULT_CATEGORIES = [
@@ -138,21 +161,29 @@ let selectedSub = '';
 function refreshInquiryPage() {
   const role = getMyRole();
   const isAdmin = role === 'admin' || role === 'super';
-  document.body.classList.toggle('is-admin', isAdmin);
-  // 로그인/로그아웃 링크 전환
   const u = fbAuth.currentUser;
   const loggedIn = u && !u.isAnonymous;
+  const isMember = loggedIn && !isAdmin;
+
+  document.body.classList.toggle('is-admin', isAdmin);
+  document.body.classList.toggle('is-member', isMember);
+
+  // 로그인/로그아웃 링크 전환
   document.getElementById('loginLink').style.display = loggedIn ? 'none' : '';
   document.getElementById('logoutLink').style.display = loggedIn ? '' : 'none';
+
+  // 회원 nav 제어
+  if (typeof applyMemberNav === 'function') applyMemberNav();
+
   renderCategoryBtns();
   renderMyInquiries();
+  renderMemberBoard();
   renderAdminBoard();
   renderCategoryEditor();
 }
 
 // 로그인 성공 콜백 (common.js doLogin에서 호출됨)
 window.onAuthSuccess = () => {
-  // 로그인 게이트 닫기
   const gate = document.getElementById('loginGate');
   if (gate) gate.remove();
   onDataReady(refreshInquiryPage);
@@ -258,13 +289,14 @@ function submitInquiry() {
     deviceName: getDeviceName() || '',
     status: 'pending',
     adminMemo: '',
+    comments: [],
     createdAt: Date.now()
   };
   data.inquiries.push(inquiry);
   saveData(data);
 
   // 텔레그램 알림
-  sendTelegram(`📋 <b>문의·민원 접수</b>\n분류: ${cat?.icon || ''} ${cat?.name || ''}\n항목: ${selectedSub || '-'}\n내용: ${(content || '-').slice(0, 80)}\n접수자: ${writerName}${phone ? '\n연락처: ' + phone : ''}`);
+  sendTelegram(`📋 <b>회원민원 접수</b>\n분류: ${cat?.icon || ''} ${cat?.name || ''}\n항목: ${selectedSub || '-'}\n내용: ${(content || '-').slice(0, 80)}\n접수자: ${writerName}${phone ? '\n연락처: ' + phone : ''}`);
 
   // 초기화
   selectedCat = ''; selectedSub = '';
@@ -274,6 +306,7 @@ function submitInquiry() {
   document.getElementById('subCategoryArea').style.display = 'none';
   document.getElementById('subCategoryBtns').innerHTML = '';
   renderMyInquiries();
+  renderMemberBoard();
   renderAdminBoard();
   alert('✅ 접수되었습니다!\n관리자가 확인 후 처리할 예정입니다.');
 }
@@ -289,6 +322,8 @@ function renderMyInquiries() {
   }
   const myUid = u.uid;
   const deviceName = getDeviceName();
+  const role = getMyRole();
+  const isAdmin = role === 'admin' || role === 'super';
   const mine = (data.inquiries || [])
     .filter(q => q.writerUid === myUid || (deviceName && q.deviceName === deviceName))
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -296,16 +331,85 @@ function renderMyInquiries() {
     el.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:#aaa;">접수 내역이 없습니다</div>';
     return;
   }
-  el.innerHTML = mine.map(q => renderInquiryCard(q, false)).join('');
+  el.innerHTML = mine.map(q => renderInquiryCard(q, isAdmin, true)).join('');
 }
 
-function renderInquiryCard(q, isAdmin) {
+// ────── 회원 게시판 (로그인 회원용 — 전체 문의 조회 + 답변) ──────
+function renderMemberBoard() {
+  const u = fbAuth.currentUser;
+  const loggedIn = u && !u.isAnonymous;
+  if (!loggedIn) return;
+  const role = getMyRole();
+  const isAdmin = role === 'admin' || role === 'super';
+  if (isAdmin) return; // 관리자는 관리자 게시판 사용
+
+  const data = loadData();
+  const el = document.getElementById('memberBoardList');
+  const all = (data.inquiries || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (!all.length) {
+    el.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:#aaa;">접수된 민원이 없습니다</div>';
+    return;
+  }
+  el.innerHTML = all.map(q => renderInquiryCard(q, false, false, true)).join('');
+}
+
+// renderInquiryCard(q, isAdmin, isOwner, isMemberView)
+function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
   const cats = getCategories();
   const cat = cats.find(c => c.id === q.category);
   const statusMap = { pending: ['대기', 'status-pending'], progress: ['처리중', 'status-progress'], resolved: ['완료', 'status-resolved'] };
   const [statusText, statusClass] = statusMap[q.status] || statusMap.pending;
   const when = q.createdAt ? new Date(q.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   const phoneTel = (q.phone || '').replace(/[^0-9+]/g, '');
+  const u = fbAuth.currentUser;
+  const loggedIn = u && !u.isAnonymous;
+
+  // 답변/댓글 영역
+  let replyHtml = '';
+  if (q.reply) {
+    replyHtml = `
+      <div style="margin-top:10px;padding:12px;background:#eaf7ee;border-radius:8px;border-left:3px solid #27ae60;">
+        <div style="font-size:12px;color:#27ae60;font-weight:700;margin-bottom:6px;">💡 답변 / 해결법</div>
+        <div style="font-size:14px;color:#2c3e50;white-space:pre-wrap;line-height:1.6;">${(q.reply||'').replace(/</g,'&lt;')}</div>
+        ${(q.replyImages && q.replyImages.length) ? `
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+            ${q.replyImages.map((img,ii) => `<img src="${img}" onclick="viewReplyImage('${q.id}',${ii})" style="width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid #ddd;cursor:pointer;">`).join('')}
+          </div>
+        ` : ''}
+        ${q.repliedAt ? `<div style="font-size:11px;color:#999;margin-top:6px;">🕐 ${new Date(q.repliedAt).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}${q.repliedBy ? ' · 👤 '+q.repliedBy : ''}</div>` : ''}
+      </div>
+    `;
+  }
+
+  // 댓글 목록
+  const comments = q.comments || [];
+  let commentsHtml = '';
+  if (comments.length) {
+    commentsHtml = `<div style="margin-top:10px;border-top:1px solid #eee;padding-top:8px;">
+      <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px;">💬 댓글 (${comments.length})</div>
+      ${comments.map(c => `
+        <div style="padding:8px 10px;background:#f8f9fa;border-radius:6px;margin-bottom:4px;font-size:13px;">
+          <span style="font-weight:700;color:#2c3e50;">${(c.writer||'').replace(/</g,'&lt;')}</span>
+          <span style="color:#aaa;font-size:11px;margin-left:6px;">${c.createdAt ? new Date(c.createdAt).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}</span>
+          <div style="margin-top:4px;color:#444;white-space:pre-wrap;">${(c.text||'').replace(/</g,'&lt;')}</div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
+
+  // 댓글 작성 (로그인 회원만)
+  let commentFormHtml = '';
+  if (loggedIn) {
+    commentFormHtml = `
+      <div style="margin-top:8px;">
+        <button class="reply-toggle" onclick="toggleCommentForm('${q.id}')">💬 댓글 달기</button>
+        <div id="commentForm_${q.id}" style="display:none;margin-top:6px;">
+          <textarea id="commentText_${q.id}" rows="2" placeholder="댓글을 입력하세요..." style="width:100%;box-sizing:border-box;padding:8px;border:1.5px solid #ddd;border-radius:6px;font-size:13px;resize:vertical;"></textarea>
+          <button onclick="submitComment('${q.id}')" style="margin-top:4px;padding:8px 16px;background:#27ae60;color:#fff;border:none;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;">등록</button>
+        </div>
+      </div>
+    `;
+  }
 
   return `
     <div class="inq-card" style="${q.status === 'resolved' ? 'opacity:0.6;' : ''}">
@@ -320,23 +424,14 @@ function renderInquiryCard(q, isAdmin) {
       ${q.content ? `<div style="margin:8px 0;color:#444;font-size:14px;white-space:pre-wrap;line-height:1.5;">${q.content.replace(/</g,'&lt;')}</div>` : ''}
       <div style="font-size:12px;color:#999;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
         <span>🕐 ${when}</span>
-        <span>👤 ${q.writer || '익명'}</span>
+        <span>👤 ${(q.writer||'익명').replace(/</g,'&lt;')}</span>
         ${q.phone ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;" onclick="event.stopPropagation()">📞 ${q.phone}</a>` : ''}
         ${q.deviceName ? `<span>📱 ${q.deviceName}</span>` : ''}
       </div>
       ${q.adminMemo ? `<div style="margin-top:8px;padding:8px 10px;background:#fff8e1;border-radius:6px;font-size:13px;border-left:3px solid #f1c40f;"><b>관리자 메모:</b> ${q.adminMemo.replace(/</g,'&lt;')}</div>` : ''}
-      ${q.reply ? `
-        <div style="margin-top:10px;padding:12px;background:#eaf7ee;border-radius:8px;border-left:3px solid #27ae60;">
-          <div style="font-size:12px;color:#27ae60;font-weight:700;margin-bottom:6px;">💡 답변 / 해결법</div>
-          <div style="font-size:14px;color:#2c3e50;white-space:pre-wrap;line-height:1.6;">${q.reply.replace(/</g,'&lt;')}</div>
-          ${(q.replyImages && q.replyImages.length) ? `
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-              ${q.replyImages.map((img,ii) => `<img src="${img}" onclick="viewReplyImage('${q.id}',${ii})" style="width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid #ddd;cursor:pointer;">`).join('')}
-            </div>
-          ` : ''}
-          ${q.repliedAt ? `<div style="font-size:11px;color:#999;margin-top:6px;">🕐 ${new Date(q.repliedAt).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}${q.repliedBy ? ' · 👤 '+q.repliedBy : ''}</div>` : ''}
-        </div>
-      ` : ''}
+      ${replyHtml}
+      ${commentsHtml}
+      ${commentFormHtml}
       ${isAdmin ? `
         <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">
           <select onchange="changeInqStatus('${q.id}',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;">
@@ -352,6 +447,37 @@ function renderInquiryCard(q, isAdmin) {
       ` : ''}
     </div>
   `;
+}
+
+// ────── 댓글 ──────
+function toggleCommentForm(id) {
+  const form = document.getElementById('commentForm_' + id);
+  if (form) form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function submitComment(id) {
+  const text = (document.getElementById('commentText_' + id).value || '').trim();
+  if (!text) { alert('댓글 내용을 입력해주세요'); return; }
+  const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q) return;
+  const u = fbAuth.currentUser;
+  const uInfo = u ? (data.users || {})[u.uid] : null;
+  const memberId = u ? (data.memberAuth || {})[u.uid] : null;
+  const member = memberId ? (data.members || []).find(m => m.id === memberId) : null;
+  const writerName = member?.name || uInfo?.name || u?.email || getDeviceName() || '익명';
+
+  if (!Array.isArray(q.comments)) q.comments = [];
+  q.comments.push({
+    writer: writerName,
+    writerUid: u?.uid || '',
+    text,
+    createdAt: Date.now()
+  });
+  saveData(data);
+  renderMyInquiries();
+  renderMemberBoard();
+  renderAdminBoard();
 }
 
 // ────── 관리자 게시판 ──────
@@ -382,23 +508,19 @@ function renderAdminBoard() {
   const progress = all.filter(q => q.status === 'progress').length;
   const resolved = all.filter(q => q.status === 'resolved').length;
 
-  if (!filtered.length) {
-    el.innerHTML = `
-      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-        <span class="status-badge status-pending" style="font-size:13px;padding:6px 14px;">⏳ 대기 ${pending}</span>
-        <span class="status-badge status-progress" style="font-size:13px;padding:6px 14px;">🔄 처리중 ${progress}</span>
-        <span class="status-badge status-resolved" style="font-size:13px;padding:6px 14px;">✅ 완료 ${resolved}</span>
-      </div>
-      <div class="empty">접수된 문의가 없습니다</div>`;
-    return;
-  }
-  el.innerHTML = `
+  const statsHtml = `
     <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
       <span class="status-badge status-pending" style="font-size:13px;padding:6px 14px;">⏳ 대기 ${pending}</span>
       <span class="status-badge status-progress" style="font-size:13px;padding:6px 14px;">🔄 처리중 ${progress}</span>
       <span class="status-badge status-resolved" style="font-size:13px;padding:6px 14px;">✅ 완료 ${resolved}</span>
     </div>
-  ` + filtered.map(q => renderInquiryCard(q, true)).join('');
+  `;
+
+  if (!filtered.length) {
+    el.innerHTML = statsHtml + '<div class="empty">접수된 민원이 없습니다</div>';
+    return;
+  }
+  el.innerHTML = statsHtml + filtered.map(q => renderInquiryCard(q, true, false)).join('');
 }
 
 // ────── 관리자 액션 ──────
@@ -437,8 +559,8 @@ function editInqContent(id) {
   modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(44,62,80,0.7);display:flex;align-items:center;justify-content:center;padding:16px;';
   modal.onclick = e => { if (e.target === modal) modal.remove(); };
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:12px;width:100%;max-width:420px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.25);">
-      <h3 style="margin:0 0 14px;color:#2c3e50;">✏ 문의 수정</h3>
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:420px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.25);max-height:90vh;overflow-y:auto;">
+      <h3 style="margin:0 0 14px;color:#2c3e50;">✏ 민원 수정</h3>
       <label style="font-size:13px;font-weight:700;">분류</label>
       <select id="editCat" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
         ${catOptions}
@@ -481,14 +603,14 @@ function saveEditInq(id) {
 }
 
 function deleteInquiry(id) {
-  if (!confirm('이 문의를 삭제할까요?')) return;
+  if (!confirm('이 민원을 삭제할까요?')) return;
   const data = loadData();
   data.inquiries = (data.inquiries || []).filter(x => x.id !== id);
   saveData(data);
 }
 
 // ────── 답변 / 해결법 (글 + 사진) ──────
-let __replyImages = []; // base64 배열 (임시)
+let __replyImages = [];
 
 function openReplyModal(id) {
   const data = loadData();
@@ -563,7 +685,6 @@ function handleReplyImages(e) {
   });
 }
 
-// 이미지 리사이즈 (maxWidth px, JPEG quality)
 function resizeImage(dataUrl, maxWidth, quality, cb) {
   const img = new Image();
   img.onload = () => {
@@ -595,7 +716,6 @@ function saveReply(id) {
   __replyImages = [];
 }
 
-// 사진 크게 보기
 function viewReplyImage(id, idx) {
   const data = loadData();
   const q = (data.inquiries || []).find(x => x.id === id);
