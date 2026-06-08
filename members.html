@@ -1515,9 +1515,16 @@ function renderTeams() {
     `;
   }).join('');
 
-  // 예비조 카드
-  const reserveIds = data.reserveMemberIds || [];
-  const reserveRows = reserveIds.map(id => {
+  // 예비조 카드 — 유효한 회원만 필터링
+  const reserveIdsRaw = data.reserveMemberIds || [];
+  const allMemberIds = new Set((data.members || []).map(m => m.id));
+  const reserveIdsValid = reserveIdsRaw.filter(id => allMemberIds.has(id));
+  // 무효 ID 정리
+  if (reserveIdsValid.length !== reserveIdsRaw.length) {
+    data.reserveMemberIds = reserveIdsValid;
+    saveData(data);
+  }
+  const reserveRows = reserveIdsValid.map(id => {
     const m = getMember(data, id);
     if (!m) return '';
     const phoneTel = (m.phone || '').replace(/[^0-9+]/g, '');
@@ -1534,13 +1541,18 @@ function renderTeams() {
       </tr>
     `;
   }).join('');
+  // 예비조 드롭다운 = 전체 회원 중 이미 예비조인 사람만 제외
+  const reserveSet2 = new Set(reserveIdsValid);
+  const reserveAddOpts = (data.members || [])
+    .filter(m => !reserveSet2.has(m.id))
+    .map(m => `<option value="${m.id}">${m.name}</option>`).join('');
 
   const reserveCard = `
     <div style="border:1px solid #ddd;border-radius:8px;background:#fff;overflow:hidden;border-left:4px solid #95a5a6;">
       <div style="background:#7f8c8d;color:#fff;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;">
         <div>
           <span style="font-size:16px;font-weight:700;">🔁 예비조</span>
-          <span style="font-size:11px;opacity:0.8;margin-left:6px;">${reserveIds.length}명 · 랜덤 분배 제외</span>
+          <span style="font-size:11px;opacity:0.8;margin-left:6px;">${reserveIdsValid.length}명 · 랜덤 분배 제외</span>
         </div>
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px;">
@@ -1549,7 +1561,7 @@ function renderTeams() {
       <div class="admin-only" style="padding:6px;background:#f8f9fa;display:flex;gap:4px;border-top:1px solid #eee;">
         <select id="addToReserve" style="flex:1;font-size:12px;padding:3px;">
           <option value="">예비조 추가...</option>
-          ${unassignedOpts}
+          ${reserveAddOpts}
         </select>
         <button class="small" onclick="addToReserve()">+</button>
       </div>
