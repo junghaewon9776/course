@@ -44,11 +44,11 @@
         </div>
         <div class="op-toolbar">
           <button class="small" id="gpsToggle" onclick="toggleGPS()">📍 GPS 시작</button>
-          <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 전송 주기">
-            <option value="0">실시간</option>
-            <option value="3000">3초</option>
-            <option value="10000" selected>10초</option>
-            <option value="15000">15초</option>
+          <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 데이터 전송 주기 (지도는 항상 실시간)">
+            <option value="0">전송:실시간</option>
+            <option value="3000">전송:3초</option>
+            <option value="10000" selected>전송:10초</option>
+            <option value="15000">전송:15초</option>
           </select>
           <button class="small gray" id="naviToggle" onclick="toggleNavi()">🧭 내비모드</button>
           <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
@@ -1545,6 +1545,7 @@ document.addEventListener('visibilitychange', () => {
 function toggleGPS() {
   const btn = document.getElementById('gpsToggle');
   if (watchId !== null) {
+    if (!confirm('GPS를 끄면 위치 추적이 중단됩니다.\nGPS를 끌까요?')) return;
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
     releaseWakeLock();
