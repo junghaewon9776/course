@@ -50,7 +50,6 @@
             <option value="5000" selected>전송:5초</option>
             <option value="7000">전송:7초</option>
           </select>
-          <button class="small gray" id="naviToggle" onclick="toggleNavi()">🧭 내비모드</button>
           <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
           <button class="small" id="btnComplaint" onclick="reportComplaint()" style="background:#e74c3c;">📞 민원접수</button>
           <button class="small" onclick="showHistoryModal('complaints')" style="background:#c0392b;">📞 민원내역</button>
@@ -67,6 +66,7 @@
           <button class="map-btn" onclick="zoomIn()" aria-label="확대">+</button>
           <button class="map-btn" onclick="zoomOut()" aria-label="축소">−</button>
           <button class="map-btn map-btn-wide" id="mapTypeBtn" onclick="cycleMapType()" title="지도 종류">🗺</button>
+          <button class="map-btn" onclick="showMapSettings()" title="지도 설정">⚙</button>
         </div>
         <div class="map-ctrl" style="bottom:10px;left:10px;flex-direction:column;">
           <button class="map-btn map-btn-wide" id="followToggle" onclick="toggleFollow()">따라가기해제</button>
@@ -1656,7 +1656,6 @@ function fitToCourse() {
 let naviMode = false;
 function toggleNavi() {
   naviMode = !naviMode;
-  updateNaviBtn();
   if (naviMode) {
     followMode = true;
     updateFollowBtn();
@@ -1668,8 +1667,29 @@ function toggleNavi() {
   } else {
     applyNaviRotation(0);
   }
+  // 모달 열려있으면 버튼 갱신
+  const nb = document.getElementById('naviToggleInModal');
+  if (nb) nb.textContent = naviMode ? '🧭 내비모드 ON (끄기)' : '🧭 내비모드 OFF (켜기)';
+}
+function showMapSettings() {
+  const overlay = document.createElement('div');
+  overlay.id = 'mapSettingsOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:20px;min-width:260px;max-width:320px;text-align:center;">
+      <h3 style="margin:0 0 16px;">⚙ 지도 설정</h3>
+      <button id="naviToggleInModal" onclick="toggleNavi()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;background:${naviMode ? '#3498db' : '#ecf0f1'};color:${naviMode ? '#fff' : '#2c3e50'};">
+        ${naviMode ? '🧭 내비모드 ON (끄기)' : '🧭 내비모드 OFF (켜기)'}
+      </button>
+      <p style="font-size:11px;color:#888;margin:8px 0 16px;">진행방향으로 지도가 회전합니다</p>
+      <button onclick="this.closest('#mapSettingsOverlay').remove()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#34495e;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">닫기</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
 }
 function updateNaviBtn() {
+  // 하위 호환 (내부 호출 시 무시)
   const btn = document.getElementById('naviToggle');
   if (!btn) return;
   if (naviMode) {
