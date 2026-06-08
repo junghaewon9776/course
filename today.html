@@ -414,6 +414,7 @@ function renderAssignments() {
         <div style="background:${course.color};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none;">${course.name[0]}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-weight:600;">${event.name} · <span style="color:${course.color}">${course.name}</span></div>
+          ${course.detail ? `<div style="font-size:12px;color:#666;">${course.detail}</div>` : ''}
           <div class="sub">거점 ${anchorCount}개</div>
         </div>
         <div style="color:#bbb;font-size:20px;font-weight:700;flex:none;">›</div>
@@ -557,7 +558,7 @@ function previewCourse(eventId, courseId) {
   // opTitle/opSubtitle 설정
   const opTitle = document.getElementById('opTitle');
   const opSubtitle = document.getElementById('opSubtitle');
-  if (opTitle) opTitle.textContent = `📋 ${event.name} · ${course.name} (미리보기)`;
+  if (opTitle) opTitle.textContent = `📋 ${event.name} · ${course.name}${course.detail ? ' ('+course.detail+')' : ''} (미리보기)`;
   if (opSubtitle) opSubtitle.textContent = `거점 ${anchors.length}개`;
 
   // nextInfo 영역: 버튼 + 코스 내역 (보기 모드 토글)
@@ -702,7 +703,7 @@ function openStartForm(eventId, courseId) {
   const hasTeams = teams.length > 0;
   card.innerHTML = `
     <div class="card" style="border:2px solid #3498db;">
-      <h2>📝 ${event.name} · ${course.name}</h2>
+      <h2>📝 ${event.name} · ${course.name}${course.detail ? ' <span style="font-size:13px;color:#666;font-weight:400;">('+course.detail+')</span>' : ''}</h2>
       ${hasTeams ? (() => {
         const suggestedTeamId = getRotationTeamForCourse(data, eventId, courseId);
         const suggestedTeam = suggestedTeamId ? allTeams.find(t => t.id === suggestedTeamId) : null;
@@ -926,7 +927,7 @@ function manualStart(eventId, courseId) {
   const course = getCourse(data, courseId);
   document.getElementById('startFormCard').innerHTML = `
     <div class="card">
-      <h2>${event.name} · ${course.name}</h2>
+      <h2>${event.name} · ${course.name}${course.detail ? ' <span style="font-size:13px;color:#666;font-weight:400;">('+course.detail+')</span>' : ''}</h2>
       <label>운전자</label>
       <input id="fDriver" type="text" placeholder="홍길동">
       <label>보조자 (여러 명이면 쉼표로)</label>
@@ -981,7 +982,7 @@ function startSession(eventId, courseId, teamId, crew) {
   // 민원접수 버튼 — 방역행사일 때만 표시 (효도위안잔치는 숨김)
   const btnComplaint = document.getElementById('btnComplaint');
   if (btnComplaint) btnComplaint.style.display = /방역/.test(event?.name || '') ? '' : 'none';
-  document.getElementById('opTitle').textContent = `${event.name} - ${course.name}`;
+  document.getElementById('opTitle').textContent = `${event.name} - ${course.name}${course.detail ? ' ('+course.detail+')' : ''}`;
   const subtitleParts = [];
   if (team) subtitleParts.push(team.name);
   if (crew?.driver) subtitleParts.push(`운전 ${crew.driver}`);
@@ -1183,7 +1184,7 @@ function checkResumableSession() {
   const total = getCourseAnchors(data, s.courseId).length;
   const driver = s.crew?.driver || '';
 
-  if (confirm(`이전 운영 이어가기?\n\n${event.name} · ${course.name}\n${driver ? '운전: ' + driver + '\n' : ''}진행: ${completed}/${total} 거점\n시작: ${elapsed}분 전\n\n[확인] = 이어가기  /  [취소] = 새로 시작`)) {
+  if (confirm(`이전 운영 이어가기?\n\n${event.name} · ${course.name}${course.detail ? ' ('+course.detail+')' : ''}\n${driver ? '운전: ' + driver + '\n' : ''}진행: ${completed}/${total} 거점\n시작: ${elapsed}분 전\n\n[확인] = 이어가기  /  [취소] = 새로 시작`)) {
     resumeSession(s);
   } else {
     clearLastActiveSession();
@@ -1204,7 +1205,7 @@ function resumeSession(s) {
   const data = loadData();
   const event = getEvent(data, s.eventId);
   const course = getCourse(data, s.courseId);
-  document.getElementById('opTitle').textContent = `${event.name} - ${course.name} (이어서)`;
+  document.getElementById('opTitle').textContent = `${event.name} - ${course.name}${course.detail ? ' ('+course.detail+')' : ''} (이어서)`;
   const subtitleParts = [];
   if (s.crew?.driver) subtitleParts.push(`운전 ${s.crew.driver}`);
   if (s.crew?.assist) subtitleParts.push(`보조 ${s.crew.assist}`);
@@ -2644,7 +2645,7 @@ function showHistoryModal(type) {
         const phone = (it.phone || '').trim();
         const phoneTel = phone.replace(/[^0-9+]/g, '');
         const crs = it.courseId ? (getCourse(data, it.courseId) || {}) : null;
-        const courseTag = crs ? `<span style="background:${crs.color||'#888'};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${(crs.name||'').replace(/</g,'&lt;')}</span>` : '';
+        const courseTag = crs ? `<span style="background:${crs.color||'#888'};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${(crs.name||'').replace(/</g,'&lt;')}${crs.detail ? ' ('+crs.detail.replace(/</g,'&lt;')+')' : ''}</span>` : '';
         return `
           <div style="padding:10px 0;border-bottom:1px solid #eee;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
