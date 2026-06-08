@@ -214,7 +214,7 @@ function render() {
 
   // 전체 코스 (숨김 행사 제외)
   const courses = [];
-  for (const e of data.events) {
+  for (const e of (data.events || [])) {
     if (!isEventVisibleForViewer(e.id, data)) continue;
     for (const c of e.courses) courses.push({ id: c.id, label: c.name, detail: c.detail || '', color: c.color, eventName: e.name });
   }
