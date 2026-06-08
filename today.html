@@ -668,6 +668,7 @@ function openStartForm(eventId, courseId) {
 
   const card = document.getElementById('startFormCard');
   card.style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   const hasVehicles = sortedVehicles.length > 0;
   const hasTeams = teams.length > 0;
   card.innerHTML = `
