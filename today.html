@@ -476,30 +476,81 @@ function previewCourse(eventId, courseId) {
   if (opTitle) opTitle.textContent = `📋 ${event.name} · ${course.name} (미리보기)`;
   if (opSubtitle) opSubtitle.textContent = `거점 ${anchors.length}개`;
 
-  // nextInfo 영역: 버튼 + 코스 내역
+  // nextInfo 영역: 버튼 + 코스 내역 (보기 모드 토글)
+  window.__previewAnchors = anchors;
+  window.__previewCourseColor = course.color;
+  window.__previewEventId = eventId;
+  window.__previewCourseId = courseId;
+  window.__previewMode = 'arrow'; // 'arrow' | 'list'
+  window.__previewFeaturedOnly = false;
+  renderPreviewInfo();
+}
+
+function renderPreviewInfo() {
   const nextInfo = document.getElementById('nextInfo');
-  if (nextInfo) {
-    let anchorListHtml = anchors.map((a, i) => `
-      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;">
-        <div style="background:${course.color};color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex:none;">${i+1}</div>
-        <div style="flex:1;min-width:0;font-size:13px;">
-          <span style="font-weight:600;">${(a.name||'').replace(/</g,'&lt;')}</span>
-          ${a.memo ? '<span style="margin-left:4px;font-size:11px;color:#888;">' + a.memo.replace(/</g,'&lt;') + '</span>' : ''}
+  if (!nextInfo) return;
+  const anchors = window.__previewAnchors || [];
+  const color = window.__previewCourseColor || '#3498db';
+  const eventId = window.__previewEventId;
+  const courseId = window.__previewCourseId;
+  const mode = window.__previewMode;
+  const featuredOnly = window.__previewFeaturedOnly;
+  const featuredAnchors = anchors.filter(a => a.featured);
+  const useAnchors = featuredOnly ? featuredAnchors : anchors;
+
+  // 화살표 보기
+  let contentHtml = '';
+  if (mode === 'arrow') {
+    if (useAnchors.length) {
+      const arrowList = useAnchors.map(a => {
+        const safe = (a.name||'').replace(/</g,'&lt;');
+        return a.featured ? `<b style="color:${color};">⭐${safe}</b>` : safe;
+      }).join(' <span style="color:#bbb;">›</span> ');
+      contentHtml = `<div style="font-size:13px;line-height:1.8;padding:4px 0;">출발 <span style="color:#bbb;">›</span> ${arrowList}</div>`;
+    } else {
+      contentHtml = '<div style="color:#aaa;font-size:13px;padding:4px 0;">대표 거점이 없습니다</div>';
+    }
+  } else {
+    // 숫자 나열 보기
+    if (useAnchors.length) {
+      contentHtml = useAnchors.map((a, i) => `
+        <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;">
+          <div style="background:${color};color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex:none;">${i+1}</div>
+          <div style="flex:1;min-width:0;font-size:13px;">
+            <span style="font-weight:600;">${(a.name||'').replace(/</g,'&lt;')}</span>
+            ${a.memo ? '<span style="margin-left:4px;font-size:11px;color:#888;">' + a.memo.replace(/</g,'&lt;') + '</span>' : ''}
+          </div>
+        </div>
+      `).join('');
+    } else {
+      contentHtml = '<div style="color:#aaa;font-size:13px;padding:4px 0;">대표 거점이 없습니다</div>';
+    }
+  }
+
+  const arrowActive = mode === 'arrow';
+  const listActive = mode === 'list';
+  const countLabel = featuredOnly
+    ? `대표 ${featuredAnchors.length}개 / 전체 ${anchors.length}개`
+    : `전체 ${anchors.length}개`;
+
+  nextInfo.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+      <button onclick="startCourse('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#27ae60;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">▶ 코스시작</button>
+      <button onclick="closePreviewMap()" style="flex:1;min-width:120px;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">← 돌아가기</button>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
+        <span style="font-weight:700;font-size:13px;color:#555;">📋 코스 내역</span>
+        <span style="font-size:11px;color:#888;">(${countLabel})</span>
+        <div style="margin-left:auto;display:flex;gap:4px;">
+          <button onclick="window.__previewFeaturedOnly=!window.__previewFeaturedOnly;renderPreviewInfo()" style="padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${featuredOnly ? '#f39c12' : '#ddd'};background:${featuredOnly ? '#fef3cd' : '#fff'};color:${featuredOnly ? '#f39c12' : '#888'};">${featuredOnly ? '⭐ 대표' : '전체'}</button>
+          <button onclick="window.__previewMode='arrow';renderPreviewInfo()" style="padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${arrowActive ? color : '#ddd'};background:${arrowActive ? color : '#fff'};color:${arrowActive ? '#fff' : '#888'};">A›B›C</button>
+          <button onclick="window.__previewMode='list';renderPreviewInfo()" style="padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${listActive ? color : '#ddd'};background:${listActive ? color : '#fff'};color:${listActive ? '#fff' : '#888'};">①②③</button>
         </div>
       </div>
-    `).join('');
-
-    nextInfo.innerHTML = `
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-        <button onclick="startCourse('${eventId}','${courseId}')" style="flex:1;min-width:120px;background:#27ae60;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">▶ 코스시작</button>
-        <button onclick="closePreviewMap()" style="flex:1;min-width:120px;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">← 돌아가기</button>
-      </div>
-      <div style="margin-top:12px;">
-        <div style="font-weight:700;font-size:13px;color:#555;margin-bottom:6px;">📋 코스 내역</div>
-        ${anchorListHtml}
-      </div>
-    `;
-  }
+      ${contentHtml}
+    </div>
+  `;
 }
 
 function closePreviewMap() {
