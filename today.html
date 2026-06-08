@@ -17,7 +17,7 @@
     <a href="admin.html">관리</a>
     <a href="members.html">인원</a>
     <a href="today.html" class="active">오늘운영</a>
-    <a href="monitor.html">모니터링</a>
+    <a href="monitor.html" class="admin-only">모니터링</a>
     <a href="stats.html">통계</a>
     <span id="meIndicator" style="font-size:12px;opacity:0.8;margin-left:8px;"></span>
     <a href="#" id="loginLink" onclick="openMemberLogin();return false;">로그인</a>
@@ -223,6 +223,12 @@ function updateMeIndicator() {
       location.reload();
     };
   }
+  // admin 이상만 보이는 요소
+  const role = getMyRole();
+  const isAdmin = role === 'admin' || role === 'super';
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+  });
 }
 
 function openMemberLogin() {
@@ -1886,19 +1892,55 @@ function reportComplaint() {
   if (!currentSession) { alert('먼저 코스를 시작하세요'); return; }
   if (!currentPos) { alert('GPS 위치가 잡히지 않았습니다.\nGPS를 켜고 위치 잡힌 후 다시 시도하세요'); return; }
 
-  const phone = prompt('민원인 연락처 (예: 010-1234-5678)', '');
-  if (phone === null) return;
-  const content = prompt('민원 내용', '');
-  if (content === null) return;
+  const data = loadData();
+  const ev = getEvent(data, currentSession.eventId);
+  // 코스 옵션 생성
+  const courses = (ev?.courses || []);
+  const courseOptions = courses.map(c =>
+    `<option value="${c.id}" ${c.id === currentSession.courseId ? 'selected' : ''}>${c.name}</option>`
+  ).join('');
+
+  let modal = document.getElementById('complaintModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'complaintModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:400px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <h3 style="margin:0 0 14px;color:#e74c3c;">📞 민원 접수</h3>
+      <label style="font-size:13px;font-weight:700;">연락처</label>
+      <input id="cmpPhone" type="tel" placeholder="010-1234-5678" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <label style="font-size:13px;font-weight:700;">민원 내용</label>
+      <input id="cmpContent" type="text" placeholder="민원 내용" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <label style="font-size:13px;font-weight:700;">배정 코스</label>
+      <select id="cmpCourse" style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+        <option value="">-- 미지정 --</option>
+        ${courseOptions}
+      </select>
+      <div style="display:flex;gap:8px;">
+        <button onclick="submitComplaint()" style="flex:1;background:#e74c3c;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">접수</button>
+        <button onclick="document.getElementById('complaintModal').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">취소</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('cmpPhone').focus();
+}
+
+function submitComplaint() {
+  const phone = (document.getElementById('cmpPhone').value || '').trim();
+  const content = (document.getElementById('cmpContent').value || '').trim();
+  const assignedCourseId = document.getElementById('cmpCourse').value || '';
 
   const data = loadData();
   if (!Array.isArray(data.complaints)) data.complaints = [];
   data.complaints.push({
     id: uid(),
     eventId: currentSession.eventId,
+    courseId: assignedCourseId,
     lat: currentPos.lat, lng: currentPos.lng,
-    phone: (phone || '').trim(),
-    content: (content || '').trim(),
+    phone, content,
     area: '',
     status: 'pending',
     reportedBy: currentSession.crew?.driver || '',
@@ -1911,12 +1953,14 @@ function reportComplaint() {
     alert('저장 실패: ' + (e.message || e));
     return;
   }
+  document.getElementById('complaintModal').remove();
   renderMapForSession();
-  // 텔레그램: 민원 접수 알림
+  // 텔레그램
   const ev = getEvent(data, currentSession.eventId);
+  const courseName = assignedCourseId ? (getCourse(data, assignedCourseId)?.name || '') : '미지정';
   const phoneTel = phone ? phone.replace(/[^0-9+]/g, '') : '';
   const phoneStr = phone ? `<a href="tel:${phoneTel}">${phone}</a>` : '-';
-  sendTelegram(`📞 <b>민원 접수</b>\n${ev?.name || ''}\n연락처: ${phoneStr}\n내용: ${content || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
+  sendTelegram(`📞 <b>민원 접수</b>\n${ev?.name || ''} · 배정: ${courseName}\n연락처: ${phoneStr}\n내용: ${content || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   alert('✅ 민원 접수됨\n관리자가 확인할 수 있습니다.');
 }
 
@@ -1953,10 +1997,13 @@ function showHistoryModal(type) {
       if (isComplaint) {
         const phone = (it.phone || '').trim();
         const phoneTel = phone.replace(/[^0-9+]/g, '');
+        const crs = it.courseId ? (getCourse(data, it.courseId) || {}) : null;
+        const courseTag = crs ? `<span style="background:${crs.color||'#888'};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${(crs.name||'').replace(/</g,'&lt;')}</span>` : '';
         return `
           <div style="padding:10px 0;border-bottom:1px solid #eee;">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
               <span style="background:${statusColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${statusLabel}</span>
+              ${courseTag}
               <span style="font-size:11px;color:#888;">${timeStr}</span>
             </div>
             <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${(it.content || '내용 없음').replace(/</g,'&lt;')}</div>
