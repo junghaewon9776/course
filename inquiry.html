@@ -9,20 +9,20 @@
   <style>
     .cat-btn {
       display:inline-flex;align-items:center;gap:6px;
-      padding:10px 16px;border:2px solid #ddd;border-radius:10px;
-      background:#fff;font-size:14px;font-weight:600;cursor:pointer;
-      transition:all .15s;color:#555;
+      padding:10px 16px;border:none;border-radius:10px;
+      background:#34495e;font-size:14px;font-weight:600;cursor:pointer;
+      transition:all .15s;color:#fff;
     }
-    .cat-btn:hover { border-color:#3498db;color:#3498db; }
-    .cat-btn.selected { border-color:#2980b9;background:#ebf5fb;color:#2980b9; }
+    .cat-btn:hover { background:#2c3e50; }
+    .cat-btn.selected { background:#2980b9;color:#fff; }
     .cat-btn .cat-icon { font-size:20px; }
 
     .sub-btn {
-      display:inline-block;padding:7px 14px;border:1.5px solid #ddd;border-radius:8px;
-      background:#fff;font-size:13px;cursor:pointer;transition:all .15s;color:#555;
+      display:inline-block;padding:7px 14px;border:none;border-radius:8px;
+      background:#7f8c8d;font-size:13px;cursor:pointer;transition:all .15s;color:#fff;
     }
-    .sub-btn:hover { border-color:#27ae60;color:#27ae60; }
-    .sub-btn.selected { border-color:#27ae60;background:#eafaf1;color:#1e8449;font-weight:600; }
+    .sub-btn:hover { background:#6c7a89; }
+    .sub-btn.selected { background:#27ae60;color:#fff;font-weight:600; }
 
     .inq-card {
       border:1px solid #e0e0e0;border-radius:10px;padding:14px;margin-bottom:10px;
@@ -46,10 +46,10 @@
 
     /* 회원 답변 버튼 */
     .reply-toggle {
-      display:inline-block;padding:5px 12px;border-radius:6px;border:1.5px solid #27ae60;
-      background:#fff;color:#27ae60;font-size:12px;font-weight:600;cursor:pointer;margin-top:8px;
+      display:inline-block;padding:5px 12px;border-radius:6px;border:none;
+      background:#27ae60;color:#fff;font-size:12px;font-weight:600;cursor:pointer;margin-top:8px;
     }
-    .reply-toggle:hover { background:#eafaf1; }
+    .reply-toggle:hover { background:#219a52; }
 
     /* 분류 편집 모달 태그 */
     .ce-sub-tag {
@@ -762,8 +762,8 @@ function renderCategoryEditor() {
             ${subsPreview ? subsPreview + moreCount : '상세 항목 없음'}
           </div>
         </div>
-        <button onclick="moveCat(${i},-1)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;" title="위로">▲</button>
-        <button onclick="moveCat(${i},1)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;font-size:12px;" title="아래로">▼</button>
+        <button onclick="moveCat(${i},-1)" style="padding:4px 8px;border:none;border-radius:4px;background:#34495e;color:#fff;cursor:pointer;font-size:12px;font-weight:700;" title="위로">▲</button>
+        <button onclick="moveCat(${i},1)" style="padding:4px 8px;border:none;border-radius:4px;background:#34495e;color:#fff;cursor:pointer;font-size:12px;font-weight:700;" title="아래로">▼</button>
         <button onclick="openCatEditModal(${i})" style="padding:6px 12px;border:none;border-radius:6px;background:#3498db;color:#fff;font-weight:700;font-size:12px;cursor:pointer;">✏ 수정</button>
       </div>
     `;
@@ -806,7 +806,7 @@ function openCatEditModal(idx) {
           oninput="document.getElementById('ceIconPreview').textContent=this.value">
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:14px;">
-        ${EMOJI_PICKS.map(e => `<button onclick="document.getElementById('ceIconInput').value='${e}';document.getElementById('ceIconPreview').textContent='${e}';" style="font-size:20px;padding:4px 6px;border:1px solid #eee;border-radius:6px;background:#fff;cursor:pointer;">${e}</button>`).join('')}
+        ${EMOJI_PICKS.map(e => `<button onclick="document.getElementById('ceIconInput').value='${e}';document.getElementById('ceIconPreview').textContent='${e}';" style="font-size:20px;padding:4px 6px;border:none;border-radius:6px;background:#ecf0f1;cursor:pointer;">${e}</button>`).join('')}
       </div>
 
       <!-- 이름 -->
