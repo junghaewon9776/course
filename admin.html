@@ -1213,30 +1213,38 @@ async function testTelegram() {
 // ────── 행사 ──────
 function renderRequests() {
   const data = loadData();
-  const reqs = (data.requests || []).filter(r => r.status === 'pending');
+  const reqs = (data.requests || []);
+  const pending = reqs.filter(r => r.status === 'pending');
   const card = document.getElementById('requestCard');
-  if (!reqs.length) { card.style.display = 'none'; return; }
   card.style.display = 'block';
-  document.getElementById('requestCount').textContent = reqs.length;
+  document.getElementById('requestCount').textContent = pending.length;
+  if (!reqs.length) { document.getElementById('requestList').innerHTML = '<div class="empty">거점 요청 없음</div>'; return; }
 
+  // 대기 먼저, 처리된 건 아래로
+  reqs.sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || (b.requestedAt||0) - (a.requestedAt||0));
   document.getElementById('requestList').innerHTML = reqs.map(r => {
     const event = getEvent(data, r.eventId);
     const course = getCourse(data, r.courseId);
     const when = new Date(r.requestedAt).toLocaleString('ko-KR');
+    const isPending = r.status === 'pending';
+    const statusTag = isPending
+      ? '<span class="tag" style="background:#e67e22;">대기</span>'
+      : r.status === 'approved' ? '<span class="tag" style="background:#27ae60;">승인됨</span>'
+      : '<span class="tag" style="background:#7f8c8d;">거절</span>';
     return `
-      <div class="list-item" style="flex-direction:column;align-items:stretch;border-left:3px solid #e67e22;">
-        <div><b>${r.name}</b> <span class="sub">- ${event?.name || '?'} ${course?.name || '?'}</span></div>
+      <div class="list-item" style="flex-direction:column;align-items:stretch;border-left:3px solid ${isPending ? '#e67e22' : '#bbb'};${isPending ? '' : 'opacity:0.6;'}">
+        <div><b>${r.name}</b> ${statusTag} <span class="sub">- ${event?.name || '?'} ${course?.name || '?'}</span></div>
         <div class="sub" style="margin:4px 0;">
           📍 ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}<br>
           ${r.memo ? '📝 ' + r.memo + '<br>' : ''}
           요청자(운전): ${r.requestedBy || '-'}${r.requestedAssist ? ' · 보조: ' + r.requestedAssist : ''}<br>
           ${when}
         </div>
-        <div style="display:flex;gap:6px;">
+        ${isPending ? `<div style="display:flex;gap:6px;">
           <button class="small success" onclick="approveRequest('${r.id}')" style="flex:1;">✅ 승인 (거점 추가)</button>
           <button class="small gray" onclick="moveRequestCourse('${r.id}')">코스 변경</button>
           <button class="small danger" onclick="rejectRequest('${r.id}')">❌ 거절</button>
-        </div>
+        </div>` : ''}
       </div>
     `;
   }).join('');
@@ -1703,7 +1711,12 @@ function renderComplaints() {
         </div>
         <div class="sub" style="margin:4px 0;white-space:pre-wrap;">${c.content || ''}</div>
         <div class="sub">📍 ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}${when ? ' · 🕐 ' + when : ''}${c.createdBy ? ' · 👤 ' + c.createdBy : ''}${c.reportedBy ? ' · 접수: ' + c.reportedBy : ''}</div>
-        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+        <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;align-items:center;">
+          <select onchange="assignComplaintCourse('${c.id}',this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;max-width:140px;">
+            <option value="">코스 미지정</option>
+            ${(function(){const d=loadData();let h='';for(const e of(d.events||[]))for(const cs of(e.courses||[]))h+='<option value="'+cs.id+'"'+(c.courseId===cs.id?' selected':'')+'>'+e.name+' '+cs.name+'</option>';return h;})()}
+          </select>
+          <button class="small" onclick="editComplaint('${c.id}')" style="background:#3498db;">✏ 수정</button>
           ${resolved
             ? `<button class="small gray" onclick="toggleComplaintStatus('${c.id}')">↺ 다시 대기로</button>`
             : `<button class="small success" onclick="toggleComplaintStatus('${c.id}')">✓ 처리완료</button>`}
@@ -1762,6 +1775,16 @@ function deleteComplaint(id) {
   data.complaints = (data.complaints || []).filter(c => c.id !== id);
   saveData(data); refreshAll();
   sendTelegram(`🗑 <b>민원 삭제</b>\n내용: ${(c?.content || '-').slice(0, 50)}`);
+}
+
+function assignComplaintCourse(id, courseId) {
+  const data = loadData();
+  const c = (data.complaints || []).find(x => x.id === id);
+  if (!c) return;
+  c.courseId = courseId || '';
+  saveData(data); refreshAll();
+  const course = getCourse(data, courseId);
+  sendTelegram(`📞 <b>민원 코스 지정</b>\n내용: ${(c.content || '-').slice(0, 30)}\n코스: ${course?.name || '미지정'}`);
 }
 
 function editComplaint(id) {
