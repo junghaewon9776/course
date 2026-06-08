@@ -1685,17 +1685,21 @@ function rotateTeams() {
   const teams = data.teams || [];
   if (teams.length < 2) { alert('조가 2개 이상이어야 밀어내기가 가능합니다'); return; }
   const names = teams.map(t => t.name).join(' → ') + ' → ' + teams[0].name;
-  if (!confirm(`조 밀어내기\n\n조원이 다음 조로 한 칸씩 이동합니다:\n${names}\n\n(조장·부조장은 유지, 조원만 이동)\n\n진행할까요?`)) return;
-  // 각 조의 memberIds + fixedMemberIds를 순환
-  const memberSlots = teams.map(t => ({
+  if (!confirm(`조 밀어내기\n\n조장·부조장·조원 전체가 다음 조로 한 칸씩 이동합니다:\n${names}\n\n(조 이름만 그대로, 사람이 통째로 이동)\n\n진행할까요?`)) return;
+  // 각 조의 모든 인원 정보를 저장
+  const slots = teams.map(t => ({
+    leaderId: t.leaderId || '',
+    viceLeaderId: t.viceLeaderId || '',
     memberIds: [...(t.memberIds || [])],
     fixedMemberIds: [...(t.fixedMemberIds || [])]
   }));
-  // 한 칸씩 밀기: 마지막 조 조원 → 첫 번째 조로
+  // 한 칸씩 밀기: 이전 조 사람들 → 현재 조로
   for (let i = 0; i < teams.length; i++) {
-    const src = (i + teams.length - 1) % teams.length; // 이전 조에서 가져옴
-    teams[i].memberIds = memberSlots[src].memberIds;
-    teams[i].fixedMemberIds = memberSlots[src].fixedMemberIds;
+    const src = (i + teams.length - 1) % teams.length;
+    teams[i].leaderId = slots[src].leaderId;
+    teams[i].viceLeaderId = slots[src].viceLeaderId;
+    teams[i].memberIds = slots[src].memberIds;
+    teams[i].fixedMemberIds = slots[src].fixedMemberIds;
   }
   saveData(data);
   alert('✅ 조 밀어내기 완료!');
