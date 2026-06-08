@@ -1460,14 +1460,23 @@ function renderTeams() {
       const phoneCell = m.phone
         ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;">📞 ${m.phone}</a>`
         : '';
+      // 다른 조 목록 (밀어내기용)
+      const otherTeams = (data.teams || []).filter(ot => ot.id !== t.id);
+      const moveOpts = otherTeams.map(ot => `<option value="${ot.id}">${ot.name}</option>`).join('');
       return `
         <tr style="${isFixed ? 'background:#fff8e1;' : ''}">
           <td style="color:#888;font-size:11px;width:50px;padding:6px 4px;">회원${idx+1}</td>
           <td style="padding:6px 4px;"><b>${m.name}</b></td>
           <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${phoneCell}</td>
-          <td class="admin-only" style="width:50px;text-align:right;padding:6px 4px;">
-            <span onclick="togglePinMember('${t.id}','${id}')" style="cursor:pointer;font-size:14px;" title="고정/해제">${isFixed ? '📌' : '📍'}</span>
-            <span onclick="removeFromTeam('${t.id}','${id}')" style="cursor:pointer;color:#e74c3c;margin-left:2px;">✕</span>
+          <td class="admin-only" style="width:120px;text-align:right;padding:4px;">
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
+              <select onchange="moveToTeam('${t.id}','${id}',this.value);this.selectedIndex=0;" style="font-size:10px;padding:1px;width:54px;color:#2980b9;" title="다른 조로 이동">
+                <option value="">→조</option>
+                ${moveOpts}
+              </select>
+              <span onclick="togglePinMember('${t.id}','${id}')" style="cursor:pointer;font-size:14px;" title="고정/해제">${isFixed ? '📌' : '📍'}</span>
+              <span onclick="removeFromTeam('${t.id}','${id}')" style="cursor:pointer;color:#e74c3c;margin-left:1px;" title="조에서 제거">✕</span>
+            </div>
           </td>
         </tr>
       `;
@@ -1633,6 +1642,26 @@ function removeFromTeam(teamId, memberId) {
   if (!team) return;
   team.memberIds = (team.memberIds || []).filter(id => id !== memberId);
   team.fixedMemberIds = (team.fixedMemberIds || []).filter(id => id !== memberId);
+  saveData(data);
+}
+
+function moveToTeam(fromTeamId, memberId, toTeamId) {
+  if (!toTeamId) return;
+  const data = loadData();
+  const fromTeam = getTeam(data, fromTeamId);
+  const toTeam = getTeam(data, toTeamId);
+  if (!fromTeam || !toTeam) return;
+  const member = getMember(data, memberId);
+  const mName = member?.name || memberId;
+  // 원래 조에서 제거
+  fromTeam.memberIds = (fromTeam.memberIds || []).filter(id => id !== memberId);
+  fromTeam.fixedMemberIds = (fromTeam.fixedMemberIds || []).filter(id => id !== memberId);
+  // 조장/부조장이었으면 해제
+  if (fromTeam.leaderId === memberId) fromTeam.leaderId = '';
+  if (fromTeam.viceLeaderId === memberId) fromTeam.viceLeaderId = '';
+  // 대상 조에 추가 (중복 방지)
+  if (!toTeam.memberIds) toTeam.memberIds = [];
+  if (!toTeam.memberIds.includes(memberId)) toTeam.memberIds.push(memberId);
   saveData(data);
 }
 
