@@ -970,6 +970,7 @@ function startSession(eventId, courseId, teamId, crew) {
   document.getElementById('assignmentCard').style.display = 'none';
   document.getElementById('startFormCard').style.display = 'none';
   document.getElementById('opPanel').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   // 미리보기에서 숨겨졌을 수 있는 UI 복원
   const toolbar = document.querySelector('.op-toolbar');
   if (toolbar) toolbar.style.display = '';
@@ -1196,6 +1197,7 @@ function resumeSession(s) {
   currentSession = s;
   document.getElementById('assignmentCard').style.display = 'none';
   document.getElementById('opPanel').style.display = 'block';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   // 미리보기에서 숨겨졌을 수 있는 UI 복원
   const tb = document.querySelector('.op-toolbar');
   if (tb) tb.style.display = '';
@@ -1548,15 +1550,20 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && watchId && !wakeLock) requestWakeLock();
 });
 
+function stopGPS() {
+  if (watchId === null) return;
+  navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  releaseWakeLock();
+  const btn = document.getElementById('gpsToggle');
+  if (btn) btn.textContent = '📍 GPS 시작';
+  document.getElementById('gpsStatus').textContent = 'GPS 중지됨';
+}
 function toggleGPS() {
   const btn = document.getElementById('gpsToggle');
   if (watchId !== null) {
     if (!confirm('GPS를 끄면 위치 추적이 중단됩니다.\nGPS를 끌까요?')) return;
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
-    releaseWakeLock();
-    btn.textContent = '📍 GPS 시작';
-    document.getElementById('gpsStatus').textContent = 'GPS 중지됨';
+    stopGPS();
     return;
   }
   if (!navigator.geolocation) { alert('GPS 미지원 브라우저'); return; }
@@ -1895,7 +1902,7 @@ function finishCourse() {
   sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfoFinish ? '\n차량: ' + vehInfoFinish : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분${autoLine}`);
 
   alert('✅ 코스 완료 보고됨');
-  if (watchId !== null) toggleGPS();
+  if (watchId !== null) stopGPS();
   releaseWakeLock();
   unpublishLiveSession(currentSession.key);
   clearLastActiveSession();
