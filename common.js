@@ -347,18 +347,20 @@ function showDeviceNameBar() {
   overlay.id = 'deviceNameModal';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(44,62,80,0.7);display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.innerHTML = `
-    <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center;">
-      <div style="font-size:48px;margin-bottom:12px;">📱</div>
-      <h2 style="margin:0 0 6px;color:#2c3e50;font-size:20px;">로컬 기기 등록</h2>
-      <p style="color:#666;font-size:13px;margin:0 0 18px;line-height:1.5;">이 기기에서 처음 접속했습니다.<br>모니터링에 표시될 <b>기기 이름</b>을 등록해주세요.</p>
+    <div style="background:#fff;border-radius:18px;padding:32px 26px 26px;max-width:360px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,0.25);text-align:center;">
+      <div style="font-size:52px;margin-bottom:8px;">🙌</div>
+      <h2 style="margin:0 0 8px;color:#2c3e50;font-size:20px;">안녕하세요! 환영합니다</h2>
+      <p style="color:#555;font-size:14px;margin:0 0 6px;line-height:1.6;">이 기기에서 처음 접속하셨네요!</p>
+      <p style="color:#777;font-size:13px;margin:0 0 20px;line-height:1.6;">본부에서 누구의 기기인지 확인할 수 있도록<br><b>기기 이름</b>을 한 번만 등록해 주세요 😊<br><span style="color:#aaa;font-size:12px;">처음 한 번만 하시면 다음부터는 안 물어봐요!</span></p>
       <input id="deviceNameInput" type="text" placeholder="예: 홍길동 폰, 사무실PC"
-        style="width:100%;box-sizing:border-box;padding:12px 14px;border:2px solid #3498db;border-radius:8px;font-size:15px;text-align:center;outline:none;"
+        style="width:100%;box-sizing:border-box;padding:13px 14px;border:2px solid #3498db;border-radius:10px;font-size:15px;text-align:center;outline:none;transition:border-color .2s;"
+        onfocus="this.style.borderColor='#2980b9'" onblur="this.style.borderColor='#3498db'"
         onkeydown="if(event.key==='Enter')registerDeviceName()">
       <button onclick="registerDeviceName()"
-        style="margin-top:14px;width:100%;padding:12px;background:#2980b9;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;">
-        ✅ 등록
+        style="margin-top:16px;width:100%;padding:13px;background:linear-gradient(135deg,#3498db,#2980b9);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(52,152,219,0.3);transition:transform .1s;"
+        onmousedown="this.style.transform='scale(0.97)'" onmouseup="this.style.transform='scale(1)'">
+        등록하기
       </button>
-      <p style="color:#aaa;font-size:11px;margin:10px 0 0;">등록 후 언제든 브라우저 설정에서 변경 가능</p>
     </div>`;
   document.body.appendChild(overlay);
   setTimeout(() => { const inp = document.getElementById('deviceNameInput'); if (inp) inp.focus(); }, 100);
@@ -366,7 +368,7 @@ function showDeviceNameBar() {
 function registerDeviceName() {
   const inp = document.getElementById('deviceNameInput');
   const name = (inp?.value || '').trim();
-  if (!name) { inp.style.borderColor = '#e74c3c'; inp.placeholder = '이름을 입력해주세요!'; inp.focus(); return; }
+  if (!name) { inp.style.borderColor = '#e74c3c'; inp.placeholder = '이름을 살짝 적어주세요 🙏'; inp.focus(); return; }
   setDeviceName(name);
   const modal = document.getElementById('deviceNameModal');
   if (modal) modal.remove();
