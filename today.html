@@ -54,6 +54,8 @@
           <button class="small gray" id="naviToggle" onclick="toggleNavi()">🧭 내비모드</button>
           <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
           <button class="small" id="btnComplaint" onclick="reportComplaint()" style="background:#e74c3c;">📞 민원접수</button>
+          <button class="small" onclick="showHistoryModal('complaints')" style="background:#c0392b;">📞 민원내역</button>
+          <button class="small" onclick="showHistoryModal('requests')" style="background:#d35400;">📌 거점요청내역</button>
         </div>
       </div>
       <div id="gpsStatus" class="muted" style="margin-top:6px;">GPS 대기중</div>
@@ -1865,6 +1867,78 @@ function resetCourse() {
   saveSession();
   renderAnchorRows();
   renderMapForSession();
+}
+
+// ─── 민원/거점요청 내역 모달 ───
+function showHistoryModal(type) {
+  const data = loadData();
+  const isComplaint = type === 'complaints';
+  const title = isComplaint ? '📞 민원 내역' : '📌 거점요청 내역';
+  const items = isComplaint
+    ? (data.complaints || []).slice().sort((a,b) => (b.createdAt||0) - (a.createdAt||0))
+    : (data.requests || []).slice().sort((a,b) => (b.requestedAt||0) - (a.requestedAt||0));
+
+  let listHtml = '';
+  if (!items.length) {
+    listHtml = '<div style="text-align:center;color:#aaa;padding:20px;">내역이 없습니다</div>';
+  } else {
+    listHtml = items.map(it => {
+      const ts = it.createdAt || it.requestedAt || 0;
+      const timeStr = ts ? new Date(ts).toLocaleString('ko-KR', {month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+      const statusColor = it.status === 'resolved' ? '#27ae60' : it.status === 'approved' ? '#27ae60' : '#e67e22';
+      const statusLabel = it.status === 'resolved' ? '처리완료' : it.status === 'approved' ? '승인됨' : '대기중';
+
+      if (isComplaint) {
+        const phone = (it.phone || '').trim();
+        const phoneTel = phone.replace(/[^0-9+]/g, '');
+        return `
+          <div style="padding:10px 0;border-bottom:1px solid #eee;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="background:${statusColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${statusLabel}</span>
+              <span style="font-size:11px;color:#888;">${timeStr}</span>
+            </div>
+            <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${(it.content || '내용 없음').replace(/</g,'&lt;')}</div>
+            ${it.reportedBy ? '<div style="font-size:11px;color:#888;">접수: ' + (it.reportedBy||'').replace(/</g,'&lt;') + '</div>' : ''}
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+              ${phone ? '<a href="tel:' + phoneTel + '" style="display:inline-flex;align-items:center;gap:4px;background:#3498db;color:#fff;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;text-decoration:none;">📞 ' + phone.replace(/</g,'&lt;') + '</a>' : ''}
+              ${typeof it.lat === 'number' ? '<a href="https://map.kakao.com/link/to/민원위치,' + it.lat + ',' + it.lng + '" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#e74c3c;color:#fff;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;text-decoration:none;">🧭 네비</a>' : ''}
+            </div>
+          </div>`;
+      } else {
+        return `
+          <div style="padding:10px 0;border-bottom:1px solid #eee;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+              <span style="background:${statusColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${statusLabel}</span>
+              <span style="font-size:11px;color:#888;">${timeStr}</span>
+            </div>
+            <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${(it.name || '').replace(/</g,'&lt;')}</div>
+            ${it.memo ? '<div style="font-size:12px;color:#555;">' + it.memo.replace(/</g,'&lt;') + '</div>' : ''}
+            ${it.requestedBy ? '<div style="font-size:11px;color:#888;">요청: ' + (it.requestedBy||'').replace(/</g,'&lt;') + '</div>' : ''}
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+              ${typeof it.lat === 'number' ? '<a href="https://map.kakao.com/link/to/요청위치,' + it.lat + ',' + it.lng + '" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#e74c3c;color:#fff;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;text-decoration:none;">🧭 네비</a>' : ''}
+            </div>
+          </div>`;
+      }
+    }).join('');
+  }
+
+  // 모달 생성
+  let modal = document.getElementById('historyModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'historyModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #eee;">
+        <div style="font-weight:700;font-size:16px;">${title}</div>
+        <button onclick="document.getElementById('historyModal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888;padding:0 4px;">✕</button>
+      </div>
+      <div style="overflow-y:auto;padding:0 16px 16px;">${listHtml}</div>
+    </div>
+  `;
+  document.body.appendChild(modal);
 }
 </script>
 </body>
