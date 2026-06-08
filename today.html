@@ -1692,41 +1692,11 @@ function showMapSettings() {
         ${naviMode ? '🧭 내비모드 ON (끄기)' : '🧭 내비모드 OFF (켜기)'}
       </button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">진행방향으로 지도가 회전합니다</p>
-      <button onclick="findMyPhone()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:16px;background:#e74c3c;color:#fff;">
-        📱 내 폰 찾기
-      </button>
       <button onclick="this.closest('#mapSettingsOverlay').remove()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#34495e;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">닫기</button>
     </div>
   `;
   document.body.appendChild(overlay);
 }
-let __findPhoneAudio = null;
-function findMyPhone() {
-  // 이미 울리고 있으면 중지
-  if (__findPhoneAudio) {
-    __findPhoneAudio.pause();
-    __findPhoneAudio = null;
-    if (navigator.vibrate) navigator.vibrate(0);
-    return;
-  }
-  // 진동 패턴 (10초간 반복)
-  if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500, 200, 500]);
-  // 비프음 생성 (Web Audio API)
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.value = 1000;
-    gain.gain.value = 0.5;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    __findPhoneAudio = { pause: () => { osc.stop(); ctx.close(); } };
-    setTimeout(() => {
-      if (__findPhoneAudio) { __findPhoneAudio.pause(); __findPhoneAudio = null; }
-    }, 10000);
-  } catch (e) { console.warn('오디오 재생 실패', e); }
 }
 function updateNaviBtn() {
   // 하위 호환 (내부 호출 시 무시)
