@@ -321,7 +321,8 @@ function render() {
     courses.forEach(c => { courseColTotals[c.id] = 0; });
 
     const S = 'font-size:11px;padding:2px 4px;white-space:nowrap;';  // 작고 한 줄
-    let dHead = `<tr><th style="${S}">일자</th><th style="${S}">방역자</th><th style="${S}">보조자</th><th style="${S}">조</th>` + courses.map(c =>
+    const hhmm = ts => { if (!ts) return '-'; const t = new Date(ts); return `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`; };
+    let dHead = `<tr><th style="${S}">일자</th><th style="${S}">방역자</th><th style="${S}">보조자</th><th style="${S}">조</th><th style="${S}">시작</th><th style="${S}">종료</th><th style="${S}">소요</th>` + courses.map(c =>
       `<th style="${S}background:${c.color};color:#fff;">${c.label}${__showDetail && c.detail ? ' ('+c.detail+')' : ''}</th>`
     ).join('') + `<th style="${S}">총계</th></tr>`;
     let dBody = '';
@@ -343,7 +344,10 @@ function render() {
           if (found) team = found.name;
         }
       }
-      let row = `<tr><td style="${S}">${dateStr}</td><td style="${S}">${driver}</td><td style="${S}">${assist}</td><td style="${S}">${team}</td>`;
+      const startStr = hhmm(log.startedAt);
+      const endStr = hhmm(log.finishedAt);
+      const durStr = (log.startedAt && log.finishedAt) ? Math.round((log.finishedAt - log.startedAt) / 60000) + '분' : '-';
+      let row = `<tr><td style="${S}">${dateStr}</td><td style="${S}">${driver}</td><td style="${S}">${assist}</td><td style="${S}">${team}</td><td style="${S}text-align:center;color:#27ae60;">${startStr}</td><td style="${S}text-align:center;color:#c0392b;">${endStr}</td><td style="${S}text-align:center;color:#666;">${durStr}</td>`;
       let rowTotal = 0;
       for (const c of courses) {
         if (log.courseId === c.id) {
@@ -360,7 +364,7 @@ function render() {
     // 합계 행
     const grandTotal = Object.values(courseColTotals).reduce((s,v) => s+v, 0);
     let dFoot = `<tr style="background:#f0f0f0;font-weight:700;">
-      <td colspan="4" style="${S}text-align:center;">합계</td>`;
+      <td colspan="7" style="${S}text-align:center;">합계</td>`;
     for (const c of courses) {
       dFoot += `<td style="${S}text-align:center;">${courseColTotals[c.id]}</td>`;
     }
