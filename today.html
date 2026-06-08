@@ -1578,8 +1578,9 @@ function toggleFollow() {
   followPauseUntil = 0;
   updateFollowBtn();
   if (followMode && currentPos && map) {
-    // 따라가기 ON → 센터만 이동, 줌 유지
+    // 따라가기 ON → 가장 가까운 줌 + 내 위치 중심
     map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+    map.setLevel(3);
   }
 }
 function fitBoundsWithMe() {
