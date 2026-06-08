@@ -1382,8 +1382,12 @@ function renderEventSelect(id, includeAll) {
   const data = loadData();
   const sel = document.getElementById(id);
   const cur = sel.value;
+  // viewSelect(지도 필터)만 전체 표시, 나머지 드롭다운은 보이는 행사만
+  const events = (id === 'viewSelect')
+    ? (data.events || [])
+    : (data.events || []).filter(e => isEventVisible(e.id));
   sel.innerHTML = (includeAll ? '<option value="all">전체</option>' : '') +
-    (data.events || []).map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+    events.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
   if (cur) sel.value = cur;
 }
 

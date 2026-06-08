@@ -1367,8 +1367,10 @@ function renderEventFilterOptions() {
   if (!sel) return;
   const data = loadData();
   const cur = sel.value;
+  const evVis2 = (data.visibility || {}).events || {};
+  const visEvents = (data.events || []).filter(e => evVis2[e.id] !== false);
   sel.innerHTML = '<option value="">전체 행사</option>' +
-    (data.events || []).map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
+    visEvents.map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
 }
 
 function render() {
