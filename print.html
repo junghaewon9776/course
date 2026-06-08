@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
@@ -7,14 +7,14 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>인쇄용 - 방역코스</title>
-  <link rel="stylesheet" href="style.css?v=20260513d">
+  <link rel="stylesheet" href="style.css?v=20260512v">
   <style>
     body { background: #fff; }
     .print-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
     .print-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
     .print-toolbar select, .print-toolbar button, .print-toolbar input { padding: 6px 10px; }
 
-    /* 크기 설정 — body에 size class 붙임 */
+    /* 크기 설정 */
     body.sz-s .print-content { font-size: 11px; }
     body.sz-s .team-header, body.sz-s .warn-box { font-size: 14px; }
     body.sz-s .team-table th, body.sz-s .team-table td { padding: 3px 5px; }
@@ -60,12 +60,18 @@
 
     @media print {
       .no-print { display: none !important; }
-      body { background: #fff; }
+      body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .print-wrap { padding: 8px; max-width: none; }
       .course-item { page-break-inside: avoid; }
+      .qr-row { page-break-inside: avoid; }
     }
 
-    /* 호차 인쇄 모드 — A4, 차 한 대당 한 페이지. @page는 JS로 동적 주입 */
+    /* 가로 인쇄 — 조 그리드 2열 */
+    body.orient-landscape .teams-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    /* 호차 인쇄 모드 */
     body.mode-hocha .print-wrap { padding: 0; max-width: none; margin: 0; }
     body.mode-hocha .print-toolbar { padding: 12px; }
     .hocha-page {
@@ -75,11 +81,8 @@
     }
     .hocha-page:last-child { page-break-after: auto; }
 
-    /* 가로(landscape) — 위 1호차 (전폭), 아래 좌(정보) 우(QR) */
     body.orient-landscape .hocha-page {
-      width: 297mm; height: 210mm;
-      padding: 4mm 6mm;
-      flex-direction: column;
+      width: 297mm; height: 210mm; padding: 4mm 6mm; flex-direction: column;
     }
     body.orient-landscape .hocha-top { width: 100%; text-align: center; }
     body.orient-landscape .hocha-bottom { display: flex; flex: 1; align-items: center; gap: 14mm; width: 100%; }
@@ -91,11 +94,8 @@
     body.orient-landscape .hocha-crew-line { font-size: 36pt; margin-top: 5mm; }
     body.orient-landscape .hocha-qr-img { width: 140px; height: 140px; }
 
-    /* 세로(portrait) — 위에서 아래 스택, QR 하단 */
     body.orient-portrait .hocha-page {
-      width: 210mm; height: 297mm;
-      padding: 8mm 8mm 8mm;
-      flex-direction: column;
+      width: 210mm; height: 297mm; padding: 8mm 8mm 8mm; flex-direction: column;
     }
     body.orient-portrait .hocha-top { width: 100%; text-align: center; }
     body.orient-portrait .hocha-bottom { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; }
@@ -107,7 +107,6 @@
     body.orient-portrait .hocha-crew-line { font-size: 40pt; margin-top: 6mm; }
     body.orient-portrait .hocha-qr-img { width: 130px; height: 130px; }
 
-    /* 공통 */
     .hocha-num { font-weight: 900; color: #e67e22; white-space: nowrap; }
     .hocha-color { font-weight: 700; color: #34495e; line-height: 1; white-space: nowrap; }
     .hocha-plate {
@@ -122,11 +121,8 @@
       display: flex; align-items: center; justify-content: center; gap: 4mm;
     }
     .hocha-crew-line .role-badge {
-      display: inline-block;
-      background: #3498db; color: #fff;
-      padding: 2mm 5mm; border-radius: 3mm;
-      font-size: 0.7em; font-weight: 800;
-      letter-spacing: 1mm;
+      display: inline-block; background: #3498db; color: #fff;
+      padding: 2mm 5mm; border-radius: 3mm; font-size: 0.7em; font-weight: 800; letter-spacing: 1mm;
     }
     .hocha-crew-line .role-badge.assist { background: #16a085; }
     .hocha-crew-line .crew-name { color: #2c3e50; }
@@ -137,8 +133,7 @@
     .hocha-qr-label .qr-step-num {
       display: inline-flex; align-items: center; justify-content: center;
       width: 6mm; height: 6mm; border-radius: 50%;
-      background: #e67e22; color: #fff; font-weight: 800; font-size: 10pt;
-      flex-shrink: 0;
+      background: #e67e22; color: #fff; font-weight: 800; font-size: 10pt; flex-shrink: 0;
     }
     .hocha-qr-label b { color: #e67e22; }
 
@@ -168,15 +163,13 @@
       <option value="course">코스 / 조 인쇄</option>
       <option value="hocha">🚐 호차 인쇄</option>
     </select>
-    <span class="modeOptHocha" style="display:none;">
-      <label>방향:</label>
-      <select id="hochaOrient" onchange="render()" style="width:auto;display:inline-block;">
-        <option value="landscape" selected>가로 (Landscape)</option>
-        <option value="portrait">세로 (Portrait)</option>
-      </select>
-    </span>
+    <label>방향:</label>
+    <select id="orientSel" onchange="render()" style="width:auto;display:inline-block;">
+      <option value="portrait">세로 (Portrait)</option>
+      <option value="landscape">가로 (Landscape)</option>
+    </select>
     <label class="modeOptCourse" style="display:flex;align-items:center;gap:4px;cursor:pointer;">
-      <input id="onlyFeaturedCourse" type="checkbox" checked onchange="render()">
+      <input id="onlyFeaturedCourse" type="checkbox" onchange="render()">
       <span>⭐ 대표 코스만</span>
     </label>
     <label class="modeOptCourse" style="display:flex;align-items:center;gap:4px;cursor:pointer;">
@@ -194,7 +187,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="firebase-config.js?v=20260513d"></script>
+<script src="firebase-config.js?v=20260512v"></script>
 <script src="common.js?v=20260608c"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(initEventFilter);
@@ -207,7 +200,6 @@ function initEventFilter() {
   const cur = sel.value;
   sel.innerHTML = '<option value="">전체</option>' +
     (data.events || []).map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
-  // URL 파라미터로 모드 자동 선택
   const params = new URLSearchParams(location.search);
   const mode = params.get('mode');
   if (mode === 'hocha') {
@@ -219,7 +211,6 @@ function initEventFilter() {
 
 function changeSize() {
   const v = document.getElementById('sizeSel').value;
-  // 사이즈 클래스만 교체, mode-hocha 등 다른 클래스는 유지
   document.body.classList.remove('sz-s', 'sz-m', 'sz-l');
   document.body.classList.add(v);
 }
@@ -233,7 +224,6 @@ function editNotice() {
   saveData(data);
 }
 
-// 🚐 호차 인쇄 — A4 한 페이지당 1대 (1호차/색상/차번호/운전·보조/QR)
 function renderHocha() {
   const data = loadData();
   const params = new URLSearchParams(location.search);
@@ -284,32 +274,29 @@ function renderHocha() {
 
 function render() {
   const mode = document.getElementById('printMode')?.value || 'course';
+  const orient = document.getElementById('orientSel')?.value || 'portrait';
+
   document.body.classList.toggle('mode-hocha', mode === 'hocha');
+  document.body.classList.remove('orient-landscape', 'orient-portrait');
+  document.body.classList.add('orient-' + orient);
+
+  // 동적 @page 스타일
+  let pageStyle = document.getElementById('dynamicPageStyle');
+  if (!pageStyle) {
+    pageStyle = document.createElement('style');
+    pageStyle.id = 'dynamicPageStyle';
+    document.head.appendChild(pageStyle);
+  }
+  pageStyle.textContent = `@page { size: A4 ${orient}; margin: ${orient === 'landscape' ? '6mm' : '10mm'}; }`;
+
   document.querySelectorAll('.modeOptCourse').forEach(el => {
     el.style.display = mode === 'course' ? '' : 'none';
   });
-  document.querySelectorAll('.modeOptHocha').forEach(el => {
-    el.style.display = mode === 'hocha' ? 'inline-flex' : 'none';
-  });
-  // 호차 모드 방향 (가로/세로) — @page와 body 클래스 동적 주입
+
   if (mode === 'hocha') {
-    const orient = document.getElementById('hochaOrient')?.value || 'landscape';
-    document.body.classList.remove('orient-landscape', 'orient-portrait');
-    document.body.classList.add('orient-' + orient);
-    let pageStyle = document.getElementById('dynamicPageStyle');
-    if (!pageStyle) {
-      pageStyle = document.createElement('style');
-      pageStyle.id = 'dynamicPageStyle';
-      document.head.appendChild(pageStyle);
-    }
-    pageStyle.textContent = `@page { size: A4 ${orient}; margin: 0; }`;
     return renderHocha();
-  } else {
-    // 코스 모드는 기본 (세로) — 동적 스타일 제거
-    const ps = document.getElementById('dynamicPageStyle');
-    if (ps) ps.remove();
-    document.body.classList.remove('orient-landscape', 'orient-portrait');
   }
+
   const data = loadData();
   const eventFilter = document.getElementById('eventFilter').value;
 
@@ -322,28 +309,20 @@ function render() {
     const memberRows = (t.memberIds || []).map(id => {
       const m = getMember(data, id);
       if (!m) return '';
-      return `
-        <tr>
-          <td class="role-cell">팀원</td>
-          <td class="name-cell">${m.name}</td>
-          <td class="phone-cell">${m.phone || ''}</td>
-        </tr>
-      `;
+      return `<tr><td class="role-cell">팀원</td><td class="name-cell">${m.name}</td><td class="phone-cell">${m.phone || ''}</td></tr>`;
+    }).join('');
+    const fixedRows = (t.fixedMemberIds || []).map(id => {
+      const m = getMember(data, id);
+      if (!m) return '';
+      return `<tr><td class="role-cell" style="background:#f3e8ff;">고정</td><td class="name-cell">${m.name}</td><td class="phone-cell">${m.phone || ''}</td></tr>`;
     }).join('');
     return `
       <table class="team-table">
         <tr><td colspan="3" class="team-header ${headerClass}">${t.name}</td></tr>
-        <tr>
-          <td class="role-cell">조장</td>
-          <td class="name-cell">${leader?.name || ''}</td>
-          <td class="phone-cell">${leader?.phone || ''}</td>
-        </tr>
-        <tr>
-          <td class="role-cell">부조장</td>
-          <td class="name-cell">${vice?.name || ''}</td>
-          <td class="phone-cell">${vice?.phone || ''}</td>
-        </tr>
+        <tr><td class="role-cell">조장</td><td class="name-cell">${leader?.name || ''}</td><td class="phone-cell">${leader?.phone || ''}</td></tr>
+        <tr><td class="role-cell">부조장</td><td class="name-cell">${vice?.name || ''}</td><td class="phone-cell">${vice?.phone || ''}</td></tr>
         ${memberRows}
+        ${fixedRows}
       </table>
     `;
   }).join('');
@@ -354,25 +333,23 @@ function render() {
     .map(id => { const m = getMember(data, id); return m ? `${m.position ? m.position + ' ' : ''}${m.name}` : ''; })
     .filter(Boolean).join(' · ');
 
-  // ─── 행사/코스 + 거점 순서 (대표 코스/대표 거점 옵션) ───
+  // ─── 코스 + 거점 (기본: 전체) ───
   const onlyFeatured = document.getElementById('onlyFeatured')?.checked;
   const onlyFeaturedCourse = document.getElementById('onlyFeaturedCourse')?.checked;
   let courseHtml = '';
   for (const ev of (data.events || [])) {
     if (eventFilter && ev.id !== eventFilter) continue;
-    // 대표 코스만 필터 — 체크되어 있으면 표시된 것만 (없으면 빈 칸)
     let courses = ev.courses || [];
     if (onlyFeaturedCourse) {
       courses = courses.filter(c => c.featured);
     }
-    if (onlyFeaturedCourse && !courses.length) continue;  // 대표 코스 0개면 행사 제목도 안 띄움
+    if (onlyFeaturedCourse && !courses.length) continue;
     courseHtml += `<h2 style="margin:14px 0 6px;border-bottom:2px solid #1f2937;padding-bottom:4px;">${ev.name}${onlyFeaturedCourse ? ' <span style="color:#f39c12;font-size:0.8em;font-weight:400;">⭐ 대표 코스만</span>' : ''}</h2>`;
     for (const c of courses) {
       const allAnchors = (data.anchors || [])
         .filter(a => a.courseId === c.id)
         .sort((a, b) => (a.order || 0) - (b.order || 0));
       const featuredAnchors = allAnchors.filter(a => a.featured);
-      // 대표거점만 모드 — 표시한 것만 (없으면 빈 칸)
       const useAnchors = onlyFeatured ? featuredAnchors : allAnchors;
       if (!useAnchors.length) {
         const msg = onlyFeatured
