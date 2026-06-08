@@ -1230,7 +1230,7 @@ function renderAnchorRows() {
           ${a.memo ? `<div class="sub">${a.memo}</div>` : ''}
         </div>
         <button class="small" onclick="navTo('${a.id}')">🧭</button>
-        <button class="small ${isDone ? 'gray' : 'success'}" onclick="toggleDone('${a.id}')">
+        <button class="small ${isDone ? 'gray' : 'success'}" onclick="toggleDone('${a.id}',true)">
           ${isDone ? '↺' : '✓'}
         </button>
       </div>
@@ -1501,27 +1501,32 @@ ${a.name} 거점 픽업 알림
   location.href = smsUrl;
 }
 
-function toggleDone(anchorId) {
+function toggleDone(anchorId, manual) {
   if (!currentSession) return;
   const set = new Set(currentSession.completions);
   const wasDone = set.has(anchorId);
   if (wasDone) set.delete(anchorId);
   else set.add(anchorId);
   currentSession.completions = [...set];
+  // 자동완료 시각 기록 (코스완료 시 일괄 전송용)
+  if (!wasDone && !manual) {
+    if (!currentSession.autoCompleted) currentSession.autoCompleted = {};
+    currentSession.autoCompleted[anchorId] = new Date().toLocaleTimeString('ko-KR');
+  }
   saveSession();
   renderAnchorRows();
   renderMapForSession();
   updateNextInfo();
 
-  // 새로 거점완료된 거점이면 텔레그램 알림
-  if (!wasDone) {
+  // 수동 체크만 텔레그램 즉시 전송
+  if (!wasDone && manual) {
     const data = loadData();
     const a = (data.anchors || []).find(x => x.id === anchorId);
     const event = getEvent(data, currentSession.eventId);
     const course = getCourse(data, currentSession.courseId);
     const vehInfo = [currentSession.crew?.vehicle, currentSession.crew?.vehicleColor].filter(Boolean).join(' / ');
     const idx = (data.anchors || []).filter(x => x.courseId === currentSession.courseId).sort((x,y)=>(x.order||0)-(y.order||0)).findIndex(x => x.id === anchorId) + 1;
-    sendTelegram(`🚐 <b>거점완료</b>\n${event?.name || ''} · ${course?.name || ''}\n${idx}번 ${a?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시각: ${new Date().toLocaleTimeString('ko-KR')}`);
+    sendTelegram(`🚐 <b>거점완료(수동)</b>\n${event?.name || ''} · ${course?.name || ''}\n${idx}번 ${a?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시각: ${new Date().toLocaleTimeString('ko-KR')}`);
   }
 }
 
@@ -1803,8 +1808,8 @@ function onGpsUpdate(pos) {
         if (!currentSession.nearTimers[a.id]) {
           currentSession.nearTimers[a.id] = now;
         } else if (now - currentSession.nearTimers[a.id] >= 1000) {
-          // 1초 머묾 → 자동 체크
-          toggleDone(a.id);
+          // 1초 머묾 → 자동 체크 (텔레그램 안 보냄)
+          toggleDone(a.id, false);
           delete currentSession.nearTimers[a.id];
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
         }
@@ -1884,10 +1889,11 @@ function finishCourse() {
   fresh.logs.push({ ...currentSession });
   saveData(fresh);
 
-  // 텔레그램: 코스 완료 알림
+  // 텔레그램: 코스 완료 알림 + 자동완료 거점 일괄 포함
   const event = getEvent(fresh, currentSession.eventId);
   const course = getCourse(fresh, currentSession.courseId);
-  const totalA = (fresh.anchors || []).filter(a => a.courseId === currentSession.courseId).length;
+  const courseAnchors = (fresh.anchors || []).filter(a => a.courseId === currentSession.courseId).sort((x,y)=>(x.order||0)-(y.order||0));
+  const totalA = courseAnchors.length;
   const dur = Math.round((currentSession.finishedAt - currentSession.startedAt) / 60000);
   const dist = (function() {
     let d = 0;
@@ -1896,7 +1902,13 @@ function finishCourse() {
     return (d/1000).toFixed(1);
   })();
   const vehInfoFinish = [currentSession.crew?.vehicle, currentSession.crew?.vehicleColor].filter(Boolean).join(' / ');
-  sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfoFinish ? '\n차량: ' + vehInfoFinish : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분`);
+  // 자동완료 거점 목록
+  const auto = currentSession.autoCompleted || {};
+  const autoList = courseAnchors
+    .map((a, i) => auto[a.id] ? `  ${i+1}. ${a.name} (${auto[a.id]})` : null)
+    .filter(Boolean).join('\n');
+  const autoLine = autoList ? `\n\n📍 <b>자동완료 거점:</b>\n${autoList}` : '';
+  sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfoFinish ? '\n차량: ' + vehInfoFinish : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분${autoLine}`);
 
   alert('✅ 코스 완료 보고됨');
   if (watchId !== null) toggleGPS();
