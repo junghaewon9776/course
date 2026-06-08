@@ -967,7 +967,13 @@ function startSession(eventId, courseId, teamId, crew) {
   };
 
   document.getElementById('assignmentCard').style.display = 'none';
+  document.getElementById('startFormCard').style.display = 'none';
   document.getElementById('opPanel').style.display = 'block';
+  // 미리보기에서 숨겨졌을 수 있는 UI 복원
+  const toolbar = document.querySelector('.op-toolbar');
+  if (toolbar) toolbar.style.display = '';
+  const anchorRows = document.getElementById('anchorRows');
+  if (anchorRows) anchorRows.parentElement.style.display = '';
   __mapInitialFitDone = false; // 새 세션 시작 → 첫 렌더링 때 줌/위치 초기화
 
   const event = getEvent(data, eventId);
@@ -1189,6 +1195,11 @@ function resumeSession(s) {
   currentSession = s;
   document.getElementById('assignmentCard').style.display = 'none';
   document.getElementById('opPanel').style.display = 'block';
+  // 미리보기에서 숨겨졌을 수 있는 UI 복원
+  const tb = document.querySelector('.op-toolbar');
+  if (tb) tb.style.display = '';
+  const ar = document.getElementById('anchorRows');
+  if (ar) ar.parentElement.style.display = '';
   __mapInitialFitDone = false;
   const data = loadData();
   const event = getEvent(data, s.eventId);
