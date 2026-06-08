@@ -62,7 +62,10 @@
           <div class="admin-only">
             <button onclick="randomAssign()" class="success">🎲 팀짜기</button>
             <button onclick="saveTeamSnapshot()">💾 현재 팀 저장</button>
+            <button onclick="exportTeamsExcel()" class="small" style="background:#27ae60;color:#fff;">⬇ 조 내보내기</button>
+            <button onclick="document.getElementById('teamUpload').click()" class="small" style="background:#3498db;color:#fff;">📤 조 불러오기</button>
             <button onclick="resetTeams()" class="gray small">조원 리셋</button>
+            <input type="file" id="teamUpload" accept=".xlsx,.xls,.csv" style="display:none" onchange="importTeamsExcel(event)">
           </div>
         </div>
         <p class="muted" style="font-size:12px;">조장·부조장 고정 / 📌 = 고정 조원 / 팀짜기 = 나머지 랜덤 분배</p>
@@ -1206,6 +1209,119 @@ function deleteMember(id) {
 }
 
 // ────── 조 ──────
+// ────── 조 엑셀 내보내기/가져오기 ──────
+function exportTeamsExcel() {
+  const data = loadData();
+  const teams = data.teams || [];
+  const members = data.members || [];
+  const getMem = id => members.find(m => m.id === id);
+  const rows = [];
+  teams.forEach(t => {
+    // 조장
+    if (t.leader) {
+      const m = getMem(t.leader);
+      rows.push({ 조: t.name, 역할: '조장', 이름: m?.name || t.leader, 연락처: m?.phone || '', 차량: t.vehicle || '' });
+    }
+    // 부조장
+    (t.subLeaders || []).forEach(id => {
+      const m = getMem(id);
+      rows.push({ 조: t.name, 역할: '부조장', 이름: m?.name || id, 연락처: m?.phone || '', 차량: '' });
+    });
+    // 고정 조원
+    (t.fixed || []).forEach(id => {
+      const m = getMem(id);
+      rows.push({ 조: t.name, 역할: '고정', 이름: m?.name || id, 연락처: m?.phone || '', 차량: '' });
+    });
+    // 일반 조원
+    (t.members || []).forEach(id => {
+      if (id === t.leader || (t.subLeaders || []).includes(id) || (t.fixed || []).includes(id)) return;
+      const m = getMem(id);
+      rows.push({ 조: t.name, 역할: '조원', 이름: m?.name || id, 연락처: m?.phone || '', 차량: '' });
+    });
+    if (!t.leader && !(t.members || []).length) {
+      rows.push({ 조: t.name, 역할: '', 이름: '', 연락처: '', 차량: t.vehicle || '' });
+    }
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '조편성');
+  XLSX.writeFile(wb, `조편성-${todayStr()}.xlsx`);
+}
+
+function importTeamsExcel(e) {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+      if (!rows.length) { alert('데이터가 없습니다'); return; }
+      const data = loadData();
+      const members = data.members || [];
+      // 이름으로 회원 찾기
+      const findMember = name => {
+        const n = String(name || '').trim();
+        if (!n) return null;
+        return members.find(m => (m.name || '').trim() === n);
+      };
+      // 조별로 그룹핑
+      const teamMap = {};
+      rows.forEach(r => {
+        const teamName = String(r['조'] || '').trim();
+        if (!teamName) return;
+        if (!teamMap[teamName]) teamMap[teamName] = { name: teamName, vehicle: '', leader: null, subLeaders: [], fixed: [], members: [] };
+        const t = teamMap[teamName];
+        const role = String(r['역할'] || '').trim();
+        const name = String(r['이름'] || '').trim();
+        const vehicle = String(r['차량'] || '').trim();
+        if (vehicle) t.vehicle = vehicle;
+        if (!name) return;
+        const m = findMember(name);
+        const id = m ? m.id : null;
+        if (!id) return; // 등록 안 된 회원은 스킵
+        if (role === '조장') { t.leader = id; if (!t.members.includes(id)) t.members.push(id); }
+        else if (role === '부조장') { t.subLeaders.push(id); if (!t.members.includes(id)) t.members.push(id); }
+        else if (role === '고정') { t.fixed.push(id); if (!t.members.includes(id)) t.members.push(id); }
+        else { if (!t.members.includes(id)) t.members.push(id); }
+      });
+      // 기존 조 업데이트 or 새 조 추가
+      const teamNames = Object.keys(teamMap);
+      let updated = 0, created = 0;
+      teamNames.forEach(name => {
+        const imp = teamMap[name];
+        const existing = data.teams.find(t => t.name === name);
+        if (existing) {
+          existing.leader = imp.leader || existing.leader;
+          existing.subLeaders = imp.subLeaders.length ? imp.subLeaders : (existing.subLeaders || []);
+          existing.fixed = imp.fixed.length ? imp.fixed : (existing.fixed || []);
+          existing.members = imp.members;
+          if (imp.vehicle) existing.vehicle = imp.vehicle;
+          updated++;
+        } else {
+          data.teams.push({
+            id: uid(), name,
+            leader: imp.leader, subLeaders: imp.subLeaders, fixed: imp.fixed,
+            members: imp.members, vehicle: imp.vehicle
+          });
+          created++;
+        }
+      });
+      saveData(data); refreshAll();
+      const skipped = rows.filter(r => r['이름'] && !findMember(r['이름'])).map(r => r['이름']);
+      let msg = `✅ 조 불러오기 완료\n업데이트: ${updated}조, 새로 생성: ${created}조`;
+      if (skipped.length) msg += `\n\n⚠ 미등록 회원 (스킵): ${skipped.join(', ')}`;
+      alert(msg);
+    } catch (err) {
+      alert('파일 읽기 실패: ' + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function renderTeams() {
   const data = loadData();
   const teams = data.teams || [];
