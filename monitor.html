@@ -142,9 +142,11 @@
     <div class="col" style="flex:2;min-width:0;">
       <div class="card">
         <h2>지도 (선택한 운행 궤적 / 운영 중 차량)</h2>
-        <div style="position:relative;">
-          <div id="map" class="map map-compact"></div>
-          <button onclick="fitAllLiveMarkers()" style="position:absolute;bottom:12px;right:12px;z-index:10;background:#e67e22;color:#fff;border:none;padding:8px 12px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.3);">🗺 전체</button>
+        <div class="map-wrap">
+          <div id="map" class="map"></div>
+          <div class="map-ctrl" style="bottom:10px;right:10px;">
+            <button class="map-btn map-btn-wide" onclick="fitAllLiveMarkers()">🗺 전체</button>
+          </div>
         </div>
         <div id="logInfo" class="muted" style="margin-top:8px;"></div>
       </div>
