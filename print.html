@@ -367,7 +367,7 @@ function render() {
         const msg = onlyFeatured
           ? `<span style="color:#aaa;">⭐ 대표 거점이 표시되지 않았습니다 (admin에서 ☆ 클릭)</span>`
           : '거점 없음';
-        courseHtml += `<div class="course-item"><div class="label" style="color:${c.color}">${c.name}</div><div class="sub">${msg}</div></div>`;
+        courseHtml += `<div class="course-item"><div class="label" style="color:${c.color}">${c.name}${c.detail ? ' <span style="color:#666;font-weight:normal;font-size:0.85em;">(' + c.detail + ')</span>' : ''}</div><div class="sub">${msg}</div></div>`;
         continue;
       }
       const arrowList = useAnchors.map(a => a.featured ? `<b>⭐${a.name}</b>` : a.name).join(' → ');
@@ -376,7 +376,7 @@ function render() {
         : `${allAnchors.length}개 거점`;
       courseHtml += `
         <div class="course-item">
-          <div class="label" style="color:${c.color}">${c.name} <span style="color:#888;font-weight:400;font-size:0.85em;">(${noteLabel})</span></div>
+          <div class="label" style="color:${c.color}">${c.name}${c.detail ? ' <span style="color:#666;font-weight:normal;font-size:0.85em;">(' + c.detail + ')</span>' : ''} <span style="color:#888;font-weight:400;font-size:0.85em;">(${noteLabel})</span></div>
           <div class="anchors">출발 → ${arrowList}</div>
         </div>
       `;

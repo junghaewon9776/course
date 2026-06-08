@@ -239,6 +239,7 @@ function render() {
       teamCourses[teamId].push({
         eventName: ev.name,
         courseName: c.name,
+        courseDetail: c.detail || '',
         color: c.color || '#95a5a6',
         anchors: useAnchors,
         totalAnchors: allAnchors.length
@@ -267,6 +268,7 @@ function render() {
       allCourseBlocks.push({
         eventName: ev.name,
         courseName: c.name,
+        courseDetail: c.detail || '',
         color: c.color || '#95a5a6',
         anchors: useAnchors,
         totalAnchors: allAnchors.length,
@@ -314,7 +316,7 @@ function render() {
           : `${c.totalAnchors}개 거점`;
         return `
           <div class="course-block" style="border-left-color:${c.color};">
-            <div class="course-block-name" style="color:${c.color};">${esc(c.courseName)} <span style="color:#999;font-weight:400;font-size:12px;">(${countLabel})</span></div>
+            <div class="course-block-name" style="color:${c.color};">${esc(c.courseName)}${c.courseDetail ? ' <span style="color:#666;font-weight:400;font-size:12px;">(' + esc(c.courseDetail) + ')</span>' : ''} <span style="color:#999;font-weight:400;font-size:12px;">(${countLabel})</span></div>
             <div class="course-block-anchors">${arrowList}</div>
           </div>
         `;
@@ -395,7 +397,7 @@ function render() {
       return `
         <div class="course-block" style="border-left-color:${c.color};">
           <div class="course-block-name" style="color:${c.color};">
-            ${esc(c.courseName)} ${teamTag}
+            ${esc(c.courseName)}${c.courseDetail ? ' <span style="color:#666;font-weight:400;font-size:12px;">(' + esc(c.courseDetail) + ')</span>' : ''} ${teamTag}
             <span style="color:#999;font-weight:400;font-size:12px;">(${countLabel})</span>
           </div>
           <div class="course-block-anchors">${arrowList}</div>
