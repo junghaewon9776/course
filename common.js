@@ -866,10 +866,12 @@ function autoFormatLoginId(input) {
   if (formatted !== v) input.value = formatted;
 }
 
-// 현재 로그인 사용자의 권한 (admin/super/viewer)
+// 현재 로그인 사용자의 권한 (super/admin/member/null)
 function getMyRole() {
   const u = fbAuth.currentUser;
   if (!u || !u.email || u.isAnonymous) return null;
+  // 회원(@bsp.local)은 항상 'member'
+  if (isMemberUser()) return 'member';
   if (typeof _cache === 'undefined' || !_cache) return 'admin'; // 데이터 미로드 시 기본
   const userInfo = (_cache.users || {})[u.uid];
   return userInfo?.role || 'admin';
