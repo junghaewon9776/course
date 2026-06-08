@@ -216,7 +216,7 @@ function render() {
   const colors = ['tc-1','tc-2','tc-3','tc-4','tc-5','tc-6','tc-7','tc-8'];
   const onlyFeatured = anchorMode === 'featured';
 
-  // 코스 배정 정보: teamId → [{eventName, course, anchors}]
+  // 코스 배정 정보: teamId → [{eventName, courseName, color, anchors}]
   const teamCourses = {};
   for (const ev of (data.events || [])) {
     const schedules = data.schedules || [];
@@ -238,6 +238,34 @@ function render() {
         color: c.color || '#95a5a6',
         anchors: useAnchors,
         totalAnchors: allAnchors.length
+      });
+    }
+  }
+
+  // 전체 코스 목록 (로테이션 없어도 항상 표시용)
+  const allCourseBlocks = [];
+  for (const ev of (data.events || [])) {
+    const courses = ev.courses || [];
+    for (const c of courses) {
+      const allAnchors = (data.anchors || [])
+        .filter(a => a.courseId === c.id)
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      const useAnchors = onlyFeatured ? allAnchors.filter(a => a.featured) : allAnchors;
+      // 로테이션에서 배정된 조 찾기
+      let assignedTeam = null;
+      const sched = (data.schedules || []).find(s => s.eventId === ev.id);
+      if (sched?.rotation?.length) {
+        const ci = courses.indexOf(c);
+        const teamId = sched.rotation[ci % sched.rotation.length];
+        assignedTeam = getTeam(data, teamId);
+      }
+      allCourseBlocks.push({
+        eventName: ev.name,
+        courseName: c.name,
+        color: c.color || '#95a5a6',
+        anchors: useAnchors,
+        totalAnchors: allAnchors.length,
+        assignedTeam
       });
     }
   }
@@ -346,9 +374,45 @@ function render() {
     </div>
   `;
 
+  // 전체 코스 섹션 (항상 표시)
+  let courseSectionHtml = '';
+  if (allCourseBlocks.length) {
+    const blocks = allCourseBlocks.map(c => {
+      const arrowList = c.anchors.length
+        ? '출발 → ' + c.anchors.map(a => a.featured ? `<b>⭐${esc(a.name)}</b>` : esc(a.name)).join(' → ')
+        : '<span style="color:#aaa;">거점 없음</span>';
+      const countLabel = onlyFeatured
+        ? `대표 ${c.anchors.length}개 / 전체 ${c.totalAnchors}개`
+        : `${c.totalAnchors}개 거점`;
+      const teamTag = c.assignedTeam
+        ? `<span style="background:#2c3e50;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;margin-left:6px;">${esc(c.assignedTeam.name)}</span>`
+        : '';
+      return `
+        <div class="course-block" style="border-left-color:${c.color};">
+          <div class="course-block-name" style="color:${c.color};">
+            ${esc(c.courseName)} ${teamTag}
+            <span style="color:#999;font-weight:400;font-size:12px;">(${countLabel})</span>
+          </div>
+          <div class="course-block-anchors">${arrowList}</div>
+        </div>
+      `;
+    }).join('');
+    courseSectionHtml = `
+      <div style="background:#fff;border-radius:12px;border:1px solid #e8e8e8;overflow:hidden;margin-bottom:20px;">
+        <div style="background:#2c3e50;color:#fff;padding:14px 18px;font-size:16px;font-weight:800;">
+          📍 코스 · 거점 안내
+        </div>
+        <div style="padding:14px 18px;">
+          ${blocks}
+        </div>
+      </div>
+    `;
+  }
+
   document.getElementById('teamsContainer').innerHTML = `
     ${reserveHtml}
     ${teamCards}
+    ${courseSectionHtml}
     ${qrHtml}
   `;
 }
