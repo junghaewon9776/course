@@ -50,7 +50,6 @@
             <option value="10000" selected>10초</option>
             <option value="15000">15초</option>
           </select>
-          <button class="small gray" id="followToggle" onclick="toggleFollow()">🎯 따라가기</button>
           <button class="small gray" id="naviToggle" onclick="toggleNavi()">🧭 내비모드</button>
           <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
           <button class="small" id="btnComplaint" onclick="reportComplaint()" style="background:#e74c3c;">📞 민원접수</button>
@@ -69,7 +68,8 @@
           <button class="map-btn" onclick="zoomOut()" aria-label="축소">−</button>
           <button class="map-btn map-btn-wide" id="mapTypeBtn" onclick="cycleMapType()" title="지도 종류">🗺</button>
         </div>
-        <div class="map-ctrl map-ctrl-bottom">
+        <div class="map-ctrl" style="bottom:10px;left:10px;flex-direction:column;">
+          <button class="map-btn map-btn-wide" id="followToggle" onclick="toggleFollow()">따라가기해제</button>
           <button class="map-btn map-btn-wide" onclick="fitToCourse()">🗺 전체</button>
         </div>
       </div>
@@ -1564,32 +1564,52 @@ function toggleGPS() {
 
 function toggleFollow() {
   followMode = !followMode;
+  followPauseUntil = 0;
   updateFollowBtn();
-  if (followMode && currentPos && map) {
-    // 따라가기 켤 때 내비처럼 가까운 줌으로 한 번 잡고, 그 후엔 사용자 +/- 그대로
-    map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
-    map.setLevel(3);
+  if (followMode && map) {
+    // 따라가기 ON → 전체 맞춤
+    fitBoundsWithMe();
   }
+}
+function fitBoundsWithMe() {
+  if (!currentSession || !map) return;
+  const data = loadData();
+  const anchors = getCourseAnchors(data, currentSession.courseId);
+  if (!anchors.length) return;
+  const bounds = new kakao.maps.LatLngBounds();
+  anchors.forEach(a => bounds.extend(new kakao.maps.LatLng(a.lat, a.lng)));
+  if (currentPos) bounds.extend(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+  map.setBounds(bounds);
 }
 function updateFollowBtn() {
   const btn = document.getElementById('followToggle');
   if (!btn) return;
   const remain = followPauseUntil - Date.now();
   if (followMode && remain > 0) {
-    btn.textContent = `🎯 일시정지 ${Math.ceil(remain/1000)}s`;
-    btn.classList.add('gray');
+    btn.textContent = `고정해제 ${Math.ceil(remain/1000)}s`;
+    btn.style.background = '#f39c12';
+    btn.style.color = '#fff';
   } else if (followMode) {
-    btn.textContent = '🎯 따라가기 ON';
-    btn.classList.remove('gray');
+    btn.textContent = '따라가기ON';
+    btn.style.background = '#27ae60';
+    btn.style.color = '#fff';
   } else {
-    btn.textContent = '🎯 따라가기';
-    btn.classList.add('gray');
+    btn.textContent = '따라가기해제';
+    btn.style.background = '';
+    btn.style.color = '';
   }
 }
 
-// 일시정지 카운트다운 표시 (1초마다)
+// 일시정지 카운트다운 표시 (1초마다) — 끝나면 따라가기ON 복원
 setInterval(() => {
-  if (followPauseUntil > Date.now()) updateFollowBtn();
+  if (followPauseUntil > Date.now()) {
+    updateFollowBtn();
+  } else if (followPauseUntil > 0 && followMode) {
+    // 카운트다운 방금 끝남 → 따라가기ON 복원 + fitBounds
+    followPauseUntil = 0;
+    updateFollowBtn();
+    fitBoundsWithMe();
+  }
 }, 1000);
 
 function zoomIn() {
@@ -1623,17 +1643,11 @@ function cycleMapType() {
 
 function fitToCourse() {
   if (!currentSession || !map) return;
-  const data = loadData();
-  const anchors = getCourseAnchors(data, currentSession.courseId);
-  if (!anchors.length) return;
-  const bounds = new kakao.maps.LatLngBounds();
-  anchors.forEach(a => bounds.extend(new kakao.maps.LatLng(a.lat, a.lng)));
-  if (currentPos) bounds.extend(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
-  map.setBounds(bounds);
-  // 따라가기는 그대로 두고 10초 일시정지 → 그 동안 전체 보이고, 끝나면 자동 복귀
-  followPauseUntil = Date.now() + 10000;
+  followMode = true;
+  followPauseUntil = 0;
   naviMode = false;
   applyNaviRotation(0);
+  fitBoundsWithMe();
   updateFollowBtn();
   updateNaviBtn();
 }
