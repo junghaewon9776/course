@@ -1126,7 +1126,8 @@ function publishCurrentLive() {
     crew: enrichedCrew,
     completedCount: (currentSession.completions || []).length,
     totalCount: totalAnchors,
-    startedAt: currentSession.startedAt
+    startedAt: currentSession.startedAt,
+    device: getDeviceName() || ''
   });
 }
 
