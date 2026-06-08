@@ -702,7 +702,7 @@ function isMemberUser() {
 }
 
 // 회원이 접근 가능한 페이지 (파일명)
-const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor.html', 'monitor-public.html', 'stats.html', 'print.html', 'inquiry.html', 'teams.html'];
+const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor-public.html', 'print.html', 'inquiry.html', 'teams.html'];
 
 // 네비게이션 접근 제어
 function applyMemberNav() {
@@ -711,15 +711,21 @@ function applyMemberNav() {
   const data = loadData();
   const myRole = (data.users || {})[u?.uid]?.role || '';
 
+  // 회원이 nav에서 볼 수 있는 페이지
+  const MEMBER_NAV_PAGES = ['index.html', 'today.html', 'inquiry.html', 'teams.html', 'print.html'];
+
   document.querySelectorAll('nav a').forEach(a => {
     const href = (a.getAttribute('href') || '').split('?')[0];
-    // 회원: 관리/인원/계정 숨김
-    if (isMember && ['admin.html', 'members.html', 'accounts.html'].includes(href)) {
-      a.style.display = 'none';
-    }
-    // 계정관리: super만 (super-nav 클래스로 초기 숨김, super면 표시)
-    if (href === 'accounts.html') {
-      a.style.display = (myRole === 'super') ? '' : 'none';
+    if (!href || href === '#') return; // 로그아웃 등 기능 링크는 건너뜀
+
+    if (isMember) {
+      // 회원: 허용 목록에 없으면 숨김
+      a.style.display = MEMBER_NAV_PAGES.includes(href) ? '' : 'none';
+    } else {
+      // 관리자: 계정관리는 super만
+      if (href === 'accounts.html') {
+        a.style.display = (myRole === 'super') ? '' : 'none';
+      }
     }
   });
 
