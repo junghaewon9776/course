@@ -62,11 +62,13 @@
     <div class="card">
       <div class="map-wrap">
         <div id="map" class="map"></div>
-        <div class="map-ctrl" style="top:10px;right:10px;flex-direction:row;gap:4px;">
-          <button class="map-btn map-btn-wide" id="mapTypeBtn" onclick="cycleMapType()" title="지도 종류">🗺</button>
+        <div class="map-ctrl" style="top:10px;left:10px;flex-direction:row;gap:4px;">
           <button class="map-btn" onclick="zoomIn()">+</button>
           <button class="map-btn" onclick="zoomOut()">−</button>
           <button class="map-btn" onclick="showMapSettings()">⚙</button>
+        </div>
+        <div class="map-ctrl" style="top:10px;right:10px;">
+          <button class="map-btn map-btn-wide" id="mapTypeBtn" onclick="cycleMapType()" title="지도 종류">🗺</button>
         </div>
         <div class="map-ctrl" style="bottom:10px;left:10px;gap:4px;">
           <button class="map-btn" id="followToggle" onclick="toggleFollow()" style="font-size:10px;width:auto;padding:0 6px;height:30px;">따라가기해제</button>
@@ -368,11 +370,10 @@ function initMap() {
     minLevel: 3, // 너무 가까이 못 가게
     maxLevel: 9
   });
-  // 사용자가 지도 드래그하면 따라가기 해제 (줌은 무관)
+  // 사용자가 지도 드래그하면 따라가기 일시정지 5초 (줌은 무관)
   kakao.maps.event.addListener(map, 'dragend', () => {
     if (followMode) {
-      followMode = false;
-      followPauseUntil = 0;
+      followPauseUntil = Date.now() + 5000;
       updateFollowBtn();
     }
   });
@@ -1594,7 +1595,12 @@ function fitBoundsWithMe() {
 function updateFollowBtn() {
   const btn = document.getElementById('followToggle');
   if (!btn) return;
-  if (followMode) {
+  const remain = followPauseUntil - Date.now();
+  if (followMode && remain > 0) {
+    btn.textContent = `고정해제${Math.ceil(remain/1000)}s`;
+    btn.style.background = '#f39c12';
+    btn.style.color = '#fff';
+  } else if (followMode) {
     btn.textContent = '따라가기ON';
     btn.style.background = '#27ae60';
     btn.style.color = '#fff';
@@ -1604,6 +1610,16 @@ function updateFollowBtn() {
     btn.style.color = '';
   }
 }
+// 카운트다운 표시 + 끝나면 따라가기ON 복귀
+setInterval(() => {
+  if (followPauseUntil > Date.now()) {
+    updateFollowBtn();
+  } else if (followPauseUntil > 0 && followMode) {
+    followPauseUntil = 0;
+    updateFollowBtn();
+    if (currentPos && map) map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+  }
+}, 1000);
 
 function zoomIn() {
   if (!map) return;
@@ -1735,8 +1751,8 @@ function onGpsUpdate(pos) {
       myMarker.setPosition(p);
       myMarker.setImage(img);
     }
-    // 따라가기 모드면 지도 중심 이동
-    if (followMode) {
+    // 따라가기 모드 + 일시정지 아니면 지도 중심 이동
+    if (followMode && Date.now() >= followPauseUntil) {
       map.setCenter(p);
     }
     // 내비모드면 진행방향 위로
