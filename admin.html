@@ -1568,7 +1568,7 @@ function renderAnchorCourseSelect() {
   let html = '<option value="">코스 선택...</option>';
   for (const e of (data.events || [])) {
     html += `<optgroup label="${e.name}">`;
-    for (const c of (e.courses || [])) html += `<option value="${c.id}">${c.name}</option>`;
+    for (const c of (e.courses || [])) html += `<option value="${c.id}">${c.name}${c.detail ? ' ('+c.detail+')' : ''}</option>`;
     html += '</optgroup>';
   }
   sel.innerHTML = html;
