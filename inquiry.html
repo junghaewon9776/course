@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>문의·민원</title>
+  <link rel="stylesheet" href="style.css?v=20260512v">
+  <style>
+    .cat-btn {
+      display:inline-flex;align-items:center;gap:6px;
+      padding:10px 16px;border:2px solid #ddd;border-radius:10px;
+      background:#fff;font-size:14px;font-weight:600;cursor:pointer;
+      transition:all .15s;color:#555;
+    }
+    .cat-btn:hover { border-color:#3498db;color:#3498db; }
+    .cat-btn.selected { border-color:#2980b9;background:#ebf5fb;color:#2980b9; }
+    .cat-btn .cat-icon { font-size:20px; }
+
+    .sub-btn {
+      display:inline-block;padding:7px 14px;border:1.5px solid #ddd;border-radius:8px;
+      background:#fff;font-size:13px;cursor:pointer;transition:all .15s;color:#555;
+    }
+    .sub-btn:hover { border-color:#27ae60;color:#27ae60; }
+    .sub-btn.selected { border-color:#27ae60;background:#eafaf1;color:#1e8449;font-weight:600; }
+
+    .inq-card {
+      border:1px solid #e0e0e0;border-radius:10px;padding:14px;margin-bottom:10px;
+      background:#fff;transition:box-shadow .15s;
+    }
+    .inq-card:hover { box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+    .status-badge {
+      display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;
+    }
+    .status-pending { background:#fff3cd;color:#856404; }
+    .status-progress { background:#d1ecf1;color:#0c5460; }
+    .status-resolved { background:#d4edda;color:#155724; }
+
+    .admin-board { display:none; }
+    body.is-admin .admin-board { display:block; }
+    body.is-admin .admin-only { display:initial !important; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>📋 문의·민원</h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="today.html">오늘운영</a>
+    <a href="inquiry.html" class="active">문의·민원</a>
+    <a href="#" onclick="doLogout();return false;">로그아웃</a>
+  </nav>
+</header>
+
+<div class="container">
+  <!-- ─── 접수 폼 ─── -->
+  <div class="card" style="border-left:4px solid #3498db;">
+    <h2>✏️ 문의·민원 접수</h2>
+    <p class="muted" style="font-size:13px;margin-bottom:14px;">해당하는 분류를 선택하고 내용을 작성해주세요.</p>
+
+    <label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block;">분류 선택</label>
+    <div id="categoryBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;"></div>
+
+    <div id="subCategoryArea" style="display:none;margin-bottom:14px;">
+      <label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block;">상세 항목</label>
+      <div id="subCategoryBtns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+    </div>
+
+    <label style="font-size:13px;font-weight:700;">상세 내용</label>
+    <textarea id="inqContent" rows="3" placeholder="구체적인 상황을 적어주세요" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;margin-bottom:12px;"></textarea>
+
+    <label style="font-size:13px;font-weight:700;">연락처 <span style="font-weight:400;color:#aaa;">(선택)</span></label>
+    <input id="inqPhone" type="tel" placeholder="010-0000-0000" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:16px;">
+
+    <button onclick="submitInquiry()" style="width:100%;padding:14px;background:#2980b9;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;">
+      📨 접수하기
+    </button>
+  </div>
+
+  <!-- ─── 내 접수 내역 ─── -->
+  <div class="card">
+    <h2>📜 내 접수 내역</h2>
+    <div id="myInquiryList"></div>
+  </div>
+
+  <!-- ─── 관리자 게시판 ─── -->
+  <div class="card admin-board" style="border-left:4px solid #e67e22;">
+    <div class="flex-between">
+      <h2>⚙️ 전체 문의 관리</h2>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        <select id="adminFilterCat" onchange="renderAdminBoard()" style="font-size:12px;padding:4px;">
+          <option value="">전체 분류</option>
+        </select>
+        <select id="adminFilterStatus" onchange="renderAdminBoard()" style="font-size:12px;padding:4px;">
+          <option value="">전체 상태</option>
+          <option value="pending">대기</option>
+          <option value="progress">처리중</option>
+          <option value="resolved">완료</option>
+        </select>
+      </div>
+    </div>
+    <p class="muted" style="font-size:12px;margin-bottom:8px;">상태 변경, 메모 작성, 삭제 가능</p>
+
+    <!-- 분류 편집 -->
+    <details style="margin-bottom:12px;">
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:#e67e22;">🔧 분류 항목 편집</summary>
+      <div id="categoryEditor" style="margin-top:8px;"></div>
+      <button onclick="addCategory()" class="small success" style="margin-top:6px;">+ 분류 추가</button>
+    </details>
+
+    <div id="adminBoardList"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js?v=20260512v"></script>
+<script src="common.js?v=20260608b"></script>
+<script>
+// ────── 기본 분류 데이터 ──────
+const DEFAULT_CATEGORIES = [
+  { id: 'equip',   icon: '🔧', name: '장비 고장',  subs: ['라보 방전', '분무기 고장', '호스 파손', '노즐 막힘'] },
+  { id: 'chem',    icon: '💧', name: '약제 문제',  subs: ['약이 안 나옴', '약제 부족', '약제 냄새 이상', '배합 문의'] },
+  { id: 'vehicle', icon: '🚐', name: '차량 문제',  subs: ['시동 불량', '타이어 펑크', '에어컨 고장', '기름 부족'] },
+  { id: 'safety',  icon: '⚠️', name: '안전·사고', subs: ['부상', '벌쏘임', '미끄러짐', '기타 사고'] },
+  { id: 'resident',icon: '🏠', name: '주민 민원',  subs: ['소음 민원', '약제 피해', '주차 민원', '방역 요청'] },
+  { id: 'etc',     icon: '💬', name: '기타',       subs: [] }
+];
+
+let selectedCat = '';
+let selectedSub = '';
+
+// ────── 초기화 ──────
+ensureAnonAuth().then(() => {
+  initFirebaseSync();
+  onDataReady(() => {
+    const role = getMyRole();
+    if (role === 'admin' || role === 'super') document.body.classList.add('is-admin');
+    renderCategoryBtns();
+    renderMyInquiries();
+    renderAdminBoard();
+    renderCategoryEditor();
+  });
+});
+window.onDataChanged = () => {
+  renderMyInquiries();
+  renderAdminBoard();
+};
+
+// ────── 분류 가져오기 (DB 우선, 없으면 기본) ──────
+function getCategories() {
+  const data = loadData();
+  if (data.inquiryCategories && data.inquiryCategories.length) return data.inquiryCategories;
+  return DEFAULT_CATEGORIES;
+}
+
+// ────── 분류 버튼 렌더 ──────
+function renderCategoryBtns() {
+  const cats = getCategories();
+  const el = document.getElementById('categoryBtns');
+  el.innerHTML = cats.map(c =>
+    `<button class="cat-btn${selectedCat === c.id ? ' selected' : ''}" onclick="selectCategory('${c.id}')">
+      <span class="cat-icon">${c.icon}</span>${c.name}
+    </button>`
+  ).join('');
+}
+
+function selectCategory(catId) {
+  selectedCat = catId;
+  selectedSub = '';
+  renderCategoryBtns();
+  const cats = getCategories();
+  const cat = cats.find(c => c.id === catId);
+  const area = document.getElementById('subCategoryArea');
+  const el = document.getElementById('subCategoryBtns');
+  if (cat && cat.subs && cat.subs.length) {
+    area.style.display = 'block';
+    el.innerHTML = cat.subs.map(s =>
+      `<button class="sub-btn" onclick="selectSub(this,'${s.replace(/'/g,"\\'")}')">${s}</button>`
+    ).join('') + `<button class="sub-btn" onclick="selectSub(this,'직접입력')">✏ 직접입력</button>`;
+  } else {
+    area.style.display = 'none';
+    el.innerHTML = '';
+  }
+}
+
+function selectSub(btn, val) {
+  document.querySelectorAll('#subCategoryBtns .sub-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedSub = val;
+  if (val === '직접입력') {
+    const ta = document.getElementById('inqContent');
+    ta.focus();
+    ta.placeholder = '직접 상세 내용을 입력해주세요';
+  }
+}
+
+// ────── 접수 ──────
+function submitInquiry() {
+  if (!selectedCat) { alert('분류를 선택해주세요'); return; }
+  const content = (document.getElementById('inqContent').value || '').trim();
+  const phone = (document.getElementById('inqPhone').value || '').trim();
+  const cats = getCategories();
+  const cat = cats.find(c => c.id === selectedCat);
+
+  if (!selectedSub && cat.subs?.length) { alert('상세 항목을 선택해주세요'); return; }
+  if (selectedSub === '직접입력' && !content) { alert('직접입력을 선택하셨으면 내용을 작성해주세요'); return; }
+
+  const data = loadData();
+  if (!Array.isArray(data.inquiries)) data.inquiries = [];
+
+  const u = fbAuth.currentUser;
+  const uInfo = u && !u.isAnonymous ? (data.users || {})[u.uid] : null;
+  const memberId = u ? (data.memberAuth || {})[u.uid] : null;
+  const member = memberId ? (data.members || []).find(m => m.id === memberId) : null;
+  const writerName = member?.name || uInfo?.name || u?.email || getDeviceName() || '익명';
+
+  const inquiry = {
+    id: uid(),
+    category: selectedCat,
+    categoryName: cat?.name || selectedCat,
+    subCategory: selectedSub !== '직접입력' ? selectedSub : '',
+    content,
+    phone: phone || member?.phone || '',
+    writer: writerName,
+    writerUid: u?.uid || '',
+    deviceName: getDeviceName() || '',
+    status: 'pending',
+    adminMemo: '',
+    createdAt: Date.now()
+  };
+  data.inquiries.push(inquiry);
+  saveData(data);
+
+  // 텔레그램 알림
+  sendTelegram(`📋 <b>문의·민원 접수</b>\n분류: ${cat?.icon || ''} ${cat?.name || ''}\n항목: ${selectedSub || '-'}\n내용: ${(content || '-').slice(0, 80)}\n접수자: ${writerName}${phone ? '\n연락처: ' + phone : ''}`);
+
+  // 초기화
+  selectedCat = ''; selectedSub = '';
+  document.getElementById('inqContent').value = '';
+  document.getElementById('inqPhone').value = '';
+  renderCategoryBtns();
+  document.getElementById('subCategoryArea').style.display = 'none';
+  document.getElementById('subCategoryBtns').innerHTML = '';
+  renderMyInquiries();
+  renderAdminBoard();
+  alert('✅ 접수되었습니다!\n관리자가 확인 후 처리할 예정입니다.');
+}
+
+// ────── 내 접수 내역 ──────
+function renderMyInquiries() {
+  const data = loadData();
+  const u = fbAuth.currentUser;
+  const el = document.getElementById('myInquiryList');
+  if (!u || !data.inquiries?.length) {
+    el.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:#aaa;">접수 내역이 없습니다</div>';
+    return;
+  }
+  const myUid = u.uid;
+  const deviceName = getDeviceName();
+  const mine = (data.inquiries || [])
+    .filter(q => q.writerUid === myUid || (deviceName && q.deviceName === deviceName))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (!mine.length) {
+    el.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:#aaa;">접수 내역이 없습니다</div>';
+    return;
+  }
+  el.innerHTML = mine.map(q => renderInquiryCard(q, false)).join('');
+}
+
+function renderInquiryCard(q, isAdmin) {
+  const cats = getCategories();
+  const cat = cats.find(c => c.id === q.category);
+  const statusMap = { pending: ['대기', 'status-pending'], progress: ['처리중', 'status-progress'], resolved: ['완료', 'status-resolved'] };
+  const [statusText, statusClass] = statusMap[q.status] || statusMap.pending;
+  const when = q.createdAt ? new Date(q.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  const phoneTel = (q.phone || '').replace(/[^0-9+]/g, '');
+
+  return `
+    <div class="inq-card" style="${q.status === 'resolved' ? 'opacity:0.6;' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">
+        <div>
+          <span style="font-size:16px;">${cat?.icon || '📋'}</span>
+          <b>${cat?.name || q.categoryName || '기타'}</b>
+          ${q.subCategory ? `<span style="background:#f0f0f0;padding:2px 8px;border-radius:6px;font-size:12px;margin-left:4px;">${q.subCategory}</span>` : ''}
+        </div>
+        <span class="status-badge ${statusClass}">${statusText}</span>
+      </div>
+      ${q.content ? `<div style="margin:8px 0;color:#444;font-size:14px;white-space:pre-wrap;line-height:1.5;">${q.content.replace(/</g,'&lt;')}</div>` : ''}
+      <div style="font-size:12px;color:#999;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <span>🕐 ${when}</span>
+        <span>👤 ${q.writer || '익명'}</span>
+        ${q.phone ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;" onclick="event.stopPropagation()">📞 ${q.phone}</a>` : ''}
+        ${q.deviceName ? `<span>📱 ${q.deviceName}</span>` : ''}
+      </div>
+      ${q.adminMemo ? `<div style="margin-top:8px;padding:8px 10px;background:#fff8e1;border-radius:6px;font-size:13px;border-left:3px solid #f1c40f;"><b>관리자 메모:</b> ${q.adminMemo.replace(/</g,'&lt;')}</div>` : ''}
+      ${isAdmin ? `
+        <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">
+          <select onchange="changeInqStatus('${q.id}',this.value)" style="font-size:12px;padding:4px 8px;border-radius:6px;">
+            <option value="pending"${q.status==='pending'?' selected':''}>⏳ 대기</option>
+            <option value="progress"${q.status==='progress'?' selected':''}>🔄 처리중</option>
+            <option value="resolved"${q.status==='resolved'?' selected':''}>✅ 완료</option>
+          </select>
+          <button class="small" onclick="editInqMemo('${q.id}')" style="background:#f39c12;color:#fff;">📝 메모</button>
+          <button class="small" onclick="editInqContent('${q.id}')" style="background:#3498db;color:#fff;">✏ 수정</button>
+          <button class="small danger" onclick="deleteInquiry('${q.id}')">🗑 삭제</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ────── 관리자 게시판 ──────
+function renderAdminBoard() {
+  if (!document.body.classList.contains('is-admin')) return;
+  const data = loadData();
+  const el = document.getElementById('adminBoardList');
+  const all = (data.inquiries || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  // 필터
+  const filterCat = document.getElementById('adminFilterCat').value;
+  const filterStatus = document.getElementById('adminFilterStatus').value;
+  const filtered = all.filter(q =>
+    (!filterCat || q.category === filterCat) &&
+    (!filterStatus || q.status === filterStatus)
+  );
+
+  // 분류 필터 옵션 갱신
+  const cats = getCategories();
+  const catSel = document.getElementById('adminFilterCat');
+  const curCat = catSel.value;
+  catSel.innerHTML = '<option value="">전체 분류</option>' +
+    cats.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+  catSel.value = curCat;
+
+  // 통계
+  const pending = all.filter(q => q.status === 'pending').length;
+  const progress = all.filter(q => q.status === 'progress').length;
+  const resolved = all.filter(q => q.status === 'resolved').length;
+
+  if (!filtered.length) {
+    el.innerHTML = `
+      <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <span class="status-badge status-pending" style="font-size:13px;padding:6px 14px;">⏳ 대기 ${pending}</span>
+        <span class="status-badge status-progress" style="font-size:13px;padding:6px 14px;">🔄 처리중 ${progress}</span>
+        <span class="status-badge status-resolved" style="font-size:13px;padding:6px 14px;">✅ 완료 ${resolved}</span>
+      </div>
+      <div class="empty">접수된 문의가 없습니다</div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+      <span class="status-badge status-pending" style="font-size:13px;padding:6px 14px;">⏳ 대기 ${pending}</span>
+      <span class="status-badge status-progress" style="font-size:13px;padding:6px 14px;">🔄 처리중 ${progress}</span>
+      <span class="status-badge status-resolved" style="font-size:13px;padding:6px 14px;">✅ 완료 ${resolved}</span>
+    </div>
+  ` + filtered.map(q => renderInquiryCard(q, true)).join('');
+}
+
+// ────── 관리자 액션 ──────
+function changeInqStatus(id, status) {
+  const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q) return;
+  q.status = status;
+  saveData(data);
+}
+
+function editInqMemo(id) {
+  const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q) return;
+  const memo = prompt('관리자 메모 (접수자에게 표시됨)', q.adminMemo || '');
+  if (memo === null) return;
+  q.adminMemo = memo.trim();
+  saveData(data);
+}
+
+function editInqContent(id) {
+  const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q) return;
+
+  const cats = getCategories();
+  const catOptions = cats.map(c =>
+    `<option value="${c.id}"${q.category === c.id ? ' selected' : ''}>${c.icon} ${c.name}</option>`
+  ).join('');
+
+  let modal = document.getElementById('editInqModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'editInqModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(44,62,80,0.7);display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:420px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.25);">
+      <h3 style="margin:0 0 14px;color:#2c3e50;">✏ 문의 수정</h3>
+      <label style="font-size:13px;font-weight:700;">분류</label>
+      <select id="editCat" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+        ${catOptions}
+      </select>
+      <label style="font-size:13px;font-weight:700;">상세 항목</label>
+      <input id="editSub" type="text" value="${(q.subCategory||'').replace(/"/g,'&quot;')}" placeholder="상세 항목"
+        style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <label style="font-size:13px;font-weight:700;">내용</label>
+      <textarea id="editContent" rows="3" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;resize:vertical;">${(q.content||'').replace(/</g,'&lt;')}</textarea>
+      <label style="font-size:13px;font-weight:700;">연락처</label>
+      <input id="editPhone" type="tel" value="${(q.phone||'').replace(/"/g,'&quot;')}"
+        style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <label style="font-size:13px;font-weight:700;">관리자 메모</label>
+      <input id="editMemo" type="text" value="${(q.adminMemo||'').replace(/"/g,'&quot;')}" placeholder="메모 (접수자에게 표시)"
+        style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <div style="display:flex;gap:8px;">
+        <button onclick="saveEditInq('${id}')" style="flex:1;background:#27ae60;color:#fff;border:none;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;">💾 저장</button>
+        <button onclick="document.getElementById('editInqModal').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;">취소</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function saveEditInq(id) {
+  const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q) return;
+  const cats = getCategories();
+  const catId = document.getElementById('editCat').value;
+  const cat = cats.find(c => c.id === catId);
+  q.category = catId;
+  q.categoryName = cat?.name || catId;
+  q.subCategory = (document.getElementById('editSub').value || '').trim();
+  q.content = (document.getElementById('editContent').value || '').trim();
+  q.phone = (document.getElementById('editPhone').value || '').trim();
+  q.adminMemo = (document.getElementById('editMemo').value || '').trim();
+  saveData(data);
+  document.getElementById('editInqModal').remove();
+}
+
+function deleteInquiry(id) {
+  if (!confirm('이 문의를 삭제할까요?')) return;
+  const data = loadData();
+  data.inquiries = (data.inquiries || []).filter(x => x.id !== id);
+  saveData(data);
+}
+
+// ────── 분류 편집 (관리자) ──────
+function renderCategoryEditor() {
+  if (!document.body.classList.contains('is-admin')) return;
+  const cats = getCategories();
+  const el = document.getElementById('categoryEditor');
+  el.innerHTML = cats.map((c, i) => `
+    <div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafafa;">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <input value="${c.icon}" style="width:40px;text-align:center;font-size:18px;border:1px solid #ddd;border-radius:6px;padding:4px;" onchange="updateCatField(${i},'icon',this.value)">
+        <input value="${c.name}" placeholder="분류명" style="flex:1;min-width:80px;padding:6px;border:1px solid #ddd;border-radius:6px;font-size:13px;" onchange="updateCatField(${i},'name',this.value)">
+        <button class="small danger" onclick="deleteCategory(${i})">삭제</button>
+      </div>
+      <div style="margin-top:6px;font-size:12px;color:#666;">
+        <span style="font-weight:600;">하위 항목:</span>
+        <input value="${(c.subs||[]).join(', ')}" placeholder="쉼표로 구분 (예: 항목1, 항목2)"
+          style="width:100%;box-sizing:border-box;padding:5px;border:1px solid #ddd;border-radius:6px;font-size:12px;margin-top:4px;"
+          onchange="updateCatSubs(${i},this.value)">
+      </div>
+    </div>
+  `).join('');
+}
+
+function updateCatField(idx, field, value) {
+  const data = loadData();
+  const cats = data.inquiryCategories || JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+  if (cats[idx]) cats[idx][field] = value.trim();
+  data.inquiryCategories = cats;
+  saveData(data);
+  renderCategoryBtns();
+  renderCategoryEditor();
+}
+
+function updateCatSubs(idx, value) {
+  const data = loadData();
+  const cats = data.inquiryCategories || JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+  if (cats[idx]) cats[idx].subs = value.split(',').map(s => s.trim()).filter(Boolean);
+  data.inquiryCategories = cats;
+  saveData(data);
+  renderCategoryBtns();
+  renderCategoryEditor();
+}
+
+function addCategory() {
+  const data = loadData();
+  const cats = data.inquiryCategories || JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+  cats.push({ id: uid(), icon: '📌', name: '새 분류', subs: [] });
+  data.inquiryCategories = cats;
+  saveData(data);
+  renderCategoryBtns();
+  renderCategoryEditor();
+}
+
+function deleteCategory(idx) {
+  if (!confirm('이 분류를 삭제할까요?')) return;
+  const data = loadData();
+  const cats = data.inquiryCategories || JSON.parse(JSON.stringify(DEFAULT_CATEGORIES));
+  cats.splice(idx, 1);
+  data.inquiryCategories = cats;
+  saveData(data);
+  renderCategoryBtns();
+  renderCategoryEditor();
+}
+</script>
+</body>
+</html>
