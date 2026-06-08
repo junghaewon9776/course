@@ -2377,13 +2377,15 @@ function resolveComplaintFromMap(id) {
   renderMapForSession();
 }
 
-async function reportComplaint() {
+let __cmpMap = null, __cmpMarker = null, __cmpAddr = '', __cmpType = '';
+
+function reportComplaint() {
   if (!currentSession) { alert('먼저 코스를 시작하세요'); return; }
   if (!currentPos) { alert('GPS 위치가 잡히지 않았습니다.\nGPS를 켜고 위치 잡힌 후 다시 시도하세요'); return; }
 
-  // 위치 선택 모달 먼저
-  const loc = await openLocationPicker(currentPos.lat, currentPos.lng);
-  if (!loc) return;
+  let old = document.getElementById('complaintModal');
+  if (old) old.remove();
+  __cmpAddr = ''; __cmpType = '';
 
   const data = loadData();
   const ev = getEvent(data, currentSession.eventId);
@@ -2392,40 +2394,200 @@ async function reportComplaint() {
     `<option value="${c.id}" ${c.id === currentSession.courseId ? 'selected' : ''}>${c.name}</option>`
   ).join('');
 
-  let modal = document.getElementById('complaintModal');
-  if (modal) modal.remove();
-  modal = document.createElement('div');
+  const modal = document.createElement('div');
   modal.id = 'complaintModal';
-  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
-  modal.onclick = e => { if (e.target === modal) modal.remove(); };
-  // 선택된 좌표+주소를 data attribute에 저장
-  modal.dataset.lat = loc.lat;
-  modal.dataset.lng = loc.lng;
-  modal.dataset.address = loc.address || '';
-  const addrDisplay = loc.address || `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}`;
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;background:rgba(0,0,0,0.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 12px;';
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:12px;width:100%;max-width:400px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-      <h3 style="margin:0 0 14px;color:#e74c3c;">📞 민원 접수</h3>
-      <div style="margin-bottom:10px;padding:8px;background:#f0f8ff;border-radius:6px;font-size:12px;color:#2c3e50;">
-        📍 ${addrDisplay}
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:420px;box-shadow:0 8px 30px rgba(0,0,0,0.4);overflow:hidden;margin:auto 0;">
+
+      <!-- 헤더 -->
+      <div style="background:#e74c3c;color:#fff;padding:16px 18px;">
+        <div style="font-size:18px;font-weight:800;">📞 민원 접수</div>
+        <div style="font-size:12px;opacity:0.85;margin-top:2px;">민원 내용과 위치를 알려주세요</div>
       </div>
-      <label style="font-size:13px;font-weight:700;">연락처</label>
-      <input id="cmpPhone" type="tel" inputmode="tel" maxlength="13" placeholder="010-1234-5678" oninput="formatPhoneInput(this)" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-      <label style="font-size:13px;font-weight:700;">민원 내용</label>
-      <input id="cmpContent" type="text" placeholder="민원 내용" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-      <label style="font-size:13px;font-weight:700;">배정 코스</label>
-      <select id="cmpCourse" style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-        <option value="">-- 미지정 --</option>
-        ${courseOptions}
-      </select>
-      <div style="display:flex;gap:8px;">
-        <button onclick="submitComplaint()" style="flex:1;background:#e74c3c;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">접수</button>
-        <button onclick="document.getElementById('complaintModal').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">취소</button>
+
+      <div style="padding:16px 18px;">
+
+        <!-- 1) 민원 유형 -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:8px;">어떤 민원인가요?</div>
+          <div id="cmpTypeBtns" style="display:flex;flex-direction:column;gap:6px;">
+            <button onclick="cmpSelectType(this,'해충(모기/파리 등) 민원')" class="cmp-type-btn" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid #eee;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#333;cursor:pointer;transition:all .15s;text-align:left;">
+              <span style="font-size:20px;">🦟</span> 해충 (모기/파리 등) 민원
+            </button>
+            <button onclick="cmpSelectType(this,'악취 민원')" class="cmp-type-btn" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid #eee;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#333;cursor:pointer;transition:all .15s;text-align:left;">
+              <span style="font-size:20px;">💨</span> 악취 민원
+            </button>
+            <button onclick="cmpSelectType(this,'방역 요청')" class="cmp-type-btn" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid #eee;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#333;cursor:pointer;transition:all .15s;text-align:left;">
+              <span style="font-size:20px;">💊</span> 방역 요청
+            </button>
+            <button onclick="cmpSelectType(this,'기타')" class="cmp-type-btn" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid #eee;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#333;cursor:pointer;transition:all .15s;text-align:left;">
+              <span style="font-size:20px;">✏️</span> 기타 (직접 입력)
+            </button>
+          </div>
+          <input id="cmpTypeCustom" type="text" placeholder="민원 내용을 직접 입력하세요" style="display:none;width:100%;padding:10px 12px;border:2px solid #e74c3c;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:6px;">
+        </div>
+
+        <!-- 2) 상세 내용 -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:4px;">상세 내용</div>
+          <div style="font-size:11px;color:#999;margin-bottom:6px;">추가 설명이 있으면 적어주세요 (선택)</div>
+          <textarea id="cmpContent" rows="2" placeholder="예: 웅덩이에 모기 유충이 많음" style="width:100%;padding:10px 12px;border:2px solid #eee;border-radius:8px;font-size:14px;box-sizing:border-box;resize:vertical;font-family:inherit;transition:border .2s;" onfocus="this.style.borderColor='#e74c3c'" onblur="this.style.borderColor='#eee'"></textarea>
+        </div>
+
+        <!-- 3) 연락처 -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:4px;">민원인 연락처</div>
+          <div style="font-size:11px;color:#999;margin-bottom:6px;">회신이 필요하면 입력해주세요 (선택)</div>
+          <input id="cmpPhone" type="tel" inputmode="tel" maxlength="13" placeholder="010-1234-5678" oninput="formatPhoneInput(this)" style="width:100%;padding:10px 12px;border:2px solid #eee;border-radius:8px;font-size:15px;box-sizing:border-box;transition:border .2s;" onfocus="this.style.borderColor='#e74c3c'" onblur="this.style.borderColor='#eee'">
+        </div>
+
+        <!-- 4) 배정 코스 -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:6px;">배정 코스</div>
+          <select id="cmpCourse" style="width:100%;padding:10px 12px;border:2px solid #eee;border-radius:8px;font-size:14px;box-sizing:border-box;">
+            <option value="">-- 미지정 --</option>
+            ${courseOptions}
+          </select>
+        </div>
+
+        <!-- 5) 위치 선택 -->
+        <div style="margin-bottom:14px;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:8px;">민원 위치</div>
+          <div style="display:flex;gap:0;margin-bottom:8px;border-radius:8px;overflow:hidden;border:2px solid #e74c3c;">
+            <button id="cmpModePin" onclick="cmpSwitchMode('pin')" style="flex:1;padding:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#e74c3c;color:#fff;transition:all .15s;">📍 직접 핑추가</button>
+            <button id="cmpModeSearch" onclick="cmpSwitchMode('search')" style="flex:1;padding:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:#e74c3c;transition:all .15s;">🔍 주소 검색</button>
+          </div>
+          <div id="cmpSearchBox" style="display:none;margin-bottom:6px;">
+            <div style="display:flex;gap:6px;">
+              <input id="cmpAddrInput" type="text" placeholder="주소 검색 (예: 법성포 법성리 123)" style="flex:1;padding:9px 10px;border:2px solid #eee;border-radius:8px;font-size:13px;" onkeydown="if(event.key==='Enter')cmpDoSearch()">
+              <button onclick="cmpDoSearch()" style="background:#3498db;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">검색</button>
+            </div>
+            <div id="cmpSearchResults" style="max-height:110px;overflow-y:auto;margin-top:4px;display:none;border:1px solid #ddd;border-radius:8px;background:#fafafa;"></div>
+          </div>
+          <div id="cmpMapContainer" style="width:100%;height:220px;border-radius:10px;overflow:hidden;border:2px solid #eee;"></div>
+          <div id="cmpAddrLabel" style="margin-top:6px;font-size:12px;color:#2c3e50;min-height:16px;padding:6px 8px;background:#f8f9fa;border-radius:6px;"></div>
+        </div>
+
+        <!-- 버튼 -->
+        <div style="display:flex;gap:8px;">
+          <button onclick="submitComplaint()" style="flex:1;background:#e74c3c;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer;">접수하기</button>
+          <button onclick="document.getElementById('complaintModal').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;">취소</button>
+        </div>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
-  document.getElementById('cmpPhone').focus();
+
+  // 지도 초기화
+  const center = new kakao.maps.LatLng(currentPos.lat, currentPos.lng);
+  __cmpMap = new kakao.maps.Map(document.getElementById('cmpMapContainer'), { center, level: 3 });
+  __cmpMarker = new kakao.maps.Marker({ position: center, draggable: true });
+  __cmpMarker.setMap(__cmpMap);
+  cmpUpdateAddr(currentPos.lat, currentPos.lng);
+
+  kakao.maps.event.addListener(__cmpMarker, 'dragend', () => {
+    const p = __cmpMarker.getPosition();
+    cmpUpdateAddr(p.getLat(), p.getLng());
+  });
+  kakao.maps.event.addListener(__cmpMap, 'click', (e) => {
+    __cmpMarker.setPosition(e.latLng);
+    cmpUpdateAddr(e.latLng.getLat(), e.latLng.getLng());
+  });
+}
+
+function cmpSelectType(btn, type) {
+  document.querySelectorAll('#cmpTypeBtns .cmp-type-btn').forEach(b => {
+    b.style.borderColor = '#eee'; b.style.background = '#fff'; b.style.color = '#333';
+  });
+  btn.style.borderColor = '#e74c3c'; btn.style.background = '#fef0ef'; btn.style.color = '#e74c3c';
+  const customInput = document.getElementById('cmpTypeCustom');
+  if (type === '기타') {
+    customInput.style.display = 'block';
+    customInput.focus();
+    __cmpType = '';
+  } else {
+    customInput.style.display = 'none';
+    customInput.value = '';
+    __cmpType = type;
+  }
+}
+
+function cmpSwitchMode(mode) {
+  const pinBtn = document.getElementById('cmpModePin');
+  const searchBtn = document.getElementById('cmpModeSearch');
+  const searchBox = document.getElementById('cmpSearchBox');
+  if (mode === 'pin') {
+    pinBtn.style.background = '#e74c3c'; pinBtn.style.color = '#fff';
+    searchBtn.style.background = '#fff'; searchBtn.style.color = '#e74c3c';
+    searchBox.style.display = 'none';
+  } else {
+    searchBtn.style.background = '#e74c3c'; searchBtn.style.color = '#fff';
+    pinBtn.style.background = '#fff'; pinBtn.style.color = '#e74c3c';
+    searchBox.style.display = 'block';
+    document.getElementById('cmpAddrInput').focus();
+  }
+}
+
+function cmpDoSearch() {
+  const q = (document.getElementById('cmpAddrInput').value || '').trim();
+  if (!q) return;
+  const resultsDiv = document.getElementById('cmpSearchResults');
+  const gc = new kakao.maps.services.Geocoder();
+  const ps = new kakao.maps.services.Places();
+  let combined = []; let done = 0;
+  const finish = () => {
+    if (++done < 2) return;
+    if (!combined.length) {
+      resultsDiv.innerHTML = '<div style="padding:10px;color:#999;font-size:12px;">검색 결과 없음</div>';
+      resultsDiv.style.display = 'block'; return;
+    }
+    resultsDiv.innerHTML = combined.slice(0, 10).map((r, i) =>
+      `<div onclick="cmpPickResult(${r.y},${r.x})" style="padding:9px 10px;cursor:pointer;border-bottom:1px solid #eee;font-size:13px;${i >= Math.min(combined.length, 10) - 1 ? 'border:none;' : ''}">${r.label}</div>`
+    ).join('');
+    resultsDiv.style.display = 'block';
+  };
+  gc.addressSearch(q, (res, st) => {
+    if (st === kakao.maps.services.Status.OK && res.length)
+      combined = res.map(r => ({ label: r.address_name + (r.road_address ? ' (' + r.road_address.address_name + ')' : ''), y: r.y, x: r.x })).concat(combined);
+    finish();
+  });
+  ps.keywordSearch(q, (data, status) => {
+    if (status === kakao.maps.services.Status.OK && data.length)
+      combined = combined.concat(data.slice(0, 6).map(d => ({ label: d.place_name + (d.road_address_name ? ' · ' + d.road_address_name : ''), y: d.y, x: d.x })));
+    finish();
+  });
+}
+
+function cmpPickResult(lat, lng) {
+  lat = parseFloat(lat); lng = parseFloat(lng);
+  const pos = new kakao.maps.LatLng(lat, lng);
+  __cmpMap.setCenter(pos);
+  __cmpMarker.setPosition(pos);
+  cmpUpdateAddr(lat, lng);
+  document.getElementById('cmpSearchResults').style.display = 'none';
+}
+
+function cmpUpdateAddr(lat, lng) {
+  const gc = new kakao.maps.services.Geocoder();
+  gc.coord2Address(lng, lat, (result, status) => {
+    const el = document.getElementById('cmpAddrLabel');
+    if (status === kakao.maps.services.Status.OK && result[0]) {
+      const r = result[0];
+      const road = r.road_address;
+      const jibun = r.address;
+      if (road) {
+        __cmpAddr = road.address_name;
+        if (el) el.innerHTML = `📍 <b>${road.address_name}</b>${jibun ? `<br><span style="color:#888;font-size:11px;">(지번) ${jibun.address_name}</span>` : ''}`;
+      } else if (jibun) {
+        __cmpAddr = jibun.address_name;
+        if (el) el.innerHTML = `📍 <b>${jibun.address_name}</b>`;
+      }
+    } else {
+      __cmpAddr = '';
+      if (el) el.innerHTML = '📍 <span style="color:#999;">주소를 찾을 수 없는 위치</span>';
+    }
+  });
 }
 
 function formatPhoneInput(el) {
@@ -2437,13 +2599,17 @@ function formatPhoneInput(el) {
 }
 
 function submitComplaint() {
-  const phone = (document.getElementById('cmpPhone').value || '').trim();
+  const customType = (document.getElementById('cmpTypeCustom').value || '').trim();
+  const type = __cmpType || customType;
+  if (!type) { alert('민원 유형을 선택해주세요'); return; }
+
   const content = (document.getElementById('cmpContent').value || '').trim();
+  const phone = (document.getElementById('cmpPhone').value || '').trim();
   const assignedCourseId = document.getElementById('cmpCourse').value || '';
-  const modal = document.getElementById('complaintModal');
-  const lat = parseFloat(modal.dataset.lat);
-  const lng = parseFloat(modal.dataset.lng);
-  const address = modal.dataset.address || '';
+  const p = __cmpMarker.getPosition();
+  const lat = p.getLat(), lng = p.getLng();
+  const address = __cmpAddr || '';
+  const fullContent = content ? type + ' — ' + content : type;
 
   const data = loadData();
   if (!Array.isArray(data.complaints)) data.complaints = [];
@@ -2452,28 +2618,26 @@ function submitComplaint() {
     eventId: currentSession.eventId,
     courseId: assignedCourseId,
     lat, lng, address,
-    phone, content,
+    phone, content: fullContent,
     area: '',
     status: 'pending',
     reportedBy: currentSession.crew?.driver || '',
     reportedAssist: currentSession.crew?.assist || '',
     createdAt: Date.now()
   });
-  try {
-    saveData(data);
-  } catch (e) {
-    alert('저장 실패: ' + (e.message || e));
-    return;
-  }
-  modal.remove();
+  try { saveData(data); }
+  catch (e) { alert('저장 실패: ' + (e.message || e)); return; }
+
+  document.getElementById('complaintModal').remove();
+  __cmpMap = null; __cmpMarker = null;
   renderMapForSession();
-  // 텔레그램
+
   const ev = getEvent(data, currentSession.eventId);
   const courseName = assignedCourseId ? (getCourse(data, assignedCourseId)?.name || '') : '미지정';
   const phoneTel = phone ? phone.replace(/[^0-9+]/g, '') : '';
   const phoneStr = phone ? `<a href="tel:${phoneTel}">${phone}</a>` : '-';
   const addrLine = address ? `\n주소: ${address}` : '';
-  sendTelegram(`📞 <b>민원 접수</b>\n${ev?.name || ''} · 배정: ${courseName}\n연락처: ${phoneStr}\n내용: ${content || '-'}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
+  sendTelegram(`📞 <b>민원 접수</b>\n유형: ${type}\n${ev?.name || ''} · 배정: ${courseName}\n연락처: ${phoneStr}\n내용: ${content || '-'}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   alert('✅ 민원 접수됨\n관리자가 확인할 수 있습니다.');
 }
 
