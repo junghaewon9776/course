@@ -1572,9 +1572,9 @@ function toggleFollow() {
   followMode = !followMode;
   followPauseUntil = 0;
   updateFollowBtn();
-  if (followMode && map) {
-    // 따라가기 ON → 전체 맞춤
-    fitBoundsWithMe();
+  if (followMode && currentPos && map) {
+    // 따라가기 ON → 센터만 이동, 줌 유지
+    map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
   }
 }
 function fitBoundsWithMe() {
