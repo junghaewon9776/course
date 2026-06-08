@@ -86,11 +86,15 @@
     <p class="muted" style="font-size:13px;margin-bottom:14px;">해당하는 분류를 선택하고 내용을 작성해주세요.</p>
 
     <label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block;">분류 선택</label>
-    <div id="categoryBtns" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;"></div>
+    <select id="categorySel" onchange="selectCategory(this.value)" style="width:100%;padding:10px 12px;border:2px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:14px;box-sizing:border-box;background:#fff;">
+      <option value="">-- 분류를 선택하세요 --</option>
+    </select>
 
     <div id="subCategoryArea" style="display:none;margin-bottom:14px;">
       <label style="font-size:13px;font-weight:700;margin-bottom:6px;display:block;">상세 항목</label>
-      <div id="subCategoryBtns" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      <select id="subCategorySel" onchange="selectSub(this.value)" style="width:100%;padding:10px 12px;border:2px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;background:#fff;">
+        <option value="">-- 항목을 선택하세요 --</option>
+      </select>
     </div>
 
     <label style="font-size:13px;font-weight:700;">상세 내용</label>
@@ -230,41 +234,39 @@ function getCategories() {
 // ────── 분류 버튼 렌더 ──────
 function renderCategoryBtns() {
   const cats = getCategories().filter(c => !c.disabled);
-  const el = document.getElementById('categoryBtns');
-  el.innerHTML = cats.map(c =>
-    `<button class="cat-btn${selectedCat === c.id ? ' selected' : ''}" onclick="selectCategory('${c.id}')">
-      <span class="cat-icon">${c.icon}</span>${c.name}
-    </button>`
-  ).join('');
+  const el = document.getElementById('categorySel');
+  el.innerHTML = '<option value="">-- 분류를 선택하세요 --</option>' +
+    cats.map(c => `<option value="${c.id}" ${selectedCat === c.id ? 'selected' : ''}>${c.icon} ${c.name}</option>`).join('');
+  // 하위 항목도 갱신
+  if (selectedCat) selectCategory(selectedCat);
 }
 
 function selectCategory(catId) {
   selectedCat = catId;
   selectedSub = '';
-  renderCategoryBtns();
   const cats = getCategories();
   const cat = cats.find(c => c.id === catId);
   const area = document.getElementById('subCategoryArea');
-  const el = document.getElementById('subCategoryBtns');
+  const el = document.getElementById('subCategorySel');
   if (cat && cat.subs && cat.subs.length) {
     area.style.display = 'block';
-    el.innerHTML = cat.subs.map(s =>
-      `<button class="sub-btn" onclick="selectSub(this,'${s.replace(/'/g,"\\'")}')">${s}</button>`
-    ).join('') + `<button class="sub-btn" onclick="selectSub(this,'직접입력')">✏ 직접입력</button>`;
+    el.innerHTML = '<option value="">-- 항목을 선택하세요 --</option>' +
+      cat.subs.map(s => `<option value="${s}">${s}</option>`).join('') +
+      '<option value="직접입력">✏ 직접입력</option>';
   } else {
     area.style.display = 'none';
     el.innerHTML = '';
   }
 }
 
-function selectSub(btn, val) {
-  document.querySelectorAll('#subCategoryBtns .sub-btn').forEach(b => b.classList.remove('selected'));
-  btn.classList.add('selected');
+function selectSub(val) {
   selectedSub = val;
   if (val === '직접입력') {
     const ta = document.getElementById('inqContent');
     ta.focus();
     ta.placeholder = '직접 상세 내용을 입력해주세요';
+  } else {
+    document.getElementById('inqContent').placeholder = '구체적인 상황을 적어주세요';
   }
 }
 
@@ -315,7 +317,7 @@ function submitInquiry() {
   document.getElementById('inqPhone').value = '';
   renderCategoryBtns();
   document.getElementById('subCategoryArea').style.display = 'none';
-  document.getElementById('subCategoryBtns').innerHTML = '';
+  document.getElementById('subCategorySel').innerHTML = '<option value="">-- 항목을 선택하세요 --</option>';
   renderMyInquiries();
   renderMemberBoard();
   renderAdminBoard();
