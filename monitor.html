@@ -73,6 +73,22 @@
     </div>
   </div>
 
+  <!-- 민원 / 거점요청 내역 -->
+  <div class="card" style="border-left:4px solid #f1c40f;">
+    <div class="flex-between" style="cursor:pointer;user-select:none;" onclick="toggleMonComplaintCard()">
+      <h2>📞 민원 내역 <span id="monComplaintCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
+      <button id="monComplaintToggle" class="small" onclick="event.stopPropagation();toggleMonComplaintCard()" style="background:#f1c40f;color:#000;">▼ 접기</button>
+    </div>
+    <div id="monComplaintBody" style="max-height:300px;overflow-y:auto;"></div>
+  </div>
+  <div class="card" style="border-left:4px solid #e67e22;">
+    <div class="flex-between" style="cursor:pointer;user-select:none;" onclick="toggleMonRequestCard()">
+      <h2>📌 거점요청 내역 <span id="monRequestCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
+      <button id="monRequestToggle" class="small" onclick="event.stopPropagation();toggleMonRequestCard()" style="background:#e67e22;color:#fff;">▼ 접기</button>
+    </div>
+    <div id="monRequestBody" style="max-height:300px;overflow-y:auto;"></div>
+  </div>
+
   <!-- 공개 모니터링 링크 (관리/공유용) -->
   <div class="card" style="border-left:4px solid #9b59b6;">
     <h2>🌐 공개 모니터링 링크</h2>
@@ -158,7 +174,7 @@
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 
 window.onAuthSuccess = () => onDataReady(loadKakaoMap);
-window.onDataChanged = () => { if (map) { render(); renderCourseQuickList(); renderPubMonConfig(); renderAllAnchorsAlwaysOn(); renderComplaintsAndNoSpray(); } };
+window.onDataChanged = () => { if (map) { render(); renderCourseQuickList(); renderPubMonConfig(); renderAllAnchorsAlwaysOn(); renderComplaintsAndNoSpray(); renderMonComplaintList(); renderMonRequestList(); } };
 checkAdminAuth().then(ok => { if (ok) onDataReady(loadKakaoMap); });
 
 let __kakaoLoadAttempt = 0;
@@ -201,9 +217,11 @@ function initMonitorMap() {
   renderCourseQuickList();
   renderPubMonConfig();
   renderAllAnchorsAlwaysOn();  // 전체 코스 핑 영구 표시
-  renderComplaintsAndNoSpray();  // 민원 + 방역금지 (관제 전용)
+  renderComplaintsAndNoSpray();  // 민원 + 방역금지 + 거점요청 (관제 전용)
+  renderMonComplaintList();
+  renderMonRequestList();
   // 줌 레벨별 마커 크기 자동 조절
-  setupMarkerZoomScale(map, () => [...__alwaysOnAnchors, ...__complaintMarkers, ...__noSprayMarkers]);
+  setupMarkerZoomScale(map, () => [...__alwaysOnAnchors, ...__complaintMarkers, ...__requestMarkers, ...__noSprayMarkers]);
   // 버튼/체크박스 상태 sync
   updateAllCoursesBtn();
   const cb2 = document.getElementById('cnsAlwaysOn');
@@ -399,11 +417,14 @@ function updateAllCoursesBtn() {
 
 // ─── 민원 + 방역금지 핀 (관제 전용 — 공개페이지엔 안 보임) ───
 const __complaintMarkers = [];
+const __requestMarkers = [];
 const __noSprayMarkers = [];
 const __noSprayCircles = [];
 function clearComplaintAndNoSprayMarkers() {
   __complaintMarkers.forEach(m => m.setMap(null));
   __complaintMarkers.length = 0;
+  __requestMarkers.forEach(m => m.setMap(null));
+  __requestMarkers.length = 0;
   __noSprayMarkers.forEach(m => m.setMap(null));
   __noSprayMarkers.length = 0;
   __noSprayCircles.forEach(c => c.setMap(null));
@@ -492,11 +513,116 @@ function renderComplaintsAndNoSpray() {
     attachAnchorInfoWindow(m, iwHtml);
     __noSprayMarkers.push(m);
   });
+
+  // 거점 추가 요청 (대기 중)
+  const requests = (data.requests || []).filter(r => r.status === 'pending');
+  requests.forEach(r => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
+      <circle cx="14" cy="14" r="12" fill="#e67e22" stroke="white" stroke-width="2"/>
+      <text x="14" y="19" text-anchor="middle" fill="white" font-size="16" font-weight="bold">+</text>
+    </svg>`;
+    const m = new kakao.maps.Marker({
+      position: new kakao.maps.LatLng(r.lat, r.lng), map,
+      image: scaledCircleMarkerImage(svg, __cScale),
+      title: '[거점요청] ' + (r.name || ''),
+      zIndex: 30
+    });
+    m.__markerMeta = { type:'circle', svg };
+    const course = getCourse(data, r.courseId);
+    const iwHtml = `<div style="padding:9px 11px 11px;font-size:12px;max-width:240px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;line-height:1.45;">
+      <div style="font-weight:700;color:#e67e22;margin-bottom:4px;">📌 거점 추가 요청</div>
+      <div style="font-weight:700;color:#2c3e50;font-size:13px;">${escapeHtml(r.name || '')}</div>
+      ${r.memo ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;font-size:11px;">${escapeHtml(r.memo)}</div>` : ''}
+      <div style="margin-top:5px;color:#888;font-size:10px;">코스: ${course?.name || '?'} · 요청: ${r.requestedBy || '-'}</div>
+      <div style="font-size:10px;color:#888;">${new Date(r.requestedAt || 0).toLocaleString('ko-KR')}</div>
+    </div>`;
+    attachAnchorInfoWindow(m, iwHtml);
+    __requestMarkers.push(m);
+  });
 }
 function toggleComplaintNoSpray() {
   const cur = localStorage.getItem('hideComplaintNoSpray') === '1';
   localStorage.setItem('hideComplaintNoSpray', cur ? '0' : '1');
   renderComplaintsAndNoSpray();
+}
+
+// ─── 민원 / 거점요청 내역 리스트 ───
+function renderMonComplaintList() {
+  const data = loadData();
+  const all = (data.complaints || []).slice().sort((a, b) =>
+    (a.status === 'resolved' ? 1 : 0) - (b.status === 'resolved' ? 1 : 0) || (b.createdAt||0) - (a.createdAt||0));
+  const pending = all.filter(c => c.status !== 'resolved');
+  const countEl = document.getElementById('monComplaintCount');
+  if (countEl) countEl.textContent = pending.length ? `(대기 ${pending.length}건)` : '(없음)';
+  const body = document.getElementById('monComplaintBody');
+  if (!body) return;
+  if (!all.length) { body.innerHTML = '<div class="empty">민원 없음</div>'; return; }
+  body.innerHTML = all.map(c => {
+    const resolved = c.status === 'resolved';
+    const when = c.createdAt ? new Date(c.createdAt).toLocaleString('ko-KR', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    const course = getCourse(data, c.courseId);
+    const phoneTel = (c.phone || '').replace(/[^0-9+]/g, '');
+    return `<div style="padding:8px 6px;border-bottom:1px solid #eee;${resolved ? 'opacity:0.5;' : ''}">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          ${resolved ? '<span style="font-size:10px;background:#7f8c8d;color:#fff;padding:1px 6px;border-radius:3px;">처리완료</span>' : '<span style="font-size:10px;background:#f1c40f;color:#000;padding:1px 6px;border-radius:3px;">대기</span>'}
+          ${course ? ' <span style="font-size:11px;color:#555;">' + escapeHtml(course.name) + '</span>' : ''}
+        </div>
+        <span style="font-size:10px;color:#999;">${when}</span>
+      </div>
+      <div style="font-size:12px;margin:4px 0;color:#333;white-space:pre-wrap;">${escapeHtml(c.content || '내용 없음')}</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${c.phone ? '<a href="tel:' + phoneTel + '" style="font-size:12px;color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞 ' + escapeHtml(c.phone) + '</a>' : ''}
+        <button onclick="focusMonComplaint(${c.lat},${c.lng})" style="font-size:11px;background:#3498db;color:#fff;border:none;padding:3px 8px;border-radius:4px;cursor:pointer;">📍 위치</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderMonRequestList() {
+  const data = loadData();
+  const all = (data.requests || []).slice().sort((a, b) =>
+    (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || (b.requestedAt||0) - (a.requestedAt||0));
+  const pending = all.filter(r => r.status === 'pending');
+  const countEl = document.getElementById('monRequestCount');
+  if (countEl) countEl.textContent = pending.length ? `(대기 ${pending.length}건)` : '(없음)';
+  const body = document.getElementById('monRequestBody');
+  if (!body) return;
+  if (!all.length) { body.innerHTML = '<div class="empty">거점요청 없음</div>'; return; }
+  body.innerHTML = all.map(r => {
+    const isPending = r.status === 'pending';
+    const when = r.requestedAt ? new Date(r.requestedAt).toLocaleString('ko-KR', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    const course = getCourse(data, r.courseId);
+    const statusTag = isPending
+      ? '<span style="font-size:10px;background:#e67e22;color:#fff;padding:1px 6px;border-radius:3px;">대기</span>'
+      : r.status === 'approved' ? '<span style="font-size:10px;background:#27ae60;color:#fff;padding:1px 6px;border-radius:3px;">승인</span>'
+      : '<span style="font-size:10px;background:#7f8c8d;color:#fff;padding:1px 6px;border-radius:3px;">거절</span>';
+    return `<div style="padding:8px 6px;border-bottom:1px solid #eee;${isPending ? '' : 'opacity:0.5;'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>${statusTag} <b style="font-size:13px;">${escapeHtml(r.name || '')}</b></div>
+        <span style="font-size:10px;color:#999;">${when}</span>
+      </div>
+      <div style="font-size:11px;color:#555;margin:3px 0;">코스: ${course?.name || '?'} · 요청: ${r.requestedBy || '-'}${r.requestedAssist ? ' / 보조: ' + r.requestedAssist : ''}</div>
+      ${r.memo ? '<div style="font-size:11px;color:#666;">📝 ' + escapeHtml(r.memo) + '</div>' : ''}
+      <button onclick="focusMonComplaint(${r.lat},${r.lng})" style="font-size:11px;background:#e67e22;color:#fff;border:none;padding:3px 8px;border-radius:4px;cursor:pointer;margin-top:3px;">📍 위치</button>
+    </div>`;
+  }).join('');
+}
+function focusMonComplaint(lat, lng) {
+  if (!map) return;
+  map.setCenter(new kakao.maps.LatLng(lat, lng));
+  map.setLevel(3);
+  document.getElementById('map')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+let __monComplaintOpen = true, __monRequestOpen = true;
+function toggleMonComplaintCard() {
+  __monComplaintOpen = !__monComplaintOpen;
+  document.getElementById('monComplaintBody').style.display = __monComplaintOpen ? '' : 'none';
+  document.getElementById('monComplaintToggle').textContent = __monComplaintOpen ? '▼ 접기' : '▶ 펼치기';
+}
+function toggleMonRequestCard() {
+  __monRequestOpen = !__monRequestOpen;
+  document.getElementById('monRequestBody').style.display = __monRequestOpen ? '' : 'none';
+  document.getElementById('monRequestToggle').textContent = __monRequestOpen ? '▼ 접기' : '▶ 펼치기';
 }
 
 // ─── 공개 모니터링 관리 (admin과 동일 기능) ───
