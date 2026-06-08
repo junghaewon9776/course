@@ -74,9 +74,8 @@
         <div class="flex-between">
           <h2>저장된 팀 구성 <span id="savedCount" class="muted"></span></h2>
           <div class="admin-only" style="display:flex;gap:4px;">
-            <button onclick="exportSavedTeams()" class="small" style="background:#27ae60;color:#fff;">⬇ 내보내기</button>
-            <button onclick="document.getElementById('savedTeamUpload').click()" class="small" style="background:#3498db;color:#fff;">📤 불러오기</button>
-            <input type="file" id="savedTeamUpload" accept=".json" style="display:none" onchange="importSavedTeams(event)">
+            <button onclick="document.getElementById('savedTeamUpload').click()" class="small" style="background:#3498db;color:#fff;">📤 가져오기</button>
+            <input type="file" id="savedTeamUpload" accept=".xlsx,.xls" style="display:none" onchange="importSavedTeams(event)">
           </div>
         </div>
         <p class="muted" style="font-size:12px;">팀 구성을 저장해두고 나중에 불러올 수 있습니다 (이전 구성 비교/복원용)</p>
@@ -1337,18 +1336,30 @@ function deleteMember(id) {
 
 // ────── 조 ──────
 // ────── 조 엑셀 내보내기/가져오기 ──────
-function exportSavedTeams() {
+function exportSavedTeamXlsx(id) {
   const data = loadData();
-  const saved = data.savedTeams || [];
-  if (!saved.length) { alert('저장된 팀 구성이 없습니다.\n먼저 "💾 현재 팀 저장"으로 저장해주세요.'); return; }
-  const json = JSON.stringify(saved, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `팀구성-${todayStr()}.json`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  alert(`✅ ${saved.length}개 팀 구성 내보내기 완료`);
+  const s = (data.savedTeams || []).find(x => x.id === id);
+  if (!s) return;
+  const members = data.members || [];
+  const getName = mid => { const m = members.find(x => x.id === mid); return m ? m.name : '(삭제됨)'; };
+  const getPhone = mid => { const m = members.find(x => x.id === mid); return m ? (m.phone || '') : ''; };
+  const rows = [];
+  (s.teams || []).forEach(t => {
+    if (t.leaderId) rows.push({ 조: t.name, 역할: '조장', 이름: getName(t.leaderId), 연락처: getPhone(t.leaderId) });
+    if (t.viceLeaderId) rows.push({ 조: t.name, 역할: '부조장', 이름: getName(t.viceLeaderId), 연락처: getPhone(t.viceLeaderId) });
+    (t.fixedMemberIds || []).forEach(mid => {
+      rows.push({ 조: t.name, 역할: '고정', 이름: getName(mid), 연락처: getPhone(mid) });
+    });
+    (t.memberIds || []).forEach(mid => {
+      if (mid === t.leaderId || mid === t.viceLeaderId || (t.fixedMemberIds || []).includes(mid)) return;
+      rows.push({ 조: t.name, 역할: '조원', 이름: getName(mid), 연락처: getPhone(mid) });
+    });
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 15 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '조편성');
+  XLSX.writeFile(wb, `${s.name}-${todayStr()}.xlsx`);
 }
 
 function importSavedTeams(e) {
@@ -1358,37 +1369,52 @@ function importSavedTeams(e) {
   const reader = new FileReader();
   reader.onload = function(ev) {
     try {
-      const imported = JSON.parse(ev.target.result);
-      if (!Array.isArray(imported) || !imported.length) { alert('유효한 팀 구성 데이터가 없습니다'); return; }
-      // 유효성 검증
-      const valid = imported.filter(s => s.name && Array.isArray(s.teams));
-      if (!valid.length) { alert('유효한 팀 구성이 없습니다'); return; }
-      if (!confirm(`${valid.length}개 팀 구성을 불러올까요?\n\n${valid.map(s => '· ' + s.name).join('\n')}\n\n기존 저장 목록에 추가됩니다.`)) return;
+      const wb = XLSX.read(ev.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+      if (!rows.length) { alert('데이터가 없습니다'); return; }
       const data = loadData();
-      if (!data.savedTeams) data.savedTeams = [];
-      // 같은 이름이면 덮어쓰기, 아니면 추가
-      let added = 0, replaced = 0;
-      valid.forEach(s => {
-        const existing = data.savedTeams.findIndex(x => x.name === s.name);
-        if (existing >= 0) {
-          data.savedTeams[existing] = s;
-          replaced++;
-        } else {
-          if (!s.id) s.id = uid();
-          data.savedTeams.push(s);
-          added++;
-        }
+      const members = data.members || [];
+      const findMember = name => {
+        const n = String(name || '').trim();
+        return n ? members.find(m => (m.name || '').trim() === n) : null;
+      };
+      // 조별로 그룹핑
+      const teamMap = {};
+      rows.forEach(r => {
+        const teamName = String(r['조'] || '').trim();
+        if (!teamName) return;
+        if (!teamMap[teamName]) teamMap[teamName] = { name: teamName, leaderId: null, viceLeaderId: null, fixedMemberIds: [], memberIds: [] };
+        const t = teamMap[teamName];
+        const role = String(r['역할'] || '').trim();
+        const m = findMember(r['이름']);
+        if (!m) return;
+        if (role === '조장') { t.leaderId = m.id; if (!t.memberIds.includes(m.id)) t.memberIds.push(m.id); }
+        else if (role === '부조장') { t.viceLeaderId = m.id; if (!t.memberIds.includes(m.id)) t.memberIds.push(m.id); }
+        else if (role === '고정') { t.fixedMemberIds.push(m.id); if (!t.memberIds.includes(m.id)) t.memberIds.push(m.id); }
+        else { if (!t.memberIds.includes(m.id)) t.memberIds.push(m.id); }
       });
+      const teams = Object.values(teamMap);
+      if (!teams.length) { alert('유효한 조 데이터가 없습니다'); return; }
+      const snapName = file.name.replace(/\.(xlsx|xls)$/i, '') || `가져오기-${todayStr()}`;
+      if (!confirm(`${teams.length}개 조를 "${snapName}"으로 저장할까요?\n\n${teams.map(t => `· ${t.name} (${t.memberIds.length}명)`).join('\n')}`)) return;
+      if (!data.savedTeams) data.savedTeams = [];
+      // 같은 이름이면 덮어쓰기
+      const existing = data.savedTeams.findIndex(x => x.name === snapName);
+      const snap = { id: uid(), name: snapName, savedAt: Date.now(), teams };
+      if (existing >= 0) data.savedTeams[existing] = snap;
+      else data.savedTeams.push(snap);
       saveData(data);
-      let msg = `✅ 불러오기 완료\n추가: ${added}개`;
-      if (replaced) msg += ` · 덮어쓰기: ${replaced}개`;
+      const skipped = rows.filter(r => r['이름'] && !findMember(r['이름'])).map(r => r['이름']);
+      let msg = `✅ 가져오기 완료 — "${snapName}"`;
+      if (skipped.length) msg += `\n\n⚠ 미등록 회원 (스킵): ${skipped.join(', ')}`;
       alert(msg);
       refreshAll();
     } catch (err) {
       alert('파일 읽기 실패: ' + err.message);
     }
   };
-  reader.readAsText(file, 'UTF-8');
+  reader.readAsArrayBuffer(file);
 }
 
 function renderTeams() {
@@ -1762,6 +1788,7 @@ function renderSavedTeams() {
           </div>
           <div>
             <button class="small" onclick="previewSavedTeam('${s.id}')">미리보기</button>
+            <button class="small" style="background:#27ae60;color:#fff;" onclick="exportSavedTeamXlsx('${s.id}')">⬇엑셀</button>
             <button class="small success" onclick="loadSavedTeam('${s.id}')">불러오기</button>
             <button class="small gray" onclick="renameSavedTeam('${s.id}')">이름</button>
             <button class="small danger" onclick="deleteSavedTeam('${s.id}')">삭제</button>
