@@ -339,28 +339,37 @@ const __deviceNameKey = 'bsp_device_name';
 function getDeviceName() { return localStorage.getItem(__deviceNameKey) || ''; }
 function setDeviceName(name) { localStorage.setItem(__deviceNameKey, name); }
 
-// 새 기기 감지 바 표시
+// 새 기기 감지 — 모달로 등록 강제
 function showDeviceNameBar() {
   if (getDeviceName()) return; // 이미 등록됨
-  if (document.getElementById('deviceNameBar')) return; // 이미 떠있음
-  const bar = document.createElement('div');
-  bar.id = 'deviceNameBar';
-  bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#fff3cd;border-bottom:2px solid #ffc107;padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.15);';
-  bar.innerHTML = `<span style="font-weight:bold;">🆕 새 기기 감지</span>
-    <span>이 기기 이름:</span>
-    <input id="deviceNameInput" type="text" placeholder="예: 홍길동 폰, 사무실PC" style="flex:1;min-width:120px;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
-    <button onclick="registerDeviceName()" style="padding:6px 16px;background:#28a745;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">등록</button>
-    <button onclick="this.parentElement.remove()" style="padding:6px 12px;background:#eee;border:none;border-radius:6px;cursor:pointer;">닫기</button>`;
-  document.body.prepend(bar);
+  if (document.getElementById('deviceNameModal')) return; // 이미 떠있음
+  const overlay = document.createElement('div');
+  overlay.id = 'deviceNameModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(44,62,80,0.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:360px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.25);text-align:center;">
+      <div style="font-size:48px;margin-bottom:12px;">📱</div>
+      <h2 style="margin:0 0 6px;color:#2c3e50;font-size:20px;">로컬 기기 등록</h2>
+      <p style="color:#666;font-size:13px;margin:0 0 18px;line-height:1.5;">이 기기에서 처음 접속했습니다.<br>모니터링에 표시될 <b>기기 이름</b>을 등록해주세요.</p>
+      <input id="deviceNameInput" type="text" placeholder="예: 홍길동 폰, 사무실PC"
+        style="width:100%;box-sizing:border-box;padding:12px 14px;border:2px solid #3498db;border-radius:8px;font-size:15px;text-align:center;outline:none;"
+        onkeydown="if(event.key==='Enter')registerDeviceName()">
+      <button onclick="registerDeviceName()"
+        style="margin-top:14px;width:100%;padding:12px;background:#2980b9;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer;">
+        ✅ 등록
+      </button>
+      <p style="color:#aaa;font-size:11px;margin:10px 0 0;">등록 후 언제든 브라우저 설정에서 변경 가능</p>
+    </div>`;
+  document.body.appendChild(overlay);
   setTimeout(() => { const inp = document.getElementById('deviceNameInput'); if (inp) inp.focus(); }, 100);
 }
 function registerDeviceName() {
   const inp = document.getElementById('deviceNameInput');
   const name = (inp?.value || '').trim();
-  if (!name) { alert('이름을 입력하세요'); return; }
+  if (!name) { inp.style.borderColor = '#e74c3c'; inp.placeholder = '이름을 입력해주세요!'; inp.focus(); return; }
   setDeviceName(name);
-  const bar = document.getElementById('deviceNameBar');
-  if (bar) bar.remove();
+  const modal = document.getElementById('deviceNameModal');
+  if (modal) modal.remove();
 }
 
 // 현재 사용자 + 기기이름 텍스트
