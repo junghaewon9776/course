@@ -1075,7 +1075,7 @@ function renderLive(live) {
             ${leftBadge}
             <div style="flex:1;min-width:0;">
               <div class="name" style="font-weight:600;color:#2c3e50;">${(it.event && it.course) ? escapeHtml(it.event.name) + ' · ' + escapeHtml(it.course.name) : ''}${it.team ? ' · ' + escapeHtml(it.team.name) : ''}</div>
-              <div style="font-size:12px;color:#34495e;">운전 ${escapeHtml(it.driver)}${it.sess.crew?.assist ? ' / 보조 ' + escapeHtml(it.sess.crew.assist) : ''}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}</div>
+              <div style="font-size:12px;color:#34495e;">운전 ${it.sess.crew?.driverPhone ? '<a href="tel:' + escapeHtml(it.sess.crew.driverPhone) + '" style="color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞' + escapeHtml(it.driver) + '</a>' : escapeHtml(it.driver)}${it.sess.crew?.assist ? ' / 보조 ' + (it.sess.crew?.assistPhone ? '<a href="tel:' + escapeHtml(it.sess.crew.assistPhone) + '" style="color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞' + escapeHtml(it.sess.crew.assist) + '</a>' : escapeHtml(it.sess.crew.assist)) : ''}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}</div>
               <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${it.sess.device ? ' · 로컬: ' + escapeHtml(it.sess.device) : ''}</div>
             </div>
           </div>
