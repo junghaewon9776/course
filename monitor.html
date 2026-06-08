@@ -65,10 +65,15 @@
       <button id="liveCardToggle" class="small" onclick="event.stopPropagation();toggleLiveCard()" style="background:#27ae60;color:#fff;">▼ 접기</button>
     </div>
     <div id="liveCardBody">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-        <p class="muted" style="font-size:11px;margin:0;">
-          운영 중인 차량의 실시간 위치 (갱신 주기 선택 가능, 5분 무업데이트면 자동 숨김)
-        </p>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+        <p class="muted" style="font-size:11px;margin:0;">5분 무업데이트면 자동 숨김</p>
+        <select id="monRefreshSel" onchange="setMonRefreshInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="지도 갱신 주기">
+          <option value="0">실시간</option>
+          <option value="3000">3초</option>
+          <option value="5000">5초</option>
+          <option value="10000" selected>10초</option>
+          <option value="30000">30초</option>
+        </select>
         <button id="monGpsBtn" class="small" onclick="toggleMonitorGPS()" style="white-space:nowrap;">📍 내 위치</button>
       </div>
       <div id="liveList" style="max-height:320px;overflow-y:auto;"></div>
@@ -804,11 +809,40 @@ function stopFollow(reason) {
 
 // ─── 라이브 구독 (admin도 실시간 차량 위치 보기) ───
 const liveMarkers = {};
+let __monRefreshMs = 10000;
+let __monRefreshTimer = null;
+let __monPendingLive = null;
+function setMonRefreshInterval(ms) {
+  __monRefreshMs = parseInt(ms) || 0;
+  // 대기 중인 데이터 즉시 반영
+  if (__monPendingLive) {
+    renderLive(__monPendingLive);
+    __monPendingLive = null;
+  }
+}
 function subscribeLive() {
   if (typeof fbDb === 'undefined') return;
   fbDb.ref('/live').on('value', snap => {
     const live = snap.val() || {};
-    renderLive(live);
+    window.__liveCache = live;
+    if (__monRefreshMs === 0) {
+      // 실시간
+      renderLive(live);
+    } else {
+      // 쓰로틀: 마지막 렌더 후 interval 지나야 다시 렌더
+      __monPendingLive = live;
+      if (!__monRefreshTimer) {
+        renderLive(live);
+        __monPendingLive = null;
+        __monRefreshTimer = setTimeout(() => {
+          __monRefreshTimer = null;
+          if (__monPendingLive) {
+            renderLive(__monPendingLive);
+            __monPendingLive = null;
+          }
+        }, __monRefreshMs);
+      }
+    }
   });
 }
 function extractHochaNum(name) {

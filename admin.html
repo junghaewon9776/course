@@ -88,6 +88,7 @@
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <input id="searchInput" type="text" placeholder="주소 또는 장소 검색 (예: 영광읍사무소, 영광로 123)" onkeydown="if(event.key==='Enter')searchPlace()">
           <button onclick="searchPlace()" style="white-space:nowrap;">🔍 검색</button>
+          <button onclick="fitAllAnchors()" style="white-space:nowrap;background:#2c3e50;color:#fff;">🗺 전체보기</button>
         </div>
         <div id="searchResults" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #ddd;border-radius:5px;margin-bottom:8px;background:#fff;"></div>
         <div style="position:relative;">
@@ -880,6 +881,22 @@ function pickSearchResult(r) {
     const crs = getCourse(data, courseId);
     sendTelegram(`📍 <b>거점 추가</b>\n코스: ${crs?.name || ''}\n거점: ${aName}\n(검색: ${r.address || r.name})`);
   });
+}
+
+function fitAllAnchors() {
+  if (!map) return;
+  const data = loadData();
+  const anchors = data.anchors || [];
+  if (!anchors.length) { alert('거점이 없습니다'); return; }
+  const bounds = new kakao.maps.LatLngBounds();
+  anchors.forEach(a => {
+    if (typeof a.lat === 'number') bounds.extend(new kakao.maps.LatLng(a.lat, a.lng));
+  });
+  // 민원도 포함
+  (data.complaints || []).forEach(c => {
+    if (typeof c.lat === 'number') bounds.extend(new kakao.maps.LatLng(c.lat, c.lng));
+  });
+  map.setBounds(bounds, 50);
 }
 
 function refreshAll() {
