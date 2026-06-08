@@ -48,8 +48,8 @@
     <a href="index.html">홈</a>
     <a href="today.html">오늘운영</a>
     <a href="inquiry.html" class="active">문의·민원</a>
-    <a href="#" id="loginLink" onclick="showLoginModal();return false;">로그인</a>
-    <a href="#" id="logoutLink" onclick="doLogout();return false;" style="display:none;">로그아웃</a>
+    <a href="#" id="loginLink" onclick="showLoginGate();return false;">로그인</a>
+    <a href="#" id="logoutLink" onclick="inqLogout();return false;" style="display:none;">로그아웃</a>
   </nav>
 </header>
 
@@ -150,13 +150,24 @@ function refreshInquiryPage() {
   renderCategoryEditor();
 }
 
-// 로그인 성공 콜백 (common.js showLoginModal에서 호출됨)
+// 로그인 성공 콜백 (common.js doLogin에서 호출됨)
 window.onAuthSuccess = () => {
+  // 로그인 게이트 닫기
+  const gate = document.getElementById('loginGate');
+  if (gate) gate.remove();
   onDataReady(refreshInquiryPage);
 };
 window.onDataChanged = () => {
   refreshInquiryPage();
 };
+
+function inqLogout() {
+  if (!confirm('로그아웃 하시겠습니까?')) return;
+  fbAuth.signOut().then(() => {
+    localStorage.removeItem('lastAdminId');
+    location.reload();
+  });
+}
 
 ensureAnonAuth().then(() => {
   initFirebaseSync();
