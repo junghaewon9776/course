@@ -115,8 +115,12 @@ window.onAuthSuccess = () => onDataReady(render);
 window.onDataChanged = () => render();
 checkAdminAuth().then(ok => { if (ok) onDataReady(render); });
 
-// 관리자만 들어올 수 있으니 항상 admin 권한
-function isEventVisibleForViewer() { return true; }
+// 관리자 👁 토글로 숨긴 행사는 통계에서도 제외
+function isEventVisibleForViewer(eventId, data) {
+  if (!data) data = loadData();
+  const v = (data.visibility || {}).events || {};
+  return v[eventId] !== false;
+}
 
 function onPeriodChange() {
   const period = document.getElementById('period').value;

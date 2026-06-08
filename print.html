@@ -206,8 +206,10 @@ function initEventFilter() {
   const data = loadData();
   const sel = document.getElementById('eventFilter');
   const cur = sel.value;
+  const evVis = (data.visibility || {}).events || {};
+  const visibleEvents = (data.events || []).filter(e => evVis[e.id] !== false);
   sel.innerHTML = '<option value="">전체</option>' +
-    (data.events || []).map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
+    visibleEvents.map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
   const params = new URLSearchParams(location.search);
   const mode = params.get('mode');
   if (mode === 'hocha') {
@@ -345,7 +347,9 @@ function render() {
   const onlyFeatured = document.getElementById('onlyFeatured')?.checked;
   const onlyFeaturedCourse = document.getElementById('onlyFeaturedCourse')?.checked;
   let courseHtml = '';
+  const _evVis = ((data.visibility || {}).events || {});
   for (const ev of (data.events || [])) {
+    if (_evVis[ev.id] === false) continue;
     if (eventFilter && ev.id !== eventFilter) continue;
     let courses = ev.courses || [];
     if (onlyFeaturedCourse) {
