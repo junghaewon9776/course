@@ -2142,77 +2142,227 @@ function locPickerCancel() {
 }
 
 /* ── 거점 요청 ──────────────────────────────────────── */
-async function requestNewAnchor() {
+let __arqMap = null, __arqMarker = null, __arqAddr = '', __arqReason = '';
+
+function requestNewAnchor() {
   if (!currentSession) { alert('먼저 코스를 시작하세요'); return; }
   if (!currentPos) { alert('GPS 위치가 잡히지 않았습니다.\nGPS를 켜고 위치 잡힌 후 다시 시도하세요'); return; }
 
-  // 위치 선택 모달
-  const loc = await openLocationPicker(currentPos.lat, currentPos.lng);
-  if (!loc) return;
+  let old = document.getElementById('anchorReqModal');
+  if (old) old.remove();
+  __arqAddr = ''; __arqReason = '';
 
-  let modal = document.getElementById('anchorReqModal');
-  if (modal) modal.remove();
-  modal = document.createElement('div');
+  const modal = document.createElement('div');
   modal.id = 'anchorReqModal';
-  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
-  modal.onclick = e => { if (e.target === modal) modal.remove(); };
-  modal.dataset.lat = loc.lat;
-  modal.dataset.lng = loc.lng;
-  modal.dataset.address = loc.address || '';
-  const addrDisplay = loc.address || `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}`;
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;background:rgba(0,0,0,0.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 12px;';
   modal.innerHTML = `
-    <div style="background:#fff;border-radius:12px;width:100%;max-width:400px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
-      <h3 style="margin:0 0 14px;color:#e67e22;">📌 거점 추가 요청</h3>
-      <div style="margin-bottom:10px;padding:8px;background:#fef9f0;border-radius:6px;font-size:12px;color:#2c3e50;">
-        📍 ${addrDisplay}
+    <div style="background:#fff;border-radius:14px;width:100%;max-width:420px;box-shadow:0 8px 30px rgba(0,0,0,0.4);overflow:hidden;margin:auto 0;">
+
+      <!-- 헤더 -->
+      <div style="background:#e67e22;color:#fff;padding:16px 18px;">
+        <div style="font-size:18px;font-weight:800;">📌 거점 추가 요청</div>
+        <div style="font-size:12px;opacity:0.85;margin-top:2px;">방역이 필요한 위치를 알려주세요</div>
       </div>
-      <label style="font-size:13px;font-weight:700;">거점 이름 <span style="color:#e74c3c;">*</span></label>
-      <input id="arqName" type="text" placeholder="예: 새로운 어린이집, 골목 입구" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-      <label style="font-size:13px;font-weight:700;">메모 / 사유</label>
-      <input id="arqMemo" type="text" placeholder="예: 다음 방역에 추가 필요 (선택)" style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-      <div style="display:flex;gap:8px;">
-        <button onclick="submitAnchorRequest()" style="flex:1;background:#e67e22;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">요청</button>
-        <button onclick="document.getElementById('anchorReqModal').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">취소</button>
+
+      <div style="padding:16px 18px;">
+
+        <!-- 1) 거점 이름 -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:4px;">거점 이름을 정해주세요</div>
+          <div style="font-size:11px;color:#999;margin-bottom:6px;">생각이 안 나시면 그냥 넘어가셔도 됩니다</div>
+          <input id="arqName" type="text" placeholder="예: ○○어린이집, 골목 입구" style="width:100%;padding:10px 12px;border:2px solid #eee;border-radius:8px;font-size:15px;box-sizing:border-box;transition:border .2s;" onfocus="this.style.borderColor='#e67e22'" onblur="this.style.borderColor='#eee'">
+        </div>
+
+        <!-- 2) 추가 이유 -->
+        <div style="margin-bottom:16px;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:8px;">거점 추가 이유</div>
+          <div id="arqReasonBtns" style="display:flex;flex-direction:column;gap:6px;">
+            <button onclick="arqSelectReason(this,'방역이 꼭 필요한 지역입니다')" class="arq-reason-btn" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid #eee;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#333;cursor:pointer;transition:all .15s;text-align:left;">
+              <span style="font-size:20px;">🦟</span> 방역이 꼭 필요한 지역입니다
+            </button>
+            <button onclick="arqSelectReason(this,'민원이 들어왔습니다')" class="arq-reason-btn" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid #eee;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#333;cursor:pointer;transition:all .15s;text-align:left;">
+              <span style="font-size:20px;">📞</span> 민원이 들어왔습니다
+            </button>
+            <button onclick="arqSelectReason(this,'기타')" class="arq-reason-btn" style="display:flex;align-items:center;gap:8px;padding:12px 14px;border:2px solid #eee;border-radius:10px;background:#fff;font-size:14px;font-weight:600;color:#333;cursor:pointer;transition:all .15s;text-align:left;">
+              <span style="font-size:20px;">✏️</span> 기타 (직접 입력)
+            </button>
+          </div>
+          <input id="arqReasonCustom" type="text" placeholder="이유를 직접 입력하세요" style="display:none;width:100%;padding:10px 12px;border:2px solid #e67e22;border-radius:8px;font-size:14px;box-sizing:border-box;margin-top:6px;">
+        </div>
+
+        <!-- 3) 위치 선택 -->
+        <div style="margin-bottom:14px;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:8px;">위치 선택</div>
+          <div style="display:flex;gap:0;margin-bottom:8px;border-radius:8px;overflow:hidden;border:2px solid #e67e22;">
+            <button id="arqModePin" onclick="arqSwitchMode('pin')" style="flex:1;padding:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#e67e22;color:#fff;transition:all .15s;">📍 직접 핑추가</button>
+            <button id="arqModeSearch" onclick="arqSwitchMode('search')" style="flex:1;padding:10px;border:none;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:#e67e22;transition:all .15s;">🔍 주소 검색</button>
+          </div>
+          <div id="arqSearchBox" style="display:none;margin-bottom:6px;">
+            <div style="display:flex;gap:6px;">
+              <input id="arqAddrInput" type="text" placeholder="주소 검색 (예: 법성포 법성리 123)" style="flex:1;padding:9px 10px;border:2px solid #eee;border-radius:8px;font-size:13px;" onkeydown="if(event.key==='Enter')arqDoSearch()">
+              <button onclick="arqDoSearch()" style="background:#3498db;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">검색</button>
+            </div>
+            <div id="arqSearchResults" style="max-height:110px;overflow-y:auto;margin-top:4px;display:none;border:1px solid #ddd;border-radius:8px;background:#fafafa;"></div>
+          </div>
+          <div id="arqMapContainer" style="width:100%;height:220px;border-radius:10px;overflow:hidden;border:2px solid #eee;"></div>
+          <div id="arqAddrLabel" style="margin-top:6px;font-size:12px;color:#2c3e50;min-height:16px;padding:6px 8px;background:#f8f9fa;border-radius:6px;"></div>
+        </div>
+
+        <!-- 버튼 -->
+        <div style="display:flex;gap:8px;">
+          <button onclick="submitAnchorRequest()" style="flex:1;background:#e67e22;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:800;font-size:15px;cursor:pointer;">요청하기</button>
+          <button onclick="document.getElementById('anchorReqModal').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:13px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;">취소</button>
+        </div>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
-  document.getElementById('arqName').focus();
+
+  // 지도 초기화
+  const center = new kakao.maps.LatLng(currentPos.lat, currentPos.lng);
+  __arqMap = new kakao.maps.Map(document.getElementById('arqMapContainer'), { center, level: 3 });
+  __arqMarker = new kakao.maps.Marker({ position: center, draggable: true });
+  __arqMarker.setMap(__arqMap);
+  arqUpdateAddr(currentPos.lat, currentPos.lng);
+
+  kakao.maps.event.addListener(__arqMarker, 'dragend', () => {
+    const p = __arqMarker.getPosition();
+    arqUpdateAddr(p.getLat(), p.getLng());
+  });
+  kakao.maps.event.addListener(__arqMap, 'click', (e) => {
+    __arqMarker.setPosition(e.latLng);
+    arqUpdateAddr(e.latLng.getLat(), e.latLng.getLng());
+  });
+}
+
+function arqSelectReason(btn, reason) {
+  // 모든 버튼 리셋
+  document.querySelectorAll('#arqReasonBtns .arq-reason-btn').forEach(b => {
+    b.style.borderColor = '#eee'; b.style.background = '#fff'; b.style.color = '#333';
+  });
+  // 선택된 버튼 강조
+  btn.style.borderColor = '#e67e22'; btn.style.background = '#fef5eb'; btn.style.color = '#e67e22';
+  const customInput = document.getElementById('arqReasonCustom');
+  if (reason === '기타') {
+    customInput.style.display = 'block';
+    customInput.focus();
+    __arqReason = '';
+  } else {
+    customInput.style.display = 'none';
+    customInput.value = '';
+    __arqReason = reason;
+  }
+}
+
+function arqSwitchMode(mode) {
+  const pinBtn = document.getElementById('arqModePin');
+  const searchBtn = document.getElementById('arqModeSearch');
+  const searchBox = document.getElementById('arqSearchBox');
+  if (mode === 'pin') {
+    pinBtn.style.background = '#e67e22'; pinBtn.style.color = '#fff';
+    searchBtn.style.background = '#fff'; searchBtn.style.color = '#e67e22';
+    searchBox.style.display = 'none';
+  } else {
+    searchBtn.style.background = '#e67e22'; searchBtn.style.color = '#fff';
+    pinBtn.style.background = '#fff'; pinBtn.style.color = '#e67e22';
+    searchBox.style.display = 'block';
+    document.getElementById('arqAddrInput').focus();
+  }
+}
+
+function arqDoSearch() {
+  const q = (document.getElementById('arqAddrInput').value || '').trim();
+  if (!q) return;
+  const resultsDiv = document.getElementById('arqSearchResults');
+  const gc = new kakao.maps.services.Geocoder();
+  const ps = new kakao.maps.services.Places();
+  let combined = []; let done = 0;
+  const finish = () => {
+    if (++done < 2) return;
+    if (!combined.length) {
+      resultsDiv.innerHTML = '<div style="padding:10px;color:#999;font-size:12px;">검색 결과 없음</div>';
+      resultsDiv.style.display = 'block'; return;
+    }
+    resultsDiv.innerHTML = combined.slice(0, 10).map((r, i) =>
+      `<div onclick="arqPickResult(${r.y},${r.x})" style="padding:9px 10px;cursor:pointer;border-bottom:1px solid #eee;font-size:13px;${i >= Math.min(combined.length, 10) - 1 ? 'border:none;' : ''}">${r.label}</div>`
+    ).join('');
+    resultsDiv.style.display = 'block';
+  };
+  gc.addressSearch(q, (res, st) => {
+    if (st === kakao.maps.services.Status.OK && res.length)
+      combined = res.map(r => ({ label: r.address_name + (r.road_address ? ' (' + r.road_address.address_name + ')' : ''), y: r.y, x: r.x })).concat(combined);
+    finish();
+  });
+  ps.keywordSearch(q, (data, status) => {
+    if (status === kakao.maps.services.Status.OK && data.length)
+      combined = combined.concat(data.slice(0, 6).map(d => ({ label: d.place_name + (d.road_address_name ? ' · ' + d.road_address_name : ''), y: d.y, x: d.x })));
+    finish();
+  });
+}
+
+function arqPickResult(lat, lng) {
+  lat = parseFloat(lat); lng = parseFloat(lng);
+  const pos = new kakao.maps.LatLng(lat, lng);
+  __arqMap.setCenter(pos);
+  __arqMarker.setPosition(pos);
+  arqUpdateAddr(lat, lng);
+  document.getElementById('arqSearchResults').style.display = 'none';
+}
+
+function arqUpdateAddr(lat, lng) {
+  const gc = new kakao.maps.services.Geocoder();
+  gc.coord2Address(lng, lat, (result, status) => {
+    const el = document.getElementById('arqAddrLabel');
+    if (status === kakao.maps.services.Status.OK && result[0]) {
+      const r = result[0];
+      const road = r.road_address;
+      const jibun = r.address;
+      if (road) {
+        __arqAddr = road.address_name;
+        if (el) el.innerHTML = `📍 <b>${road.address_name}</b>${jibun ? `<br><span style="color:#888;font-size:11px;">(지번) ${jibun.address_name}</span>` : ''}`;
+      } else if (jibun) {
+        __arqAddr = jibun.address_name;
+        if (el) el.innerHTML = `📍 <b>${jibun.address_name}</b>`;
+      }
+    } else {
+      __arqAddr = '';
+      if (el) el.innerHTML = '📍 <span style="color:#999;">주소를 찾을 수 없는 위치</span>';
+    }
+  });
 }
 
 function submitAnchorRequest() {
   const name = (document.getElementById('arqName').value || '').trim();
-  if (!name) { alert('거점 이름을 입력하세요'); document.getElementById('arqName').focus(); return; }
-  const memo = (document.getElementById('arqMemo').value || '').trim();
-  const modal = document.getElementById('anchorReqModal');
-  const lat = parseFloat(modal.dataset.lat);
-  const lng = parseFloat(modal.dataset.lng);
-  const address = modal.dataset.address || '';
+  const customReason = (document.getElementById('arqReasonCustom').value || '').trim();
+  const reason = __arqReason || customReason;
+  if (!reason) { alert('거점 추가 이유를 선택해주세요'); return; }
+
+  const p = __arqMarker.getPosition();
+  const lat = p.getLat(), lng = p.getLng();
+  const address = __arqAddr || '';
 
   const data = loadData();
   if (!Array.isArray(data.requests)) data.requests = [];
-  const req = {
+  data.requests.push({
     id: uid(),
     lat, lng, address,
-    name, memo,
+    name: name || '(이름 미정)',
+    memo: reason,
     eventId: currentSession.eventId,
     courseId: currentSession.courseId,
     requestedBy: currentSession.crew?.driver || '',
     requestedAssist: currentSession.crew?.assist || '',
     requestedAt: Date.now(),
     status: 'pending'
-  };
-  data.requests.push(req);
-  try {
-    saveData(data);
-  } catch (e) {
-    alert('저장 실패: ' + (e.message || e));
-    return;
-  }
-  modal.remove();
+  });
+  try { saveData(data); }
+  catch (e) { alert('저장 실패: ' + (e.message || e)); return; }
+
+  document.getElementById('anchorReqModal').remove();
+  __arqMap = null; __arqMarker = null;
   renderMapForSession();
   const addrLine = address ? `\n주소: ${address}` : '';
-  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
+  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name || '(이름 미정)'}\n이유: ${reason}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   alert('✅ 관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
 }
 
