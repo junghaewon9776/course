@@ -351,7 +351,7 @@ function loadKakaoMap() {
   window.__kakaoLoadAttempt++;
   const script = document.createElement('script');
   script.dataset.kakaoSdk = '1';
-  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
+  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`;
   script.onload = () => kakao.maps.load(() => { initMap(); });
   script.onerror = () => {
     console.warn('카카오 SDK 로드 실패. 재시도', window.__kakaoLoadAttempt);
@@ -1963,9 +1963,140 @@ function finishCourse() {
   renderAssignments();
 }
 
-function requestNewAnchor() {
+/* ── 위치 선택 지도 핀 모달 ─────────────────────────── */
+let __pickerResolve = null;
+let __pickerMap = null;
+let __pickerMarker = null;
+
+function openLocationPicker(initLat, initLng) {
+  return new Promise(resolve => {
+    __pickerResolve = resolve;
+    let old = document.getElementById('locPickerModal');
+    if (old) old.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'locPickerModal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:100000;background:rgba(0,0,0,0.6);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;';
+    modal.innerHTML = `
+      <div style="background:#fff;border-radius:12px;width:100%;max-width:440px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.4);display:flex;flex-direction:column;max-height:90vh;">
+        <div style="padding:14px 16px 10px;border-bottom:1px solid #eee;">
+          <h3 style="margin:0 0 8px;font-size:15px;">📍 위치 선택</h3>
+          <div style="display:flex;gap:6px;">
+            <input id="lpAddrInput" type="text" placeholder="주소 검색 (예: 법성포)" style="flex:1;padding:8px 10px;border:1px solid #ccc;border-radius:6px;font-size:13px;">
+            <button onclick="locPickerSearch()" style="background:#3498db;color:#fff;border:none;padding:8px 14px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;">검색</button>
+          </div>
+          <div id="lpSearchResults" style="max-height:120px;overflow-y:auto;margin-top:4px;display:none;border:1px solid #ddd;border-radius:6px;background:#fafafa;"></div>
+        </div>
+        <div id="lpMapContainer" style="width:100%;height:300px;"></div>
+        <div style="padding:10px 16px;display:flex;align-items:center;gap:8px;border-top:1px solid #eee;">
+          <span id="lpCoordLabel" style="flex:1;font-size:11px;color:#888;"></span>
+          <button onclick="locPickerConfirm()" style="background:#27ae60;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">확인</button>
+          <button onclick="locPickerCancel()" style="background:#555;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">취소</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // 지도 생성
+    const center = new kakao.maps.LatLng(initLat, initLng);
+    __pickerMap = new kakao.maps.Map(document.getElementById('lpMapContainer'), {
+      center, level: 3
+    });
+    __pickerMarker = new kakao.maps.Marker({
+      position: center, draggable: true
+    });
+    __pickerMarker.setMap(__pickerMap);
+    updatePickerCoord(initLat, initLng);
+
+    // 마커 드래그 → 좌표 갱신
+    kakao.maps.event.addListener(__pickerMarker, 'dragend', () => {
+      const p = __pickerMarker.getPosition();
+      updatePickerCoord(p.getLat(), p.getLng());
+    });
+    // 지도 클릭 → 마커 이동
+    kakao.maps.event.addListener(__pickerMap, 'click', (e) => {
+      __pickerMarker.setPosition(e.latLng);
+      updatePickerCoord(e.latLng.getLat(), e.latLng.getLng());
+    });
+
+    // 엔터키로 검색
+    document.getElementById('lpAddrInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') locPickerSearch();
+    });
+  });
+}
+
+function updatePickerCoord(lat, lng) {
+  const el = document.getElementById('lpCoordLabel');
+  if (el) el.textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+}
+
+function locPickerSearch() {
+  const q = (document.getElementById('lpAddrInput').value || '').trim();
+  if (!q) return;
+  const ps = new kakao.maps.services.Places();
+  const resultsDiv = document.getElementById('lpSearchResults');
+  ps.keywordSearch(q, (data, status) => {
+    if (status !== kakao.maps.services.Status.OK || !data.length) {
+      // Places 실패 시 Geocoder로 시도
+      const gc = new kakao.maps.services.Geocoder();
+      gc.addressSearch(q, (res, st) => {
+        if (st !== kakao.maps.services.Status.OK || !res.length) {
+          resultsDiv.innerHTML = '<div style="padding:10px;color:#999;font-size:12px;">검색 결과 없음</div>';
+          resultsDiv.style.display = 'block';
+          return;
+        }
+        renderPickerResults(res.map(r => ({ place_name: r.address_name, y: r.y, x: r.x })));
+      });
+      return;
+    }
+    renderPickerResults(data.slice(0, 8));
+  });
+}
+
+function renderPickerResults(items) {
+  const resultsDiv = document.getElementById('lpSearchResults');
+  resultsDiv.innerHTML = items.map((r, i) =>
+    `<div onclick="locPickerSelect(${r.y}, ${r.x})" style="padding:8px 10px;cursor:pointer;border-bottom:1px solid #eee;font-size:13px;${i === items.length - 1 ? 'border:none;' : ''}">${r.place_name || r.address_name || ''}</div>`
+  ).join('');
+  resultsDiv.style.display = 'block';
+}
+
+function locPickerSelect(lat, lng) {
+  lat = parseFloat(lat); lng = parseFloat(lng);
+  const pos = new kakao.maps.LatLng(lat, lng);
+  __pickerMap.setCenter(pos);
+  __pickerMarker.setPosition(pos);
+  updatePickerCoord(lat, lng);
+  document.getElementById('lpSearchResults').style.display = 'none';
+  document.getElementById('lpAddrInput').value = '';
+}
+
+function locPickerConfirm() {
+  const p = __pickerMarker.getPosition();
+  document.getElementById('locPickerModal').remove();
+  if (__pickerResolve) __pickerResolve({ lat: p.getLat(), lng: p.getLng() });
+  __pickerResolve = null;
+  __pickerMap = null;
+  __pickerMarker = null;
+}
+
+function locPickerCancel() {
+  document.getElementById('locPickerModal').remove();
+  if (__pickerResolve) __pickerResolve(null);
+  __pickerResolve = null;
+  __pickerMap = null;
+  __pickerMarker = null;
+}
+
+/* ── 거점 요청 ──────────────────────────────────────── */
+async function requestNewAnchor() {
   if (!currentSession) { alert('먼저 코스를 시작하세요'); return; }
   if (!currentPos) { alert('GPS 위치가 잡히지 않았습니다.\nGPS를 켜고 위치 잡힌 후 다시 시도하세요'); return; }
+
+  // 위치 선택 모달
+  const loc = await openLocationPicker(currentPos.lat, currentPos.lng);
+  if (!loc) return;
 
   const name = prompt('추가 요청할 거점 이름\n(예: 새로운 어린이집, 골목 입구)');
   if (!name) return;
@@ -1975,7 +2106,7 @@ function requestNewAnchor() {
   if (!Array.isArray(data.requests)) data.requests = [];
   const req = {
     id: uid(),
-    lat: currentPos.lat, lng: currentPos.lng,
+    lat: loc.lat, lng: loc.lng,
     name, memo,
     eventId: currentSession.eventId,
     courseId: currentSession.courseId,
@@ -1992,8 +2123,7 @@ function requestNewAnchor() {
     return;
   }
   renderMapForSession();
-  // 텔레그램: 거점추가 요청 알림
-  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
+  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}\n위치: ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   alert('관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
 }
 
@@ -2008,13 +2138,16 @@ function resolveComplaintFromMap(id) {
   renderMapForSession();
 }
 
-function reportComplaint() {
+async function reportComplaint() {
   if (!currentSession) { alert('먼저 코스를 시작하세요'); return; }
   if (!currentPos) { alert('GPS 위치가 잡히지 않았습니다.\nGPS를 켜고 위치 잡힌 후 다시 시도하세요'); return; }
 
+  // 위치 선택 모달 먼저
+  const loc = await openLocationPicker(currentPos.lat, currentPos.lng);
+  if (!loc) return;
+
   const data = loadData();
   const ev = getEvent(data, currentSession.eventId);
-  // 코스 옵션 생성
   const courses = (ev?.courses || []);
   const courseOptions = courses.map(c =>
     `<option value="${c.id}" ${c.id === currentSession.courseId ? 'selected' : ''}>${c.name}</option>`
@@ -2026,9 +2159,15 @@ function reportComplaint() {
   modal.id = 'complaintModal';
   modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
   modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  // 선택된 좌표를 data attribute에 저장
+  modal.dataset.lat = loc.lat;
+  modal.dataset.lng = loc.lng;
   modal.innerHTML = `
     <div style="background:#fff;border-radius:12px;width:100%;max-width:400px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
       <h3 style="margin:0 0 14px;color:#e74c3c;">📞 민원 접수</h3>
+      <div style="margin-bottom:10px;padding:8px;background:#f0f8ff;border-radius:6px;font-size:12px;color:#2c3e50;">
+        📍 선택 위치: ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}
+      </div>
       <label style="font-size:13px;font-weight:700;">연락처</label>
       <input id="cmpPhone" type="tel" placeholder="010-1234-5678" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
       <label style="font-size:13px;font-weight:700;">민원 내용</label>
@@ -2052,6 +2191,9 @@ function submitComplaint() {
   const phone = (document.getElementById('cmpPhone').value || '').trim();
   const content = (document.getElementById('cmpContent').value || '').trim();
   const assignedCourseId = document.getElementById('cmpCourse').value || '';
+  const modal = document.getElementById('complaintModal');
+  const lat = parseFloat(modal.dataset.lat);
+  const lng = parseFloat(modal.dataset.lng);
 
   const data = loadData();
   if (!Array.isArray(data.complaints)) data.complaints = [];
@@ -2059,7 +2201,7 @@ function submitComplaint() {
     id: uid(),
     eventId: currentSession.eventId,
     courseId: assignedCourseId,
-    lat: currentPos.lat, lng: currentPos.lng,
+    lat, lng,
     phone, content,
     area: '',
     status: 'pending',
@@ -2073,14 +2215,14 @@ function submitComplaint() {
     alert('저장 실패: ' + (e.message || e));
     return;
   }
-  document.getElementById('complaintModal').remove();
+  modal.remove();
   renderMapForSession();
   // 텔레그램
   const ev = getEvent(data, currentSession.eventId);
   const courseName = assignedCourseId ? (getCourse(data, assignedCourseId)?.name || '') : '미지정';
   const phoneTel = phone ? phone.replace(/[^0-9+]/g, '') : '';
   const phoneStr = phone ? `<a href="tel:${phoneTel}">${phone}</a>` : '-';
-  sendTelegram(`📞 <b>민원 접수</b>\n${ev?.name || ''} · 배정: ${courseName}\n연락처: ${phoneStr}\n내용: ${content || '-'}\n위치: ${currentPos.lat.toFixed(5)}, ${currentPos.lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
+  sendTelegram(`📞 <b>민원 접수</b>\n${ev?.name || ''} · 배정: ${courseName}\n연락처: ${phoneStr}\n내용: ${content || '-'}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   alert('✅ 민원 접수됨\n관리자가 확인할 수 있습니다.');
 }
 
