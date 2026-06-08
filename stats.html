@@ -291,7 +291,7 @@ function render() {
         <div class="col" style="flex:1;min-width:320px;">
           <div class="card">
             <h2>${labels.title}</h2>
-            <canvas id="mc_${uid}" style="max-height:400px;"></canvas>
+            <div id="mcWrap_${uid}" style="position:relative;"><canvas id="mc_${uid}"></canvas></div>
           </div>
         </div>
         <div class="col" style="flex:1;min-width:320px;">
@@ -392,8 +392,15 @@ function render() {
     tfoot += '</tr>';
     document.getElementById('tb_' + uid).innerHTML = thead + tbody + tfoot;
 
-    // 회원별 누적 막대
+    // 회원별 누적 막대 — 8명 초과 시 가로 막대로 전환
     const sortedNames = sortedAll.map(x => x[0]);
+    const useHorizontal = sortedNames.length > 8;
+    const mcWrap = document.getElementById('mcWrap_' + uid);
+    if (useHorizontal) {
+      mcWrap.style.height = Math.max(300, sortedNames.length * 36) + 'px';
+    } else {
+      mcWrap.style.height = '400px';
+    }
     const mc = new Chart(document.getElementById('mc_' + uid), {
       type: 'bar',
       data: {
@@ -405,12 +412,22 @@ function render() {
         }))
       },
       options: {
+        indexAxis: useHorizontal ? 'y' : 'x',
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: true, position: 'bottom', labels: { font: { size: 10 } } }, tooltip: { mode: 'index', intersect: false } },
-        scales: { x: { stacked: true, ticks: { font: { size: 10 } } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
-        layout: { padding: { top: 24 } }
+        plugins: {
+          legend: { display: true, position: 'bottom', labels: { font: { size: 10 } } },
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: useHorizontal ? {
+          x: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
+          y: { stacked: true, ticks: { font: { size: 11 }, autoSkip: false } }
+        } : {
+          x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 45 } },
+          y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }
+        },
+        layout: { padding: { top: useHorizontal ? 4 : 24, right: useHorizontal ? 32 : 0 } }
       },
-      plugins: [stackTotalsPlugin]
+      plugins: useHorizontal ? [] : [stackTotalsPlugin]
     });
     __charts.push(mc);
 
