@@ -62,15 +62,11 @@
     <div class="card">
       <div class="map-wrap">
         <div id="map" class="map"></div>
-        <div class="map-ctrl" style="top:10px;left:10px;right:10px;flex-direction:row;justify-content:space-between;">
-          <div style="display:flex;gap:4px;">
-            <button class="map-btn" onclick="zoomIn()">+</button>
-            <button class="map-btn" onclick="zoomOut()">−</button>
-            <button class="map-btn" onclick="showMapSettings()">⚙</button>
-          </div>
-        </div>
-        <div class="map-ctrl" style="top:54px;right:10px;">
+        <div class="map-ctrl" style="top:10px;right:10px;flex-direction:column;">
           <button class="map-btn map-btn-wide" id="mapTypeBtn" onclick="cycleMapType()" title="지도 종류">🗺</button>
+          <button class="map-btn" onclick="zoomIn()">+</button>
+          <button class="map-btn" onclick="zoomOut()">−</button>
+          <button class="map-btn" onclick="showMapSettings()">⚙</button>
         </div>
         <div class="map-ctrl" style="bottom:10px;left:10px;gap:4px;">
           <button class="map-btn" id="followToggle" onclick="toggleFollow()" style="font-size:10px;width:auto;padding:0 6px;height:30px;">따라가기해제</button>
