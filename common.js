@@ -792,7 +792,7 @@ function showLoginGate() {
         <label>전화번호 (- 없이)</label>
         <input id="loginEmail" type="tel" inputmode="numeric" autocomplete="username" placeholder="01012345678" value="${savedId}" oninput="autoFormatLoginId(this)">
         <label>PIN (4자리)</label>
-        <input id="loginPw" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="PIN 4자리" onkeydown="if(event.key==='Enter')doLogin()">
+        <input id="loginPw" type="password" autocomplete="current-password" placeholder="PIN 4자리" onkeydown="if(event.key==='Enter')doLogin()">
         <div id="loginErr" style="color:#e74c3c;font-size:12px;margin-top:6px;min-height:14px;"></div>
         <button onclick="doLogin()" style="width:100%;margin-top:10px;padding:10px;">로그인</button>
         <details style="margin-top:14px;font-size:11px;color:#666;">
