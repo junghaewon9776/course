@@ -22,22 +22,22 @@
       <div class="title">오늘의 운영</div>
       <div class="desc" style="color:#e8f5e9;">방역하기 (현장 기사용 + GPS)</div>
     </a>
-    <a href="admin.html" class="menu-card">
+    <a href="admin.html" class="menu-card admin-only" style="display:none;">
       <div class="icon">⚙️</div>
       <div class="title">관리자</div>
       <div class="desc">행사·코스·거점·요청 관리</div>
     </a>
-    <a href="members.html" class="menu-card">
+    <a href="members.html" class="menu-card admin-only" style="display:none;">
       <div class="icon">👥</div>
       <div class="title">인원관리</div>
       <div class="desc">회원·조 편성·팀짜기</div>
     </a>
-    <a href="monitor.html" class="menu-card" id="monitorCard" style="display:none;">
+    <a href="monitor.html" class="menu-card admin-only" style="display:none;">
       <div class="icon">📊</div>
       <div class="title">본부 모니터링</div>
       <div class="desc">실시간 차량 + 운행기록</div>
     </a>
-    <a href="stats.html" class="menu-card">
+    <a href="stats.html" class="menu-card admin-only" style="display:none;">
       <div class="icon">📈</div>
       <div class="title">통계</div>
       <div class="desc">회원별 방역 횟수·차트</div>
@@ -47,7 +47,7 @@
       <div class="title">계정관리</div>
       <div class="desc">관리자 계정 추가·권한</div>
     </a>
-    <a href="print.html" class="menu-card">
+    <a href="print.html" class="menu-card admin-only" style="display:none;">
       <div class="icon">🖨</div>
       <div class="title">인쇄용</div>
       <div class="desc">조·코스·QR 한 페이지로</div>
@@ -79,10 +79,12 @@
       // 계정관리: super만 표시
       const ac = document.getElementById('accountsCard');
       if (ac && getMyRole() === 'super') ac.style.display = '';
-      // 모니터링: admin 이상만
-      const mc = document.getElementById('monitorCard');
+      // admin 이상만 보이는 메뉴
       const role2 = getMyRole();
-      if (mc && (role2 === 'admin' || role2 === 'super')) mc.style.display = '';
+      const isAdmin = role2 === 'admin' || role2 === 'super';
+      document.querySelectorAll('.admin-only').forEach(el => {
+        el.style.display = isAdmin ? '' : 'none';
+      });
       // 로그인 정보 표시
       const u = fbAuth.currentUser;
       if (u && !u.isAnonymous) {
