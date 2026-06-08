@@ -315,76 +315,56 @@ function render() {
     const unitPrice = hasUnitPrice ? (parseInt(event.unitPrice) || 0) : 0;
     const fmtWon = v => (v != null) ? '₩' + v.toLocaleString() : '';
 
-    // ── 일자별 운행 기록 표 (피벗: 행=방역자, 열=일자) ──
-    // 조 추정 헬퍼
-    function resolveTeam(log) {
-      if (log.teamId) return getTeam(data, log.teamId)?.name || '';
-      const dName = (log.crew?.driver || '').trim();
-      if (!dName) return '';
-      const dm = (data.members || []).find(m => (m.name||'').trim() === dName);
-      if (!dm) return '';
-      const t = (data.teams || []).find(t => t.leaderId === dm.id || t.viceLeaderId === dm.id || (t.memberIds || []).includes(dm.id));
-      return t ? t.name : '';
-    }
-    // 날짜 목록 수집 (오름차순)
-    const dateSet = new Set();
-    for (const log of logs) {
-      const d = new Date(log.startedAt || 0);
-      dateSet.add(`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`);
-    }
-    const dates = [...dateSet].sort();
-    // 방역자별 집계: { driver: { team, dates: { '2026.06.09': [{courseId, assist}] } } }
-    const driverMap = {};
-    for (const log of logs) {
-      const driver = log.crew?.driver || '-';
-      const d = new Date(log.startedAt || 0);
-      const ds = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
-      if (!driverMap[driver]) driverMap[driver] = { team: resolveTeam(log), dates: {}, total: 0 };
-      if (!driverMap[driver].dates[ds]) driverMap[driver].dates[ds] = [];
-      const crs = courses.find(c => c.id === log.courseId);
-      driverMap[driver].dates[ds].push({ courseId: log.courseId, color: crs?.color || '#ccc', label: crs?.label || '?' });
-      driverMap[driver].total++;
-    }
-    // 짧은 날짜 표시 (월.일)
-    const shortDate = ds => { const p = ds.split('.'); return p[1] + '.' + p[2]; };
+    // ── 일자별 운행 기록 표 ──
+    const sortedLogs = [...logs].sort((a,b) => (b.startedAt||0) - (a.startedAt||0));
+    const courseColTotals = {};
+    courses.forEach(c => { courseColTotals[c.id] = 0; });
 
-    let dHead = `<tr><th style="position:sticky;left:0;background:#fff;z-index:1;">방역자</th><th>조</th>` +
-      dates.map(ds => `<th style="font-size:10px;white-space:nowrap;writing-mode:horizontal-tb;padding:3px 4px;">${shortDate(ds)}</th>`).join('') +
-      '<th>합계</th></tr>';
+    const S = 'font-size:11px;padding:2px 4px;white-space:nowrap;';  // 작고 한 줄
+    let dHead = `<tr><th style="${S}">일자</th><th style="${S}">방역자</th><th style="${S}">보조자</th><th style="${S}">조</th>` + courses.map(c =>
+      `<th style="${S}background:${c.color};color:#fff;">${c.label}${__showDetail && c.detail ? ' ('+c.detail+')' : ''}</th>`
+    ).join('') + `<th style="${S}">총계</th></tr>`;
     let dBody = '';
-    const dateColTotals = {};
-    dates.forEach(ds => { dateColTotals[ds] = 0; });
-    let grandTotal = 0;
-    const sortedDrivers = Object.entries(driverMap).sort((a,b) => b[1].total - a[1].total);
-    for (const [driver, info] of sortedDrivers) {
-      dBody += `<tr><td style="white-space:nowrap;font-weight:600;position:sticky;left:0;background:#fff;z-index:1;">${driver}</td><td style="font-size:11px;color:#666;">${info.team}</td>`;
-      for (const ds of dates) {
-        const entries = info.dates[ds] || [];
-        if (entries.length === 0) {
-          dBody += '<td></td>';
-        } else {
-          const cell = entries.map(e => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${e.color};margin:0 1px;" title="${e.label}"></span>`).join('');
-          dBody += `<td style="text-align:center;">${cell}</td>`;
-          dateColTotals[ds] += entries.length;
+    for (const log of sortedLogs) {
+      const d = new Date(log.startedAt || 0);
+      const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+      const driver = log.crew?.driver || '-';
+      const assist = log.crew?.assist || '-';
+      let team = '-';
+      if (log.teamId) {
+        team = getTeam(data, log.teamId)?.name || '-';
+      } else if (driver !== '-') {
+        const driverMember = (data.members || []).find(m => (m.name||'').trim() === driver.trim());
+        if (driverMember) {
+          const found = (data.teams || []).find(t =>
+            t.leaderId === driverMember.id || t.viceLeaderId === driverMember.id || (t.memberIds || []).includes(driverMember.id)
+          );
+          if (found) team = found.name;
         }
       }
-      dBody += `<td style="font-weight:700;text-align:center;">${info.total}</td></tr>`;
-      grandTotal += info.total;
+      let row = `<tr><td style="${S}">${dateStr}</td><td style="${S}">${driver}</td><td style="${S}">${assist}</td><td style="${S}">${team}</td>`;
+      let rowTotal = 0;
+      for (const c of courses) {
+        if (log.courseId === c.id) {
+          row += `<td style="${S}background:${c.color}22;font-weight:700;text-align:center;">1</td>`;
+          courseColTotals[c.id]++;
+          rowTotal++;
+        } else {
+          row += `<td style="${S}"></td>`;
+        }
+      }
+      row += `<td style="${S}font-weight:700;text-align:center;">${rowTotal}</td>`;
+      dBody += row + '</tr>';
     }
     // 합계 행
-    let dFoot = `<tr style="background:#f0f0f0;font-weight:700;"><td style="position:sticky;left:0;background:#f0f0f0;z-index:1;">합계</td><td></td>`;
-    for (const ds of dates) {
-      dFoot += `<td style="text-align:center;font-size:11px;">${dateColTotals[ds] || ''}</td>`;
+    const grandTotal = Object.values(courseColTotals).reduce((s,v) => s+v, 0);
+    let dFoot = `<tr style="background:#f0f0f0;font-weight:700;">
+      <td colspan="4" style="${S}text-align:center;">합계</td>`;
+    for (const c of courses) {
+      dFoot += `<td style="${S}text-align:center;">${courseColTotals[c.id]}</td>`;
     }
-    dFoot += `<td style="text-align:center;">${grandTotal}</td></tr>`;
-    // 범례
-    const legend = '<div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;font-size:11px;">' +
-      courses.map(c => `<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.color};margin-right:3px;"></span>${c.label}${__showDetail && c.detail ? ' ('+c.detail+')' : ''}</span>`).join('') + '</div>';
+    dFoot += `<td style="${S}text-align:center;">${grandTotal}</td></tr>`;
     document.getElementById('daily_' + uid).innerHTML = dHead + (dBody || '<tr><td colspan="99" class="empty">기록 없음</td></tr>') + dFoot;
-    // 범례 삽입
-    const legendEl = document.createElement('div');
-    legendEl.innerHTML = legend;
-    document.getElementById('daily_' + uid).parentElement.appendChild(legendEl);
 
     // ── 회원 × 코스 표 (금액 포함) ──
     const sortedAll = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]);
