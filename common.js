@@ -552,7 +552,10 @@ async function adminSignIn(email, password) {
 }
 
 async function adminSignOut() {
+  localStorage.removeItem('lastAdminId');
   await fbAuth.signOut();
+  // 익명 로그인 후 이동 (DB 접근 권한 유지, permission_denied 방지)
+  try { await fbAuth.signInAnonymously(); } catch(e) {}
   location.href = 'index.html';
 }
 
