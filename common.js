@@ -1011,17 +1011,70 @@ function formatEtaMin(min) {
 }
 
 // ───────── 마커/화살표 ─────────
-function numberedMarkerImage(num, color, dim) {
+// 줌 레벨별 마커 스케일 (1=가까움, 14=멀리)
+function getMarkerScale(level) {
+  if (level <= 3) return 1.0;
+  if (level <= 5) return 0.8;
+  if (level <= 7) return 0.6;
+  return 0.45;
+}
+
+function numberedMarkerImage(num, color, dim, scale) {
+  const s = scale || 1.0;
+  const w = Math.round(22 * s), h = Math.round(28 * s);
   const fill = dim ? '#ccc' : color;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="28" viewBox="0 0 22 28">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 22 28">
     <path d="M11 0 C5 0 0 5 0 11 C0 18 11 28 11 28 C11 28 22 18 22 11 C22 5 17 0 11 0 Z" fill="${fill}" stroke="white" stroke-width="1.5"/>
     <text x="11" y="15" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="white" text-anchor="middle">${num}</text>
   </svg>`;
   return new kakao.maps.MarkerImage(
     'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-    new kakao.maps.Size(22, 28),
-    { offset: new kakao.maps.Point(11, 28) }
+    new kakao.maps.Size(w, h),
+    { offset: new kakao.maps.Point(Math.round(w/2), h) }
   );
+}
+
+function scaledCircleMarkerImage(svgContent, scale) {
+  const s = scale || 1.0;
+  const sz = Math.round(28 * s);
+  // svgContent의 width/height를 교체
+  const scaled = svgContent.replace(/width="\d+"/, `width="${sz}"`).replace(/height="\d+"/, `height="${sz}"`);
+  return new kakao.maps.MarkerImage(
+    'data:image/svg+xml;utf8,' + encodeURIComponent(scaled),
+    new kakao.maps.Size(sz, sz),
+    { offset: new kakao.maps.Point(Math.round(sz/2), Math.round(sz/2)) }
+  );
+}
+
+// 마커에 메타 저장 후 줌 변경 시 자동 리스케일
+// marker.__markerMeta = { type:'numbered', num, color, dim }
+//                     | { type:'circle', svg }
+//                     | { type:'pin', svg, baseW, baseH }
+function setupMarkerZoomScale(map, getMarkers) {
+  let lastScale = getMarkerScale(map.getLevel());
+  kakao.maps.event.addListener(map, 'zoom_changed', () => {
+    const scale = getMarkerScale(map.getLevel());
+    if (scale === lastScale) return;
+    lastScale = scale;
+    const markers = getMarkers();
+    markers.forEach(m => {
+      if (!m || !m.__markerMeta) return;
+      const meta = m.__markerMeta;
+      if (meta.type === 'numbered') {
+        m.setImage(numberedMarkerImage(meta.num, meta.color, meta.dim, scale));
+      } else if (meta.type === 'circle') {
+        m.setImage(scaledCircleMarkerImage(meta.svg, scale));
+      } else if (meta.type === 'pin') {
+        const w = Math.round(meta.baseW * scale), h = Math.round(meta.baseH * scale);
+        const svg = meta.svg.replace(/width="\d+"/, `width="${w}"`).replace(/height="\d+"/, `height="${h}"`);
+        m.setImage(new kakao.maps.MarkerImage(
+          'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+          new kakao.maps.Size(w, h),
+          { offset: new kakao.maps.Point(Math.round(w/2), h) }
+        ));
+      }
+    });
+  });
 }
 
 function arrowMarker(map, fromPos, toPos, color) {

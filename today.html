@@ -354,6 +354,8 @@ function initMap() {
     }
     isUserInteracting = false;
   });
+  // 줌 레벨별 마커 크기 자동 조절
+  setupMarkerZoomScale(map, () => anchorMarkers);
 }
 
 let followPauseUntil = 0;
@@ -441,15 +443,17 @@ function previewCourse(eventId, courseId) {
   const path = [];
   const bounds = new kakao.maps.LatLngBounds();
 
+  const __pvScale = getMarkerScale(map.getLevel());
   anchors.forEach((a, i) => {
     const pos = new kakao.maps.LatLng(a.lat, a.lng);
     bounds.extend(pos); path.push(pos);
     const marker = new kakao.maps.Marker({
       position: pos, map,
       title: `${i+1}. ${a.name}`,
-      image: numberedMarkerImage(i+1, course.color, false),
+      image: numberedMarkerImage(i+1, course.color, false, __pvScale),
       zIndex: 10
     });
+    marker.__markerMeta = { type:'numbered', num:i+1, color:course.color, dim:false };
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:10px;font-size:12px;max-width:240px;">
         <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')}</div>
@@ -477,9 +481,10 @@ function previewCourse(eventId, courseId) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#f1c40f" stroke="white" stroke-width="2"/><path d="M11 9c-.5 0-1 .4-1 1 0 4 3 7 7 7 .6 0 1-.4 1-1v-2c0-.5-.4-1-1-1l-2 .3c-.4-.6-.8-1-1.3-1.3l.3-2c0-.6-.4-1-1-1H11z" fill="white"/></svg>`;
     const m = new kakao.maps.Marker({
       position: new kakao.maps.LatLng(c.lat, c.lng), map,
-      image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(28,28), {offset:new kakao.maps.Point(14,14)}),
+      image: scaledCircleMarkerImage(svg, __pvScale),
       title: '[민원] ' + (c.phone||''), zIndex: 8
     });
+    m.__markerMeta = { type:'circle', svg };
     const phoneTel = (c.phone||'').replace(/[^0-9+]/g,'');
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:10px;font-size:12px;max-width:240px;"><div style="font-weight:700;color:#b7950b;margin-bottom:4px;">📞 민원</div><div style="color:#444;">${(c.content||'').replace(/</g,'&lt;')}</div>${c.phone ? '<div style="margin-top:6px;"><a href="tel:'+phoneTel+'" style="color:#27ae60;">📞 '+c.phone+'</a></div>' : ''}</div>`
@@ -493,9 +498,10 @@ function previewCourse(eventId, courseId) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#e67e22" stroke="white" stroke-width="2"/><text x="14" y="19" text-anchor="middle" font-size="16" fill="white">📌</text></svg>`;
     const m = new kakao.maps.Marker({
       position: new kakao.maps.LatLng(r.lat, r.lng), map,
-      image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(28,28), {offset:new kakao.maps.Point(14,14)}),
+      image: scaledCircleMarkerImage(svg, __pvScale),
       title: '[요청] ' + (r.name||''), zIndex: 5
     });
+    m.__markerMeta = { type:'circle', svg };
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:8px;font-size:12px;max-width:220px;"><div style="font-weight:700;color:#e67e22;">📌 거점요청</div><div>${(r.name||'').replace(/</g,'&lt;')}</div>${r.memo ? '<div style="color:#888;">'+r.memo.replace(/</g,'&lt;')+'</div>' : ''}</div>`
     });
@@ -515,9 +521,10 @@ function previewCourse(eventId, courseId) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#e74c3c" stroke="white" stroke-width="2"/><path d="M5 14a9 9 0 0118 0 9 9 0 01-18 0zm3.5-6.5l13 13" stroke="white" stroke-width="2.5" fill="none"/></svg>`;
     const m = new kakao.maps.Marker({
       position: pos, map,
-      image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(28,28), {offset:new kakao.maps.Point(14,14)}),
+      image: scaledCircleMarkerImage(svg, __pvScale),
       title: '[방역금지] ' + (z.name||''), zIndex: 7
     });
+    m.__markerMeta = { type:'circle', svg };
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:8px;font-size:12px;max-width:220px;"><div style="font-weight:700;color:#e74c3c;">⛔ 방역 금지</div><div>${(z.name||'').replace(/</g,'&lt;')}</div>${z.reason ? '<div style="color:#888;">'+z.reason.replace(/</g,'&lt;')+'</div>' : ''}<div style="font-size:11px;color:#aaa;">반경 ${radius}m</div></div>`
     });
@@ -1219,12 +1226,14 @@ function renderMapForSession() {
     const pos = new kakao.maps.LatLng(a.lat, a.lng);
     bounds.extend(pos); path.push(pos);
     const isDone = done.has(a.id);
+    const scale = getMarkerScale(map.getLevel());
     const marker = new kakao.maps.Marker({
       position: pos, map,
       title: `${i+1}. ${a.name}`,
-      image: numberedMarkerImage(i+1, course.color, isDone),
+      image: numberedMarkerImage(i+1, course.color, isDone, scale),
       zIndex: 10
     });
+    marker.__markerMeta = { type:'numbered', num:i+1, color:course.color, dim:isDone };
     // 이장님 정보 가져오기
     const villageHeads = (a.villageHeadIds || [])
       .map(mid => (data.members || []).find(m => m.id === mid))
@@ -1275,21 +1284,19 @@ function renderMapForSession() {
   }
 
   // 요청 마커 (주황 별)
+  const __zScale = getMarkerScale(map.getLevel());
   const reqs = (data.requests || []).filter(r => r.courseId === currentSession.courseId && r.status === 'pending');
   reqs.forEach(r => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22">
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 22 22">
       <path d="M11 1 L13.5 8 L21 8 L15 13 L17 21 L11 16 L5 21 L7 13 L1 8 L8.5 8 Z" fill="#e67e22" stroke="white" stroke-width="1.5" stroke-linejoin="round"/>
     </svg>`;
     const m = new kakao.maps.Marker({
       position: new kakao.maps.LatLng(r.lat, r.lng), map,
-      image: new kakao.maps.MarkerImage(
-        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-        new kakao.maps.Size(22, 22),
-        { offset: new kakao.maps.Point(11, 11) }
-      ),
+      image: scaledCircleMarkerImage(svg, __zScale),
       title: `[요청] ${r.name}`,
       zIndex: 5
     });
+    m.__markerMeta = { type:'circle', svg };
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:4px 8px;font-size:12px;"><b>[요청] ${r.name}</b><br>${r.memo || ''}</div>`
     });
@@ -1312,14 +1319,11 @@ function renderMapForSession() {
     </svg>`;
     const m = new kakao.maps.Marker({
       position: new kakao.maps.LatLng(c.lat, c.lng), map,
-      image: new kakao.maps.MarkerImage(
-        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-        new kakao.maps.Size(28, 28),
-        { offset: new kakao.maps.Point(14, 14) }
-      ),
+      image: scaledCircleMarkerImage(svg, __zScale),
       title: '[민원] ' + (c.phone || ''),
       zIndex: 8
     });
+    m.__markerMeta = { type:'circle', svg };
     const phoneTel = (c.phone || '').replace(/[^0-9+]/g, '');
     const phoneLink = c.phone
       ? `<div style="margin-top:8px;font-size:11px;text-align:right;"><a href="tel:${phoneTel}" style="color:#27ae60;text-decoration:none;">📞 ${c.phone}</a></div>`
@@ -1357,14 +1361,11 @@ function renderMapForSession() {
     </svg>`;
     const m = new kakao.maps.Marker({
       position: pos, map,
-      image: new kakao.maps.MarkerImage(
-        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-        new kakao.maps.Size(28, 28),
-        { offset: new kakao.maps.Point(14, 14) }
-      ),
+      image: scaledCircleMarkerImage(svg, __zScale),
       title: '[방역불가] ' + (z.name || ''),
       zIndex: 7
     });
+    m.__markerMeta = { type:'circle', svg };
     const iw = new kakao.maps.InfoWindow({
       content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
         <div style="font-weight:700;color:#e74c3c;margin-bottom:4px;">⛔ 방역 금지</div>
