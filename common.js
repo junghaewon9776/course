@@ -1223,10 +1223,17 @@ function arrowMarker(map, fromPos, toPos, color) {
 
 // ───────── 카카오내비 ─────────
 function openKakaoNavi(name, lat, lng) {
+  const webUrl = `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`;
   const ua = navigator.userAgent;
   if (/iPhone|iPad|Android/.test(ua)) {
+    // 앱 스킴 시도 → 일정 시간 내 전환 안 되면 웹으로 폴백
+    const start = Date.now();
+    const timer = setTimeout(() => {
+      if (Date.now() - start < 2000) window.open(webUrl);
+    }, 1200);
+    window.addEventListener('pagehide', () => clearTimeout(timer), { once: true });
     location.href = `kakaomap://route?ep=${lat},${lng}&by=CAR`;
   } else {
-    window.open(`https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`);
+    window.open(webUrl);
   }
 }
