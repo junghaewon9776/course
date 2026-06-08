@@ -48,7 +48,8 @@
     <a href="index.html">홈</a>
     <a href="today.html">오늘운영</a>
     <a href="inquiry.html" class="active">문의·민원</a>
-    <a href="#" onclick="doLogout();return false;">로그아웃</a>
+    <a href="#" id="loginLink" onclick="showLoginModal();return false;">로그인</a>
+    <a href="#" id="logoutLink" onclick="doLogout();return false;" style="display:none;">로그아웃</a>
   </nav>
 </header>
 
@@ -134,21 +135,33 @@ let selectedCat = '';
 let selectedSub = '';
 
 // ────── 초기화 ──────
-ensureAnonAuth().then(() => {
-  initFirebaseSync();
-  onDataReady(() => {
-    const role = getMyRole();
-    if (role === 'admin' || role === 'super') document.body.classList.add('is-admin');
-    renderCategoryBtns();
-    renderMyInquiries();
-    renderAdminBoard();
-    renderCategoryEditor();
-  });
-});
-window.onDataChanged = () => {
+function refreshInquiryPage() {
+  const role = getMyRole();
+  const isAdmin = role === 'admin' || role === 'super';
+  document.body.classList.toggle('is-admin', isAdmin);
+  // 로그인/로그아웃 링크 전환
+  const u = fbAuth.currentUser;
+  const loggedIn = u && !u.isAnonymous;
+  document.getElementById('loginLink').style.display = loggedIn ? 'none' : '';
+  document.getElementById('logoutLink').style.display = loggedIn ? '' : 'none';
+  renderCategoryBtns();
   renderMyInquiries();
   renderAdminBoard();
+  renderCategoryEditor();
+}
+
+// 로그인 성공 콜백 (common.js showLoginModal에서 호출됨)
+window.onAuthSuccess = () => {
+  onDataReady(refreshInquiryPage);
 };
+window.onDataChanged = () => {
+  refreshInquiryPage();
+};
+
+ensureAnonAuth().then(() => {
+  initFirebaseSync();
+  onDataReady(refreshInquiryPage);
+});
 
 // ────── 분류 가져오기 (DB 우선, 없으면 기본) ──────
 function getCategories() {
