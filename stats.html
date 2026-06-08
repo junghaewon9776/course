@@ -170,6 +170,7 @@ function getFilteredLogs() {
   }
   const eventFilter = document.getElementById('eventFilter')?.value || '';
   return (data.logs || []).filter(l => {
+    if (l.hidden) return false;
     const t = l.startedAt || 0;
     if (t < from || t > to) return false;
     if (!l.finishedAt) return false;
