@@ -1220,30 +1220,30 @@ function exportTeamsExcel() {
     // 조장
     if (t.leader) {
       const m = getMem(t.leader);
-      rows.push({ 조: t.name, 역할: '조장', 이름: m?.name || t.leader, 연락처: m?.phone || '', 차량: t.vehicle || '' });
+      rows.push({ 조: t.name, 역할: '조장', 이름: m?.name || t.leader, 연락처: m?.phone || '' });
     }
     // 부조장
     (t.subLeaders || []).forEach(id => {
       const m = getMem(id);
-      rows.push({ 조: t.name, 역할: '부조장', 이름: m?.name || id, 연락처: m?.phone || '', 차량: '' });
+      rows.push({ 조: t.name, 역할: '부조장', 이름: m?.name || id, 연락처: m?.phone || '' });
     });
     // 고정 조원
     (t.fixed || []).forEach(id => {
       const m = getMem(id);
-      rows.push({ 조: t.name, 역할: '고정', 이름: m?.name || id, 연락처: m?.phone || '', 차량: '' });
+      rows.push({ 조: t.name, 역할: '고정', 이름: m?.name || id, 연락처: m?.phone || '' });
     });
     // 일반 조원
     (t.members || []).forEach(id => {
       if (id === t.leader || (t.subLeaders || []).includes(id) || (t.fixed || []).includes(id)) return;
       const m = getMem(id);
-      rows.push({ 조: t.name, 역할: '조원', 이름: m?.name || id, 연락처: m?.phone || '', 차량: '' });
+      rows.push({ 조: t.name, 역할: '조원', 이름: m?.name || id, 연락처: m?.phone || '' });
     });
     if (!t.leader && !(t.members || []).length) {
-      rows.push({ 조: t.name, 역할: '', 이름: '', 연락처: '', 차량: t.vehicle || '' });
+      rows.push({ 조: t.name, 역할: '', 이름: '', 연락처: '' });
     }
   });
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 15 }, { wch: 15 }];
+  ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 15 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '조편성');
   XLSX.writeFile(wb, `조편성-${todayStr()}.xlsx`);
@@ -1273,12 +1273,10 @@ function importTeamsExcel(e) {
       rows.forEach(r => {
         const teamName = String(r['조'] || '').trim();
         if (!teamName) return;
-        if (!teamMap[teamName]) teamMap[teamName] = { name: teamName, vehicle: '', leader: null, subLeaders: [], fixed: [], members: [] };
+        if (!teamMap[teamName]) teamMap[teamName] = { name: teamName, leader: null, subLeaders: [], fixed: [], members: [] };
         const t = teamMap[teamName];
         const role = String(r['역할'] || '').trim();
         const name = String(r['이름'] || '').trim();
-        const vehicle = String(r['차량'] || '').trim();
-        if (vehicle) t.vehicle = vehicle;
         if (!name) return;
         const m = findMember(name);
         const id = m ? m.id : null;
@@ -1299,13 +1297,12 @@ function importTeamsExcel(e) {
           existing.subLeaders = imp.subLeaders.length ? imp.subLeaders : (existing.subLeaders || []);
           existing.fixed = imp.fixed.length ? imp.fixed : (existing.fixed || []);
           existing.members = imp.members;
-          if (imp.vehicle) existing.vehicle = imp.vehicle;
           updated++;
         } else {
           data.teams.push({
             id: uid(), name,
             leader: imp.leader, subLeaders: imp.subLeaders, fixed: imp.fixed,
-            members: imp.members, vehicle: imp.vehicle
+            members: imp.members
           });
           created++;
         }
