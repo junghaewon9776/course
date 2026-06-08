@@ -1247,7 +1247,7 @@ function renderRequests() {
       <div class="list-item" style="flex-direction:column;align-items:stretch;border-left:3px solid ${isPending ? '#e67e22' : '#bbb'};${isPending ? '' : 'opacity:0.6;'}">
         <div><b>${r.name}</b> ${statusTag} <span class="sub">- ${event?.name || '?'} ${course?.name || '?'}</span></div>
         <div class="sub" style="margin:4px 0;">
-          📍 ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}<br>
+          📍 ${r.address ? r.address + '<br>(' + r.lat.toFixed(5) + ', ' + r.lng.toFixed(5) + ')' : r.lat.toFixed(5) + ', ' + r.lng.toFixed(5)}<br>
           ${r.memo ? '📝 ' + r.memo + '<br>' : ''}
           요청자(운전): ${r.requestedBy || '-'}${r.requestedAssist ? ' · 보조: ' + r.requestedAssist : ''}<br>
           ${when}
@@ -1766,7 +1766,7 @@ function renderComplaints() {
           </div>
         </div>
         <div class="sub" style="margin:4px 0;white-space:pre-wrap;">${c.content || ''}</div>
-        <div class="sub">📍 ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}${when ? ' · 🕐 ' + when : ''}${c.createdBy ? ' · 👤 ' + c.createdBy : ''}${c.reportedBy ? ' · 접수: ' + c.reportedBy : ''}</div>
+        <div class="sub">📍 ${c.address ? c.address + ' (' + c.lat.toFixed(5) + ', ' + c.lng.toFixed(5) + ')' : c.lat.toFixed(5) + ', ' + c.lng.toFixed(5)}${when ? ' · 🕐 ' + when : ''}${c.createdBy ? ' · 👤 ' + c.createdBy : ''}${c.reportedBy ? ' · 접수: ' + c.reportedBy : ''}</div>
         <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;align-items:center;">
           <select onchange="assignComplaintCourse('${c.id}',this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;max-width:140px;">
             <option value="">코스 미지정</option>
