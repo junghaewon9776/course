@@ -2150,16 +2150,50 @@ async function requestNewAnchor() {
   const loc = await openLocationPicker(currentPos.lat, currentPos.lng);
   if (!loc) return;
 
-  const name = prompt('추가 요청할 거점 이름\n(예: 새로운 어린이집, 골목 입구)');
-  if (!name) return;
-  const memo = prompt('메모 / 사유 (선택)\n(예: 다음 방역에 추가 필요)', '') || '';
+  let modal = document.getElementById('anchorReqModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'anchorReqModal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.dataset.lat = loc.lat;
+  modal.dataset.lng = loc.lng;
+  modal.dataset.address = loc.address || '';
+  const addrDisplay = loc.address || `${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}`;
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:400px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <h3 style="margin:0 0 14px;color:#e67e22;">📌 거점 추가 요청</h3>
+      <div style="margin-bottom:10px;padding:8px;background:#fef9f0;border-radius:6px;font-size:12px;color:#2c3e50;">
+        📍 ${addrDisplay}
+      </div>
+      <label style="font-size:13px;font-weight:700;">거점 이름 <span style="color:#e74c3c;">*</span></label>
+      <input id="arqName" type="text" placeholder="예: 새로운 어린이집, 골목 입구" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <label style="font-size:13px;font-weight:700;">메모 / 사유</label>
+      <input id="arqMemo" type="text" placeholder="예: 다음 방역에 추가 필요 (선택)" style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <div style="display:flex;gap:8px;">
+        <button onclick="submitAnchorRequest()" style="flex:1;background:#e67e22;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">요청</button>
+        <button onclick="document.getElementById('anchorReqModal').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;">취소</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('arqName').focus();
+}
+
+function submitAnchorRequest() {
+  const name = (document.getElementById('arqName').value || '').trim();
+  if (!name) { alert('거점 이름을 입력하세요'); document.getElementById('arqName').focus(); return; }
+  const memo = (document.getElementById('arqMemo').value || '').trim();
+  const modal = document.getElementById('anchorReqModal');
+  const lat = parseFloat(modal.dataset.lat);
+  const lng = parseFloat(modal.dataset.lng);
+  const address = modal.dataset.address || '';
 
   const data = loadData();
   if (!Array.isArray(data.requests)) data.requests = [];
   const req = {
     id: uid(),
-    lat: loc.lat, lng: loc.lng,
-    address: loc.address || '',
+    lat, lng, address,
     name, memo,
     eventId: currentSession.eventId,
     courseId: currentSession.courseId,
@@ -2175,10 +2209,11 @@ async function requestNewAnchor() {
     alert('저장 실패: ' + (e.message || e));
     return;
   }
+  modal.remove();
   renderMapForSession();
-  const addrLine = loc.address ? `\n주소: ${loc.address}` : '';
-  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}${addrLine}\n위치: ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
-  alert('관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
+  const addrLine = address ? `\n주소: ${address}` : '';
+  sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name}\n메모: ${memo || '-'}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
+  alert('✅ 관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
 }
 
 function resolveComplaintFromMap(id) {
