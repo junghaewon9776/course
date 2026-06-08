@@ -74,21 +74,6 @@
   </div>
 
   <!-- 민원 / 거점요청 내역 -->
-  <div class="card" style="border-left:4px solid #f1c40f;">
-    <div class="flex-between" style="cursor:pointer;user-select:none;" onclick="toggleMonComplaintCard()">
-      <h2>📞 민원 내역 <span id="monComplaintCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
-      <button id="monComplaintToggle" class="small" onclick="event.stopPropagation();toggleMonComplaintCard()" style="background:#f1c40f;color:#000;">▼ 접기</button>
-    </div>
-    <div id="monComplaintBody" style="max-height:300px;overflow-y:auto;"></div>
-  </div>
-  <div class="card" style="border-left:4px solid #e67e22;">
-    <div class="flex-between" style="cursor:pointer;user-select:none;" onclick="toggleMonRequestCard()">
-      <h2>📌 거점요청 내역 <span id="monRequestCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
-      <button id="monRequestToggle" class="small" onclick="event.stopPropagation();toggleMonRequestCard()" style="background:#e67e22;color:#fff;">▼ 접기</button>
-    </div>
-    <div id="monRequestBody" style="max-height:300px;overflow-y:auto;"></div>
-  </div>
-
   <!-- 공개 모니터링 링크 (관리/공유용) -->
   <div class="card" style="border-left:4px solid #9b59b6;">
     <h2>🌐 공개 모니터링 링크</h2>
@@ -164,6 +149,22 @@
         <div id="logList"></div>
       </div>
     </div>
+  </div>
+
+  <!-- 민원/거점요청: 지도 아래로 이동 -->
+  <div class="card" style="border-left:4px solid #f1c40f;">
+    <div class="flex-between" style="cursor:pointer;user-select:none;" onclick="toggleMonComplaintCard()">
+      <h2>📞 민원 내역 <span id="monComplaintCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
+      <button id="monComplaintToggle" class="small" onclick="event.stopPropagation();toggleMonComplaintCard()" style="background:#f1c40f;color:#000;">▼ 접기</button>
+    </div>
+    <div id="monComplaintBody" style="max-height:300px;overflow-y:auto;"></div>
+  </div>
+  <div class="card" style="border-left:4px solid #e67e22;">
+    <div class="flex-between" style="cursor:pointer;user-select:none;" onclick="toggleMonRequestCard()">
+      <h2>📌 거점요청 내역 <span id="monRequestCount" class="muted" style="font-size:13px;font-weight:400;"></span></h2>
+      <button id="monRequestToggle" class="small" onclick="event.stopPropagation();toggleMonRequestCard()" style="background:#e67e22;color:#fff;">▼ 접기</button>
+    </div>
+    <div id="monRequestBody" style="max-height:300px;overflow-y:auto;"></div>
   </div>
 </div>
 
