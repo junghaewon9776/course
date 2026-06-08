@@ -291,7 +291,9 @@ function render() {
         <div class="col" style="flex:1;min-width:320px;">
           <div class="card">
             <h2>${labels.title}</h2>
-            <div id="mcWrap_${uid}" style="position:relative;"><canvas id="mc_${uid}"></canvas></div>
+            <div id="mcScroll_${uid}" style="max-height:500px;overflow-y:auto;">
+              <div id="mcWrap_${uid}" style="position:relative;"><canvas id="mc_${uid}"></canvas></div>
+            </div>
           </div>
         </div>
         <div class="col" style="flex:1;min-width:320px;">
@@ -392,15 +394,11 @@ function render() {
     tfoot += '</tr>';
     document.getElementById('tb_' + uid).innerHTML = thead + tbody + tfoot;
 
-    // 회원별 누적 막대 — 8명 초과 시 가로 막대로 전환
+    // 회원별 누적 막대 — 8명 초과 시 가로 막대 + 스크롤
     const sortedNames = sortedAll.map(x => x[0]);
     const useHorizontal = sortedNames.length > 8;
     const mcWrap = document.getElementById('mcWrap_' + uid);
-    if (useHorizontal) {
-      mcWrap.style.height = Math.max(300, sortedNames.length * 36) + 'px';
-    } else {
-      mcWrap.style.height = '400px';
-    }
+    mcWrap.style.height = useHorizontal ? Math.max(300, sortedNames.length * 36) + 'px' : '400px';
     const mc = new Chart(document.getElementById('mc_' + uid), {
       type: 'bar',
       data: {
