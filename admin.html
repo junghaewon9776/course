@@ -1404,17 +1404,19 @@ function renderCourses() {
     return;
   }
   el.innerHTML = courses.map(c => {
-    const vis = isCourseVisible(c.id);
-    const featured = !!c.featured;
+    const anchorCnt = (data.anchors || []).filter(a => a.courseId === c.id).length;
     return `
-    <div class="list-item">
-      <button class="small ${vis ? '' : 'gray'}" onclick="toggleCourseVisible('${c.id}')" title="지도 표시">${vis ? '👁' : '🚫'}</button>
-      <button class="small ${featured ? 'success' : 'gray'}" onclick="toggleCourseFeatured('${c.id}')" title="대표 코스">${featured ? '⭐' : '☆'}</button>
-      <div class="info">
-        <span class="tag" style="background:${c.color}">${c.name}</span>
-        ${c.detail ? `<span class="sub" style="color:#555;">${c.detail}</span>` : ''}
-        <span class="sub">${(data.anchors || []).filter(a => a.courseId === c.id).length}개 거점</span>
+    <div class="list-item" style="padding:10px;">
+      <div class="info" style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${c.color};flex-shrink:0;border:1px solid rgba(0,0,0,.1);"></span>
+          <span style="font-weight:700;font-size:14px;">${c.name}</span>
+          ${c.detail ? `<span style="color:#666;font-size:13px;">(${c.detail})</span>` : ''}
+          ${c.featured ? '<span style="color:#f39c12;font-size:13px;">⭐</span>' : ''}
+        </div>
+        <div class="sub" style="margin-top:2px;margin-left:20px;">${anchorCnt}개 거점</div>
       </div>
+      <input type="color" value="${c.color}" style="width:30px;height:30px;padding:0;border:1px solid #ddd;border-radius:6px;cursor:pointer;" onchange="setCourseColor('${c.id}',this.value)">
       <button class="small" onclick="openCourseEditModal('${c.id}')">수정</button>
       <button class="small danger" onclick="deleteCourse('${c.id}')">삭제</button>
     </div>
