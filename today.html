@@ -384,16 +384,13 @@ function renderAssignments() {
   el.innerHTML = `
     <h3 style="margin:0 0 8px;color:#555;">코스를 선택하세요</h3>
   ` + items.map(({event, course, anchorCount}) => `
-      <div class="anchor-row" style="cursor:default;">
-        <div class="num" style="background:${course.color}">${course.name[0]}</div>
-        <div style="flex:1;">
-          <div><b>${event.name}</b> · <span style="color:${course.color}">${course.name}</span></div>
+      <div onclick="previewCourse('${event.id}','${course.id}')" style="display:flex;align-items:center;gap:10px;padding:12px 10px;border-bottom:1px solid #eee;cursor:pointer;">
+        <div style="background:${course.color};color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex:none;">${course.name[0]}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;">${event.name} · <span style="color:${course.color}">${course.name}</span></div>
           <div class="sub">거점 ${anchorCount}개</div>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button onclick="previewCourse('${event.id}','${course.id}')" style="background:#3498db;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">📋 코스보기</button>
-          <button onclick="startCourse('${event.id}','${course.id}')" style="background:#27ae60;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">▶ 코스시작</button>
-        </div>
+        <div style="color:#bbb;font-size:20px;font-weight:700;flex:none;">›</div>
       </div>
     `).join('');
 }
@@ -420,11 +417,11 @@ function previewCourse(eventId, courseId) {
   `;
   if (anchors.length) {
     html += anchors.map((a, i) => `
-      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f0f0f0;">
-        <div style="background:${course.color};color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none;">${i+1}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;">${(a.name||'').replace(/</g,'&lt;')}</div>
-          ${a.memo ? '<div class="sub" style="white-space:pre-wrap;">' + a.memo.replace(/</g,'&lt;') + '</div>' : ''}
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #f0f0f0;">
+        <div style="background:${course.color};color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:10px;flex:none;">${i+1}</div>
+        <div style="flex:1;min-width:0;font-size:13px;">
+          <span style="font-weight:600;">${(a.name||'').replace(/</g,'&lt;')}</span>
+          ${a.memo ? '<span class="sub" style="margin-left:4px;font-size:11px;color:#888;">' + a.memo.replace(/</g,'&lt;') + '</span>' : ''}
         </div>
       </div>
     `).join('');
