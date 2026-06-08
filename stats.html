@@ -80,9 +80,7 @@
     </select>
     <label style="font-size:12px;margin-left:8px;">상세:</label>
     <button id="detailToggle" class="small" onclick="toggleDetail()" style="font-size:12px;">상세 켜기</button>
-    <label style="font-size:12px;margin-left:8px;">단가:</label>
-    <input id="unitPrice" type="number" value="30000" min="0" step="1000" style="width:90px;display:inline-block;font-size:12px;padding:4px 6px;" onchange="render()">
-    <span style="font-size:11px;color:#888;">원</span>
+    <span style="font-size:11px;color:#888;margin-left:8px;">💰 단가는 행사별로 설정</span>
   </div>
 
   <div id="statsContainer"></div>
@@ -128,6 +126,17 @@ function toggleDetail() {
 }
 function detailSuffix(c) {
   return (__showDetail && c.detail) ? ' (' + c.detail + ')' : '';
+}
+
+function saveEventUnitPrice(eventId, val) {
+  const data = loadData();
+  const ev = (data.events || []).find(e => e.id === eventId);
+  if (!ev) return;
+  const num = parseInt(val);
+  if (isNaN(num) || num < 0) { ev.unitPrice = null; }
+  else { ev.unitPrice = num; }
+  saveData(data);
+  render();
 }
 
 function onPeriodChange() {
@@ -263,7 +272,16 @@ function render() {
     const section = document.createElement('div');
     section.innerHTML = `
       <div class="card" style="border-left:4px solid #2c3e50;margin-bottom:6px;">
-        <h2 style="font-size:16px;">📋 ${event.name}</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">
+          <h2 style="font-size:16px;margin:0;">📋 ${event.name}</h2>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <label style="font-size:12px;font-weight:600;color:#555;">💰 단가:</label>
+            <input type="number" id="up_${uid}" value="${event.unitPrice ?? ''}" min="0" step="1000"
+              placeholder="미설정" style="width:90px;font-size:12px;padding:4px 6px;"
+              onchange="saveEventUnitPrice('${event.id}', this.value)">
+            <span style="font-size:11px;color:#888;">원</span>
+          </div>
+        </div>
       </div>
       <div class="card">
         <h2>📅 일자별 운행 기록</h2>
@@ -290,9 +308,10 @@ function render() {
     `;
     container.appendChild(section);
 
-    // 단가
-    const unitPrice = parseInt(document.getElementById('unitPrice')?.value) || 0;
-    const fmtWon = v => v ? '₩' + v.toLocaleString() : '';
+    // 단가 (행사별 저장값)
+    const hasUnitPrice = event.unitPrice != null && event.unitPrice !== '';
+    const unitPrice = hasUnitPrice ? (parseInt(event.unitPrice) || 0) : 0;
+    const fmtWon = v => (v != null) ? '₩' + v.toLocaleString() : '';
 
     // ── 일자별 운행 기록 표 ──
     const sortedLogs = [...logs].sort((a,b) => (b.startedAt||0) - (a.startedAt||0));
@@ -347,7 +366,7 @@ function render() {
 
     // ── 회원 × 코스 표 (금액 포함) ──
     const sortedAll = Object.entries(memberTotals).sort((a,b) => b[1]-a[1]);
-    let thead = `<tr><th>${labels.row}</th>` + courses.map(c => `<th>${c.label}${__showDetail && c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.7;">('+c.detail+')</span>' : ''}</th>`).join('') + '<th>총합</th>' + (unitPrice ? '<th>금액</th>' : '') + '</tr>';
+    let thead = `<tr><th>${labels.row}</th>` + courses.map(c => `<th>${c.label}${__showDetail && c.detail ? '<br><span style="font-weight:400;font-size:10px;opacity:.7;">('+c.detail+')</span>' : ''}</th>`).join('') + '<th>총합</th>' + (hasUnitPrice ? '<th>금액</th>' : '') + '</tr>';
     let tbody = '';
     let allTotal = 0;
     for (const [name, total] of sortedAll) {
@@ -360,7 +379,7 @@ function render() {
         row += `<td class="${v===0?'num-zero':v>=3?'num-high':''}">${v||''}</td>`;
       }
       row += `<td><b>${total}</b></td>`;
-      if (unitPrice) row += `<td style="white-space:nowrap;color:#2c3e50;font-weight:600;">${fmtWon(total * unitPrice)}</td>`;
+      if (hasUnitPrice) row += `<td style="white-space:nowrap;color:#2c3e50;font-weight:600;">${fmtWon(total * unitPrice)}</td>`;
       tbody += row + '</tr>';
     }
     // 합계 행
@@ -369,7 +388,7 @@ function render() {
       tfoot += `<td style="text-align:center;">${courseTotals[c.id] || 0}</td>`;
     }
     tfoot += `<td><b>${allTotal}</b></td>`;
-    if (unitPrice) tfoot += `<td style="white-space:nowrap;color:#c0392b;">${fmtWon(allTotal * unitPrice)}</td>`;
+    if (hasUnitPrice) tfoot += `<td style="white-space:nowrap;color:#c0392b;">${fmtWon(allTotal * unitPrice)}</td>`;
     tfoot += '</tr>';
     document.getElementById('tb_' + uid).innerHTML = thead + tbody + tfoot;
 
