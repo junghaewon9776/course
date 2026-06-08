@@ -64,6 +64,7 @@
             <button onclick="saveTeamSnapshot()">💾 현재 팀 저장</button>
             <button onclick="exportTeamsExcel()" class="small" style="background:#27ae60;color:#fff;">⬇ 조 내보내기</button>
             <button onclick="document.getElementById('teamUpload').click()" class="small" style="background:#3498db;color:#fff;">📤 조 불러오기</button>
+            <button onclick="rotateTeams()" class="small" style="background:#e67e22;color:#fff;">🔄 조 밀어내기</button>
             <button onclick="resetTeams()" class="gray small">조원 리셋</button>
             <input type="file" id="teamUpload" accept=".xlsx,.xls,.csv" style="display:none" onchange="importTeamsExcel(event)">
           </div>
@@ -1445,6 +1446,18 @@ function renderTeams() {
   const data = loadData();
   const teams = data.teams || [];
   const memberOpts = (data.members || []).map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  // 이미 어느 조에든 배정된 회원 ID 집합
+  const assignedIds = new Set();
+  const reserveIds = new Set(data.reserveMemberIds || []);
+  teams.forEach(t => {
+    if (t.leaderId) assignedIds.add(t.leaderId);
+    if (t.viceLeaderId) assignedIds.add(t.viceLeaderId);
+    (t.memberIds || []).forEach(id => assignedIds.add(id));
+  });
+  // 미배정 회원만 (예비조 포함 제외)
+  const unassignedOpts = (data.members || [])
+    .filter(m => !assignedIds.has(m.id) && !reserveIds.has(m.id))
+    .map(m => `<option value="${m.id}">${m.name}</option>`).join('');
 
   const teamCards = teams.map(t => {
     const fixed = new Set(t.fixedMemberIds || []);
@@ -1519,7 +1532,7 @@ function renderTeams() {
         <div class="admin-only" style="padding:6px;background:#f8f9fa;display:flex;gap:4px;border-top:1px solid #eee;">
           <select id="addToTeam_${t.id}" style="flex:1;font-size:12px;padding:3px;">
             <option value="">조원 추가...</option>
-            ${memberOpts}
+            ${unassignedOpts}
           </select>
           <button class="small" onclick="addToTeam('${t.id}')">+</button>
         </div>
@@ -1561,7 +1574,7 @@ function renderTeams() {
       <div class="admin-only" style="padding:6px;background:#f8f9fa;display:flex;gap:4px;border-top:1px solid #eee;">
         <select id="addToReserve" style="flex:1;font-size:12px;padding:3px;">
           <option value="">예비조 추가...</option>
-          ${memberOpts}
+          ${unassignedOpts}
         </select>
         <button class="small" onclick="addToReserve()">+</button>
       </div>
@@ -1653,6 +1666,7 @@ function moveToTeam(fromTeamId, memberId, toTeamId) {
   if (!fromTeam || !toTeam) return;
   const member = getMember(data, memberId);
   const mName = member?.name || memberId;
+  if (!confirm(`${mName}님을 ${fromTeam.name} → ${toTeam.name}(으)로 이동할까요?`)) return;
   // 원래 조에서 제거
   fromTeam.memberIds = (fromTeam.memberIds || []).filter(id => id !== memberId);
   fromTeam.fixedMemberIds = (fromTeam.fixedMemberIds || []).filter(id => id !== memberId);
@@ -1663,6 +1677,28 @@ function moveToTeam(fromTeamId, memberId, toTeamId) {
   if (!toTeam.memberIds) toTeam.memberIds = [];
   if (!toTeam.memberIds.includes(memberId)) toTeam.memberIds.push(memberId);
   saveData(data);
+}
+
+// 조 밀어내기 — 조원 전체가 다음 조로 순환 이동 (1조→2조→3조→1조)
+function rotateTeams() {
+  const data = loadData();
+  const teams = data.teams || [];
+  if (teams.length < 2) { alert('조가 2개 이상이어야 밀어내기가 가능합니다'); return; }
+  const names = teams.map(t => t.name).join(' → ') + ' → ' + teams[0].name;
+  if (!confirm(`조 밀어내기\n\n조원이 다음 조로 한 칸씩 이동합니다:\n${names}\n\n(조장·부조장은 유지, 조원만 이동)\n\n진행할까요?`)) return;
+  // 각 조의 memberIds + fixedMemberIds를 순환
+  const memberSlots = teams.map(t => ({
+    memberIds: [...(t.memberIds || [])],
+    fixedMemberIds: [...(t.fixedMemberIds || [])]
+  }));
+  // 한 칸씩 밀기: 마지막 조 조원 → 첫 번째 조로
+  for (let i = 0; i < teams.length; i++) {
+    const src = (i + teams.length - 1) % teams.length; // 이전 조에서 가져옴
+    teams[i].memberIds = memberSlots[src].memberIds;
+    teams[i].fixedMemberIds = memberSlots[src].fixedMemberIds;
+  }
+  saveData(data);
+  alert('✅ 조 밀어내기 완료!');
 }
 
 function togglePinMember(teamId, memberId) {
