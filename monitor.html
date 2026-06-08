@@ -1011,7 +1011,8 @@ function renderLive(live) {
         cont.dataset.hocha = hochaPart;
       }
     }
-    items.push({ key, sess, event, course, driver, color });
+    const team = getTeam(data, sess.teamId);
+    items.push({ key, sess, event, course, team, driver, color });
   }
   for (const key of Object.keys(liveMarkers)) {
     if (!activeKeys.has(key)) {
@@ -1073,8 +1074,9 @@ function renderLive(live) {
           <div onclick="focusLiveMarker('${safeKey}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
             ${leftBadge}
             <div style="flex:1;min-width:0;">
-              <div class="name" style="font-weight:600;color:#2c3e50;">${(it.event && it.course) ? escapeHtml(it.event.name) + ' · ' + escapeHtml(it.course.name) + ' · ' + escapeHtml(it.driver) : escapeHtml(it.driver)}</div>
-              <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}${it.sess.crew?.assist ? ' · 보조: ' + escapeHtml(it.sess.crew.assist) : ''}${it.sess.device ? ' · 📱 ' + escapeHtml(it.sess.device) : ''}</div>
+              <div class="name" style="font-weight:600;color:#2c3e50;">${(it.event && it.course) ? escapeHtml(it.event.name) + ' · ' + escapeHtml(it.course.name) : ''}${it.team ? ' · ' + escapeHtml(it.team.name) : ''}</div>
+              <div style="font-size:12px;color:#34495e;">운전 ${escapeHtml(it.driver)}${it.sess.crew?.assist ? ' / 보조 ' + escapeHtml(it.sess.crew.assist) : ''}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}</div>
+              <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${it.sess.device ? ' · 로컬: ' + escapeHtml(it.sess.device) : ''}</div>
             </div>
           </div>
           <div style="display:flex;flex-direction:column;gap:4px;flex:none;">
