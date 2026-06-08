@@ -787,20 +787,18 @@ function showLoginGate() {
       <div style="background:#fff;padding:24px;border-radius:10px;width:340px;max-width:92vw;">
         <h2 style="margin-bottom:8px;color:#2c3e50;">🔐 로그인</h2>
         <p style="font-size:12px;color:#7f8c8d;margin-bottom:14px;line-height:1.5;">
-          간부 <b>이메일</b> 또는 회원 <b>전화번호 + PIN</b>으로 들어올 수 있어요.
+          회원 <b>전화번호 + PIN 4자리</b>로 로그인하세요.
         </p>
-        <label>이메일 또는 전화번호</label>
-        <input id="loginEmail" type="text" autocomplete="username" placeholder="bsp1001@naver.com 또는 010-1234-5678" value="${savedId}" oninput="autoFormatLoginId(this)">
-        <label>비밀번호 또는 PIN</label>
-        <input id="loginPw" type="password" autocomplete="current-password" placeholder="간부:비번 / 회원:PIN" onkeydown="if(event.key==='Enter')doLogin()">
+        <label>전화번호 (- 없이)</label>
+        <input id="loginEmail" type="tel" inputmode="numeric" autocomplete="username" placeholder="01012345678" value="${savedId}" oninput="autoFormatLoginId(this)">
+        <label>PIN (4자리)</label>
+        <input id="loginPw" type="password" inputmode="numeric" maxlength="4" autocomplete="current-password" placeholder="PIN 4자리" onkeydown="if(event.key==='Enter')doLogin()">
         <div id="loginErr" style="color:#e74c3c;font-size:12px;margin-top:6px;min-height:14px;"></div>
         <button onclick="doLogin()" style="width:100%;margin-top:10px;padding:10px;">로그인</button>
         <details style="margin-top:14px;font-size:11px;color:#666;">
-          <summary style="cursor:pointer;color:#3498db;">계정/PIN이 없거나 비번을 모르면?</summary>
+          <summary style="cursor:pointer;color:#3498db;">PIN이 없으면?</summary>
           <div style="padding:8px;background:#f8f9fa;border-radius:5px;margin-top:6px;line-height:1.6;">
-            <b>회원이면:</b> 사무국장에게 PIN 발급 요청 → 전화번호 + 4자리 PIN으로 로그인<br>
-            <b>간부면:</b> super 관리자에게 이메일+초기비번(123456) 발급 요청 → 첫 로그인 후 비번 변경<br>
-            <b>비번 분실:</b> super 관리자에게 비번재설정 메일 요청
+            사무국장에게 PIN 발급 요청 → 전화번호 + 4자리 PIN으로 로그인
           </div>
         </details>
         <div style="margin-top:10px;text-align:center;">
