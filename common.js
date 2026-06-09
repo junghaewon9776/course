@@ -1130,10 +1130,10 @@ function formatEtaMin(min) {
 // ───────── 마커/화살표 ─────────
 // 줌 레벨별 마커 스케일 (1=가까움, 14=멀리)
 function getMarkerScale(level) {
-  if (level <= 3) return 1.0;
-  if (level <= 5) return 0.8;
-  if (level <= 7) return 0.6;
-  return 0.45;
+  if (level <= 3) return 1.0;   // 가까이: 원래 크기
+  if (level <= 5) return 0.65;
+  if (level <= 7) return 0.45;
+  return 0.3;                   // 멀리: 훨씬 작게
 }
 
 function numberedMarkerImage(num, color, dim, scale) {
