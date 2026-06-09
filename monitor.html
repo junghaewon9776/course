@@ -318,6 +318,19 @@ function clearAlwaysOnAnchors() {
   __alwaysOnLines.forEach(l => l.setMap(null));
   __alwaysOnLines.length = 0;
 }
+// 전체 코스 핀과 동일한 작은 핀 이미지 생성 (개별 코스/운행목록 공용)
+function makeSmallPin(color) {
+  const sc = (typeof getMarkerScale === 'function') ? getMarkerScale(map.getLevel()) : 1;
+  const w = Math.round(10 * sc), h = Math.round(13 * sc);
+  const svgOf = (ww, hh) => `<svg xmlns="http://www.w3.org/2000/svg" width="${ww}" height="${hh}" viewBox="0 0 14 18"><path d="M7 0 C3 0 0 3 0 7 C0 11 7 18 7 18 C7 18 14 11 14 7 C14 3 11 0 7 0 Z" fill="${color}" stroke="white" stroke-width="1" opacity="0.85"/></svg>`;
+  const img = new kakao.maps.MarkerImage(
+    'data:image/svg+xml;utf8,' + encodeURIComponent(svgOf(w, h)),
+    new kakao.maps.Size(w, h),
+    { offset: new kakao.maps.Point(Math.round(w/2), h) }
+  );
+  return { img, meta: { type:'pin', svg: svgOf(14, 18), baseW:14, baseH:18 } };
+}
+
 function renderAllAnchorsAlwaysOn() {
   if (!map) return;
   clearAlwaysOnAnchors();
@@ -802,15 +815,8 @@ function showAllCoursesOnMap() {
         .sort((a, b) => (a.order || 0) - (b.order || 0));
       if (!anchors.length) continue;
       totalCourses++;
-      // 코스마다 색깔 다른 핀
-      const dotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="20" viewBox="0 0 16 20">
-        <path d="M8 0 C3.5 0 0 3.5 0 8 C0 13 8 20 8 20 C8 20 16 13 16 8 C16 3.5 12.5 0 8 0 Z" fill="${c.color}" stroke="white" stroke-width="1.2"/>
-      </svg>`;
-      const dotImg = new kakao.maps.MarkerImage(
-        'data:image/svg+xml;utf8,' + encodeURIComponent(dotSvg),
-        new kakao.maps.Size(16, 20),
-        { offset: new kakao.maps.Point(8, 20) }
-      );
+      // 코스마다 색깔 다른 핀 — 전체 코스와 동일한 작은 크기
+      const { img: dotImg, meta: __pinMeta } = makeSmallPin(c.color);
       const path = [];
       anchors.forEach((a, i) => {
         const pos = new kakao.maps.LatLng(a.lat, a.lng);
@@ -823,6 +829,7 @@ function showAllCoursesOnMap() {
           title: `[${c.name}] ${i + 1}. ${a.name}`,
           zIndex: 20
         });
+        marker.__markerMeta = __pinMeta;
         const naviUrl = `https://map.kakao.com/link/to/${encodeURIComponent(a.name||'거점')},${a.lat},${a.lng}`;
         attachAnchorInfoWindow(marker, buildAnchorIwHtml({
           headerColor: c.color,
@@ -1585,13 +1592,16 @@ function drawLog(log) {
   const anchors = getCourseAnchors(data, log.courseId);
   const done = new Set(log.completions || []);
   const bounds = new kakao.maps.LatLngBounds();
+  const logColor = getCourse(data, log.courseId)?.color || '#3498db';
 
   anchors.forEach((a, i) => {
     const pos = new kakao.maps.LatLng(a.lat, a.lng);
     bounds.extend(pos);
+    const { img, meta } = makeSmallPin(logColor);
     const marker = new kakao.maps.Marker({
-      position: pos, map, title: `${i+1}. ${a.name}`
+      position: pos, map, image: img, title: `${i+1}. ${a.name}`
     });
+    marker.__markerMeta = meta;
     if (!done.has(a.id)) marker.setOpacity(0.4);
     logMarkers.push(marker);
   });
