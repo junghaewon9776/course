@@ -361,6 +361,8 @@ function initMap() {
   map.relayout();
   // 확대/축소 컨트롤 (+/-)
   map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+  // 줌 레벨별 마커 크기 자동 조절 (핀 작게)
+  setupMarkerZoomScale(map, () => kakaoMarkers);
   // 지도 종류 토글 컨트롤 (좌상단 오버레이)
   const ctrl = document.createElement('div');
   ctrl.style.cssText = 'position:absolute;top:10px;left:10px;z-index:5;background:#fff;border:1px solid #ddd;border-radius:6px;padding:4px;display:flex;gap:2px;font-size:12px;';
@@ -2223,9 +2225,10 @@ function renderMap() {
       const marker = new kakao.maps.Marker({
         position: pos, map, draggable: true,
         title: `${course.name} ${i+1}. ${a.name}`,
-        image: numberedMarkerImage(i+1, course.color),
+        image: numberedMarkerImage(i+1, course.color, false, getMarkerScale(map.getLevel())),
         zIndex: 10
       });
+      marker.__markerMeta = { type:'numbered', num:i+1, color:course.color, dim:false };
       kakao.maps.event.addListener(marker, 'dragend', () => {
         const p = marker.getPosition();
         if (!confirm(`"${a.name}" 위치를 이동할까요?`)) {
