@@ -651,6 +651,9 @@ function openLocationModal(lat, lng, title, color) {
   const pos = new kakao.maps.LatLng(lat, lng);
   const modalMap = new kakao.maps.Map(document.getElementById('__locModalMap'), { center: pos, level: 3 });
   new kakao.maps.Marker({ position: pos, map: modalMap });
+  // 지도/위성 전환 + 확대/축소 컨트롤
+  modalMap.addControl(new kakao.maps.MapTypeControl(), kakao.maps.ControlPosition.TOPRIGHT);
+  modalMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
   // 모달이 그려진 뒤 지도 크기 재인식
   setTimeout(() => { modalMap.relayout(); modalMap.setCenter(pos); }, 120);
 }
