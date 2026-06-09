@@ -359,6 +359,8 @@ function initMap() {
     level: data.mapDefault.level || 5
   });
   map.relayout();
+  // 확대/축소 컨트롤 (+/-)
+  map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
   // 지도 종류 토글 컨트롤 (좌상단 오버레이)
   const ctrl = document.createElement('div');
   ctrl.style.cssText = 'position:absolute;top:10px;left:10px;z-index:5;background:#fff;border:1px solid #ddd;border-radius:6px;padding:4px;display:flex;gap:2px;font-size:12px;';

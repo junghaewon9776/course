@@ -63,8 +63,6 @@
       <div class="map-wrap">
         <div id="map" class="map"></div>
         <div class="map-ctrl" style="top:10px;left:10px;flex-direction:row;gap:4px;">
-          <button class="map-btn" onclick="zoomIn()">+</button>
-          <button class="map-btn" onclick="zoomOut()">−</button>
           <button class="map-btn" onclick="showMapSettings()" style="font-size:16px;">🧭</button>
         </div>
         <div class="map-ctrl" style="top:10px;right:10px;">
@@ -370,6 +368,8 @@ function initMap() {
     minLevel: 3, // 너무 가까이 못 가게
     maxLevel: 9
   });
+  // 확대/축소 컨트롤 (+/-) — 모니터링과 동일
+  map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
   // 사용자가 지도 드래그하면 따라가기 일시정지 5초 (줌은 무관)
   kakao.maps.event.addListener(map, 'dragend', () => {
     if (followMode) {
