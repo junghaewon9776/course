@@ -403,12 +403,33 @@ function toggleAllAnchors() {
 }
 
 // 전체 코스 ON/OFF 토글 (단일 버튼) — 집중 모드 중이면 풀고 ON으로 복귀
+// 보이는 모든 코스 거점이 한눈에 들어오게 지도 맞춤
+function fitAllVisibleAnchors() {
+  if (!map) return;
+  const data = loadData();
+  const evVis = (data.visibility || {}).events || {};
+  const csVis = (data.visibility || {}).courses || {};
+  const bounds = new kakao.maps.LatLngBounds();
+  let has = false;
+  for (const ev of (data.events || [])) {
+    if (evVis[ev.id] === false) continue;
+    for (const c of (ev.courses || [])) {
+      if (csVis[c.id] === false) continue;
+      (data.anchors || []).filter(a => a.courseId === c.id).forEach(a => {
+        if (a.lat != null && a.lng != null) { bounds.extend(new kakao.maps.LatLng(a.lat, a.lng)); has = true; }
+      });
+    }
+  }
+  if (has) map.setBounds(bounds);
+}
+
 function toggleShowAllCourses() {
   if (window.__focusedMode) {
-    // 단일/전체 코스 미리보기 중 → 끄고 영구 핀 ON으로
+    // 단일/전체 코스 미리보기 중 → 끄고 영구 핀 ON으로 + 지도 전체로 정렬
     clearCoursePreview();
     localStorage.setItem('hideAllAnchors', '0');
     renderAllAnchorsAlwaysOn();
+    fitAllVisibleAnchors();
   } else {
     // 일반 토글 (영구 핀 ON ↔ OFF)
     const cur = localStorage.getItem('hideAllAnchors') === '1';
