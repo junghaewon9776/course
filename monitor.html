@@ -905,15 +905,8 @@ function showCourseOnMap(courseId) {
 
   const bounds = new kakao.maps.LatLngBounds();
   const path = [];
-  // 번호 없이 코스 색 핀만
-  const dotSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="22" viewBox="0 0 18 22">
-    <path d="M9 0 C4 0 0 4 0 9 C0 15 9 22 9 22 C9 22 18 15 18 9 C18 4 14 0 9 0 Z" fill="${course.color}" stroke="white" stroke-width="1.5"/>
-  </svg>`;
-  const dotImg = new kakao.maps.MarkerImage(
-    'data:image/svg+xml;utf8,' + encodeURIComponent(dotSvg),
-    new kakao.maps.Size(18, 22),
-    { offset: new kakao.maps.Point(9, 22) }
-  );
+  // 번호 없이 코스 색 핀만 — 전체 코스와 동일한 작은 크기
+  const { img: dotImg, meta: __pinMeta } = makeSmallPin(course.color);
   anchors.forEach((a, i) => {
     const pos = new kakao.maps.LatLng(a.lat, a.lng);
     bounds.extend(pos);
@@ -924,6 +917,7 @@ function showCourseOnMap(courseId) {
       title: `${i + 1}. ${a.name}`,
       zIndex: 20
     });
+    marker.__markerMeta = __pinMeta;
     // 클릭 시 InfoWindow (거점 이름 + 메모) — 헬퍼로 토글 처리
     const naviUrl = `https://map.kakao.com/link/to/${encodeURIComponent(a.name||'거점')},${a.lat},${a.lng}`;
     attachAnchorInfoWindow(marker, buildAnchorIwHtml({
