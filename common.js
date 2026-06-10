@@ -9,6 +9,7 @@ const KAKAO_KEY = 'f3f8fa6decb5e2185b09d6bf70ef525b';
 
   const isAndroid = /Android/i.test(ua);
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isKakao = /KAKAOTALK/i.test(ua);
 
   function show() {
     if (document.getElementById('inAppWarn')) return;
@@ -34,10 +35,19 @@ const KAKAO_KEY = 'f3f8fa6decb5e2185b09d6bf70ef525b';
               버튼이 안 되면 우측 상단 ⋮ 메뉴 →<br>"다른 브라우저로 열기" 선택
             </p>
           ` : `
+            ${isKakao ? `
+            <button onclick="location.href='kakaotalk://web/openExternal?url=${encodeURIComponent(url)}'" style="background:#27ae60;color:#fff;border:none;padding:12px 18px;border-radius:6px;font-size:14px;font-weight:600;width:100%;margin-bottom:8px;cursor:pointer;">
+              🌐 Safari로 바로 열기
+            </button>
+            <p style="color:#888;font-size:11px;margin-top:4px;">
+              버튼이 안 되면 우측 상단 <b>···</b> 메뉴 →<br>"다른 브라우저로 열기" 선택
+            </p>
+            ` : `
             <p style="color:#2c3e50;font-size:13px;background:#f0f4f8;padding:10px;border-radius:6px;text-align:left;">
               우측 상단 <b>···</b> 또는 <b>↗</b> 메뉴를 누르고<br>
               <b>"Safari로 열기"</b> 또는 <b>"기본 브라우저로 열기"</b>를 선택하세요.
             </p>
+            `}
           `}
         </div>
       </div>
