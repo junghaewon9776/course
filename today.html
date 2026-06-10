@@ -478,9 +478,11 @@ function previewCourse(eventId, courseId) {
     });
     marker.__markerMeta = { type:'numbered', num:i+1, color:course.color, dim:false };
     const iw = new kakao.maps.InfoWindow({
-      content: `<div style="padding:10px;font-size:12px;max-width:240px;">
-        <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')}</div>
-        ${a.memo ? '<div style="color:#444;white-space:pre-wrap;">' + a.memo.replace(/</g,'&lt;') + '</div>' : ''}
+      zIndex: 1000,
+      removable: true,
+      content: `<div style="padding:8px 10px;font-size:12px;max-width:200px;">
+        <div style="font-weight:700;color:${course.color};margin-bottom:3px;font-size:13px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')}</div>
+        ${a.memo ? '<div style="color:#444;white-space:pre-wrap;font-size:11px;">' + a.memo.replace(/</g,'&lt;') + '</div>' : ''}
       </div>`
     });
     kakao.maps.event.addListener(marker, 'click', () => toggleInfoWindow(iw, marker, map));
@@ -1295,13 +1297,15 @@ function renderMapForSession() {
 
     const aId = a.id;
     const iw = new kakao.maps.InfoWindow({
-      content: `<div style="padding:10px;font-size:12px;max-width:260px;">
-        <div style="font-weight:700;color:${course.color};margin-bottom:4px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')} ${isDone?'<span style="font-size:10px;background:#27ae60;color:#fff;padding:1px 6px;border-radius:3px;">거점완료</span>':''}</div>
-        ${a.memo ? `<div style="color:#444;white-space:pre-wrap;margin-bottom:6px;">${a.memo.replace(/</g,'&lt;')}</div>` : ''}
+      zIndex: 1000,
+      removable: true,
+      content: `<div style="padding:8px 10px;font-size:12px;max-width:210px;">
+        <div style="font-weight:700;color:${course.color};margin-bottom:3px;font-size:13px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')} ${isDone?'<span style="font-size:9px;background:#27ae60;color:#fff;padding:1px 5px;border-radius:3px;">완료</span>':''}</div>
+        ${a.memo ? `<div style="color:#444;white-space:pre-wrap;margin-bottom:5px;font-size:11px;">${a.memo.replace(/</g,'&lt;')}</div>` : ''}
         ${headInfoHtml}
-        <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">
-          <a href="#" onclick="navTo('${aId}');return false;" style="flex:1;min-width:110px;background:#3498db;color:#fff;padding:8px;border-radius:6px;text-align:center;font-weight:700;text-decoration:none;font-size:12px;">🧭 내비</a>
-          ${villageHeads.length ? `<a href="#" onclick="shareAnchorInfoToVillageHead('${aId}');return false;" style="flex:1;min-width:110px;background:#f39c12;color:#fff;padding:8px;border-radius:6px;text-align:center;font-weight:700;text-decoration:none;font-size:12px;">📤 이장님 공유</a>` : ''}
+        <div style="display:flex;gap:4px;margin-top:6px;">
+          <a href="#" onclick="navTo('${aId}');return false;" style="flex:1;background:#3498db;color:#fff;padding:6px;border-radius:5px;text-align:center;font-weight:700;text-decoration:none;font-size:11px;">🧭 내비</a>
+          ${villageHeads.length ? `<a href="#" onclick="shareAnchorInfoToVillageHead('${aId}');return false;" style="flex:1;background:#f39c12;color:#fff;padding:6px;border-radius:5px;text-align:center;font-weight:700;text-decoration:none;font-size:11px;">📤 공유</a>` : ''}
         </div>
       </div>`
     });

@@ -2247,16 +2247,16 @@ function renderMap() {
       const iw = new kakao.maps.InfoWindow({
         zIndex: 999,
         removable: true,
-        content: `<div style="padding:12px 14px;font-size:13px;min-width:220px;max-width:260px;font-family:-apple-system,'Malgun Gothic',sans-serif;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #eee;">
-            <span style="background:${course.color};color:#fff;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;">${course.name} ${i+1}</span>
+        content: `<div style="padding:9px 11px;font-size:12px;width:182px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #eee;">
+            <span style="background:${course.color};color:#fff;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;">${course.name} ${i+1}</span>
           </div>
-          <div style="font-size:14px;font-weight:700;color:#2c3e50;margin-bottom:4px;">${(a.name||'').replace(/</g,'&lt;')}</div>
-          ${a.memo ? `<div style="color:#7f8c8d;font-size:12px;margin-bottom:10px;line-height:1.4;">${a.memo.replace(/</g,'&lt;')}</div>` : '<div style="margin-bottom:10px;"></div>'}
-          <div style="display:flex;gap:6px;">
-            <button onclick="editAnchor('${a.id}')" style="flex:1;background:#3498db;color:#fff;padding:9px 6px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">✎ 수정</button>
-            <button onclick="moveAnchorTo('${a.id}', ${(getCourseAnchors(loadData(), course.id)).length})" style="flex:1;background:#9b59b6;color:#fff;padding:9px 6px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">№ 순번</button>
-            <button onclick="if(confirm('이 거점 삭제?'))deleteAnchor('${a.id}')" style="background:#e74c3c;color:#fff;padding:9px 11px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">🗑</button>
+          <div style="font-size:13px;font-weight:700;color:#2c3e50;margin-bottom:3px;">${(a.name||'').replace(/</g,'&lt;')}</div>
+          ${a.memo ? `<div style="color:#7f8c8d;font-size:11px;margin-bottom:8px;line-height:1.4;">${a.memo.replace(/</g,'&lt;')}</div>` : '<div style="margin-bottom:8px;"></div>'}
+          <div style="display:flex;gap:4px;">
+            <button onclick="editAnchor('${a.id}')" style="flex:1;background:#3498db;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✎수정</button>
+            <button onclick="moveAnchorTo('${a.id}', ${(getCourseAnchors(loadData(), course.id)).length})" style="flex:1;background:#9b59b6;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">№순번</button>
+            <button onclick="if(confirm('이 거점 삭제?'))deleteAnchor('${a.id}')" style="flex:none;background:#e74c3c;color:#fff;padding:7px 9px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>
           </div>
         </div>`
       });
