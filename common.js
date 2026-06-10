@@ -36,8 +36,11 @@ const KAKAO_KEY = 'f3f8fa6decb5e2185b09d6bf70ef525b';
             </p>
           ` : `
             ${isKakao ? `
-            <button onclick="location.href='kakaotalk://web/openExternal?url=${encodeURIComponent(url)}'" style="background:#27ae60;color:#fff;border:none;padding:12px 18px;border-radius:6px;font-size:14px;font-weight:600;width:100%;margin-bottom:8px;cursor:pointer;">
-              🌐 Safari로 바로 열기
+            <button onclick="location.href='googlechromes://${url.replace(/^https?:\/\//,'')}'" style="background:#1a73e8;color:#fff;border:none;padding:13px 18px;border-radius:6px;font-size:15px;font-weight:700;width:100%;margin-bottom:8px;cursor:pointer;">
+              🌐 크롬으로 열기
+            </button>
+            <button onclick="location.href='kakaotalk://web/openExternal?url=${encodeURIComponent(url)}'" style="background:#2980b9;color:#fff;border:none;padding:11px 18px;border-radius:6px;font-size:13px;font-weight:600;width:100%;margin-bottom:8px;cursor:pointer;">
+              🧭 기본 브라우저(Safari)로 열기
             </button>
             <p style="color:#888;font-size:11px;margin-top:4px;">
               버튼이 안 되면 우측 상단 <b>···</b> 메뉴 →<br>"다른 브라우저로 열기" 선택
