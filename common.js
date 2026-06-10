@@ -35,19 +35,15 @@ const KAKAO_KEY = 'f3f8fa6decb5e2185b09d6bf70ef525b';
               버튼이 안 되면 우측 상단 ⋮ 메뉴 →<br>"다른 브라우저로 열기" 선택
             </p>
           ` : `
-            ${isKakao ? `
-            <button onclick="location.href='googlechromes://${url.replace(/^https?:\/\//,'')}'" style="background:#1a73e8;color:#fff;border:none;padding:13px 18px;border-radius:6px;font-size:15px;font-weight:700;width:100%;margin-bottom:8px;cursor:pointer;">
-              🌐 크롬으로 열기
-            </button>
-            <p style="color:#888;font-size:11px;margin-top:4px;">
-              버튼이 안 되면 우측 상단 <b>···</b> 메뉴 →<br>"다른 브라우저로 열기" 선택
-            </p>
-            ` : `
-            <p style="color:#2c3e50;font-size:13px;background:#f0f4f8;padding:10px;border-radius:6px;text-align:left;">
-              우측 상단 <b>···</b> 또는 <b>↗</b> 메뉴를 누르고<br>
-              <b>"Safari로 열기"</b> 또는 <b>"기본 브라우저로 열기"</b>를 선택하세요.
-            </p>
-            `}
+            <div style="background:#f0f4f8;border-radius:8px;padding:14px;text-align:left;">
+              <p style="color:#2c3e50;font-size:14px;font-weight:700;margin-bottom:10px;">📱 아이폰에서 크롬으로 여는 법</p>
+              <p style="color:#444;font-size:13px;line-height:1.8;margin:0;">
+                <b>①</b> 화면 <b>맨 아래 ↗ 공유 버튼</b> 누르기<br>
+                <b>②</b> 목록에서 <b style="color:#1a73e8;">"Chrome에서 열기"</b> 선택
+              </p>
+            </div>
+            <div style="font-size:30px;margin-top:8px;line-height:1;">👇</div>
+            <p style="color:#888;font-size:11px;margin-top:2px;">아래쪽 공유 버튼을 눌러주세요</p>
           `}
         </div>
       </div>
