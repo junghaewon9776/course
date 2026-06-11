@@ -109,7 +109,9 @@
 <script src="firebase-config.js?v=20260513t"></script>
 <script src="common.js?v=20260609e"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
-<style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}</style>
+<style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
+@keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
+#nspAlertBanner{position:fixed;top:0;left:0;right:0;z-index:99999;background:#e74c3c;color:#fff;padding:18px 16px;text-align:center;font-weight:800;font-size:17px;box-shadow:0 3px 14px rgba(0,0,0,0.45);animation:nspFlash 0.5s ease-in-out infinite;cursor:pointer;}</style>
 <div id="errBar"></div>
 <script>
   (function(){
@@ -1750,10 +1752,48 @@ function applyNaviRotation(heading) {
   if (map) setTimeout(() => map.relayout(), 600);
 }
 
+// ───────── ⛔ 방역금지구역 근접 알람 ─────────
+let __nspState = {};  // zoneId -> 진입 여부 (중복 알람 방지)
+function checkNoSprayProximity(lat, lng) {
+  const data = loadData();
+  for (const z of (data.noSprayZones || [])) {
+    if (z.lat == null || z.lng == null) continue;
+    const d = distance(lat, lng, z.lat, z.lng);
+    const r = z.radius || 50;
+    if (d <= r) {
+      if (!__nspState[z.id]) { __nspState[z.id] = true; triggerNoSprayAlert(z); }
+    } else if (d > r + 15) {
+      __nspState[z.id] = false;  // 반경+여유 15m 벗어나면 리셋 (경계 깜빡임 방지)
+    }
+  }
+}
+function triggerNoSprayAlert(zone) {
+  // 진동 (강하게)
+  if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
+  // 음성: "방역 금지 구역입니다"
+  try {
+    if (window.speechSynthesis) {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('방역 금지 구역입니다');
+      u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
+      speechSynthesis.speak(u);
+    }
+  } catch (e) {}
+  // 깜박이는 화면 경고 배너
+  let b = document.getElementById('nspAlertBanner');
+  if (!b) { b = document.createElement('div'); b.id = 'nspAlertBanner'; document.body.appendChild(b); }
+  b.innerHTML = `⛔ 방역금지구역입니다 — <b>${(zone.name||'').replace(/</g,'&lt;')}</b><br><span style="font-size:13px;font-weight:600;">방역을 중단하세요 (반경 ${zone.radius||50}m)</span>`;
+  b.onclick = () => { b.style.display = 'none'; };
+  b.style.display = 'block';
+  clearTimeout(window.__nspBannerTimer);
+  window.__nspBannerTimer = setTimeout(() => { if (b) b.style.display = 'none'; }, 8000);
+}
+
 function onGpsUpdate(pos) {
   const lat = pos.coords.latitude, lng = pos.coords.longitude;
   const heading = pos.coords.heading; // 0~360 또는 null
   currentPos = { lat, lng, heading };
+  checkNoSprayProximity(lat, lng);  // ⛔ 방역금지구역 근접 알람
   document.getElementById('gpsStatus').textContent =
     `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} (정확도 ${Math.round(pos.coords.accuracy)}m)`;
 
