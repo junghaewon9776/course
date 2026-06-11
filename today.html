@@ -45,9 +45,9 @@
         <div class="op-toolbar">
           <button class="small" id="gpsToggle" onclick="toggleGPS()">📍 GPS 시작</button>
           <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 데이터 전송 주기 (지도는 항상 실시간)">
-            <option value="0">전송:실시간</option>
+            <option value="0" selected>전송:실시간</option>
             <option value="3000">전송:3초</option>
-            <option value="5000" selected>전송:5초</option>
+            <option value="5000">전송:5초</option>
             <option value="7000">전송:7초</option>
           </select>
           <button class="small" id="btnReqAnchor" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
@@ -1226,9 +1226,10 @@ async function removePhoto(id) {
 }
 
 let __lastLivePublish = 0;
-let __liveIntervalMs = 5000;
+let __liveIntervalMs = 0;   // 기본 실시간
 function setLiveInterval(ms) {
-  __liveIntervalMs = parseInt(ms, 10) || 5000;
+  const v = parseInt(ms, 10);
+  __liveIntervalMs = isNaN(v) ? 5000 : v;   // 0(실시간)이 5000으로 덮이던 버그 수정
 }
 function publishCurrentLive(force) {
   if (!currentSession || currentSession.finishedAt) return;
@@ -1961,7 +1962,7 @@ function toggleGPS() {
       backgroundTitle: "🚐 방역코스 운행 중",
       requestPermissions: true,
       stale: false,
-      distanceFilter: 5
+      distanceFilter: 0    // 0 = 위치 갱신마다 보고 (실시간). 5m 필터 때문에 ~3초마다 끊겨 보이던 것 해결
     }, function (location, error) {
       if (error) { console.warn('백그라운드 GPS 오류:', error); return; }
       if (location) {
@@ -1983,7 +1984,7 @@ function toggleGPS() {
   } else {
     // 웹: 일반 GPS (화면 켜진 상태에서만)
     watchId = navigator.geolocation.watchPosition(onGpsUpdate, onGpsError,
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
   }
   requestWakeLock();
   btn.textContent = '⏸ GPS 중지';
