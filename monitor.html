@@ -8,6 +8,11 @@
   <meta http-equiv="Expires" content="0">
   <title>본부 모니터링</title>
   <link rel="stylesheet" href="style.css?v=20260611b">
+  <style>
+    /* PC에서 모니터링 지도 세로로 크게 */
+    #map.map-compact { height: 720px; }
+    @media (max-width: 600px) { #map.map-compact { height: 320px; } }
+  </style>
 </head>
 <body>
 <header>
