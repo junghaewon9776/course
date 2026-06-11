@@ -1473,6 +1473,7 @@ function openCourseEditModal(id) {
   const c = getCourse(data, id);
   if (!c) return;
   const featured = !!c.featured;
+  const pinMode = !!c.pinMode;
   const anchors = (data.anchors || []).filter(a => a.courseId === id);
   // 소속 행사
   let eventName = '';
@@ -1529,6 +1530,15 @@ function openCourseEditModal(id) {
         <span class="sub">대표 코스는 인쇄 시 우선 표시</span>
       </div>
 
+      <label style="margin-top:14px;">📍 전단지(핑) 코스</label>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button id="__cePinBtn" class="small ${pinMode ? 'success' : 'gray'}" style="padding:8px 16px;font-size:13px;"
+          onclick="this.__on=!this.__on;this.className='small '+(this.__on?'success':'gray');this.textContent=this.__on?'📍 핑 코스 ON':'끄기 (일반 방역)';">
+          ${pinMode ? '📍 핑 코스 ON' : '끄기 (일반 방역)'}
+        </button>
+        <span class="sub">거점 없이, 단원이 현장에서 직접 핑을 찍는 코스</span>
+      </div>
+
       ${anchors.length ? `
       <div style="margin-top:16px;padding-top:14px;border-top:1px solid #eee;">
         <div style="font-size:12px;color:#888;margin-bottom:6px;">📍 소속 거점 ${anchors.length}개</div>
@@ -1551,6 +1561,7 @@ function openCourseEditModal(id) {
   document.body.appendChild(ov);
   // featured 상태 초기화
   document.getElementById('__ceFeaturedBtn').__on = featured;
+  document.getElementById('__cePinBtn').__on = pinMode;
 }
 function saveCourseEdit(id) {
   const data = loadData();
@@ -1563,6 +1574,7 @@ function saveCourseEdit(id) {
   c.detail = document.getElementById('__ceDetail').value.trim();
   c.color = document.getElementById('__ceColor').value;
   c.featured = !!document.getElementById('__ceFeaturedBtn').__on;
+  c.pinMode = !!document.getElementById('__cePinBtn').__on;
   saveData(data);
   document.getElementById('__courseEditOv')?.remove();
   refreshAll();
@@ -2449,11 +2461,27 @@ function renderMap() {
 function _getEvtCfg(eventId) {
   const all = (_cache || {}).eventConfig || {};
   const c = all[eventId] || {};
-  return { teams: Array.isArray(c.teams) ? c.teams : [], vehicles: Array.isArray(c.vehicles) ? c.vehicles : [] };
+  return {
+    teams: Array.isArray(c.teams) ? c.teams : [],
+    vehicles: Array.isArray(c.vehicles) ? c.vehicles : [],
+    personMode: !!c.personMode,                 // 👤 인원별(개인) 운영 모드
+    personCount: typeof c.personCount === 'number' ? c.personCount : 0  // 참여 인원수
+  };
 }
 
 function _saveEvtCfg(eventId, cfg) {
   fbDb.ref('/eventConfig/' + eventId).set(cfg);
+}
+function toggleEvtPerson(eventId) {
+  const cfg = _getEvtCfg(eventId);
+  cfg.personMode = !cfg.personMode;
+  _saveEvtCfg(eventId, cfg);
+  refreshAll();
+}
+function setEvtPersonCount(eventId, n) {
+  const cfg = _getEvtCfg(eventId);
+  cfg.personCount = Math.max(0, parseInt(n, 10) || 0);
+  _saveEvtCfg(eventId, cfg);
 }
 
 function toggleEvtTeam(eventId, teamId) {
@@ -2519,6 +2547,22 @@ function renderEvtAssign() {
     }).join('');
   }
   h += '</div>';
+
+  // 👤 인원별(개인) 운영 모드
+  h += `<div style="margin-top:14px;padding-top:12px;border-top:2px solid #eee;">
+    <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid ${cfg.personMode ? '#16a085' : '#e5e7eb'};border-radius:8px;background:${cfg.personMode ? '#e8f8f5' : '#fff'};cursor:pointer;font-size:13px;">
+      <input type="checkbox" ${cfg.personMode ? 'checked' : ''} onchange="toggleEvtPerson('${eventId}')">
+      <span style="font-weight:700;">👤 인원별(개인) 운영</span>
+      <span style="color:#888;font-size:11px;">조·차량 없이 회원 각자가 코스를 돕니다 (전단지 등). 핑 찍기 자동 켜짐</span>
+    </label>
+    ${cfg.personMode ? `
+    <div style="margin-top:8px;display:flex;align-items:center;gap:8px;font-size:13px;">
+      <span style="color:#555;">참여 인원수</span>
+      <input type="number" min="0" value="${cfg.personCount || 0}" onchange="setEvtPersonCount('${eventId}', this.value)"
+        style="width:70px;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;text-align:center;"> 명
+      <span style="color:#aaa;font-size:11px;">(계획 인원 — 참고용)</span>
+    </div>` : ''}
+  </div>`;
 
   // 차량 추가 간편 UI
   h += `<div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;">

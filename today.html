@@ -44,13 +44,15 @@
         </div>
         <div class="op-toolbar">
           <button class="small" id="gpsToggle" onclick="toggleGPS()">📍 GPS 시작</button>
+          <button class="small" id="btnPinHere" onclick="dropPinHere()" style="display:none;background:#16a085;font-weight:700;">📍 여기 핑</button>
+          <button class="small" id="btnPinMap" onclick="armMapPin()" style="display:none;background:#27ae60;">🗺️ 지도에서 핑</button>
           <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 데이터 전송 주기 (지도는 항상 실시간)">
             <option value="0">전송:실시간</option>
             <option value="3000">전송:3초</option>
             <option value="5000" selected>전송:5초</option>
             <option value="7000">전송:7초</option>
           </select>
-          <button class="small" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
+          <button class="small" id="btnReqAnchor" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점요청</button>
           <button class="small" id="btnComplaint" onclick="reportComplaint()" style="background:#e74c3c;">📞 민원접수</button>
           <button class="small" onclick="showHistoryModal('complaints')" style="background:#c0392b;">📞 민원내역</button>
           <button class="small" onclick="showHistoryModal('requests')" style="background:#d35400;">📌 거점요청내역</button>
@@ -76,12 +78,13 @@
       <div id="nextInfo" style="margin-top:8px;font-size:13px;"></div>
     </div>
 
-    <div class="card">
-      <h2>거점 진행</h2>
+    <div class="card" id="progressCard">
+      <h2 id="progressTitle">거점 진행</h2>
       <div id="anchorRows"></div>
+      <div id="pinRows" style="display:none;"></div>
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
         <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스완료</button>
-        <button onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
+        <button id="btnReqAnchor2" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
         <button class="gray" onclick="resetCourse()">진행 초기화</button>
       </div>
     </div>
@@ -132,6 +135,14 @@
 let currentSession = null;
 let watchId = null;
 let map, anchorMarkers = [], myMarker, trackLine, courseLine;
+let pinMarkers = [];        // 📍 전단지 핑 마커들
+let __pinArmed = false;     // "지도에서 핑" 모드 — 다음 지도 클릭 시 핑 추가
+// 🔴 오늘의 운영에 다른 운영자(다른 조 포함) 실시간 표시 — 모니터링처럼
+let __othersSubscribed = false;
+const otherMarkers = {};    // sessionKey → 위치 마커
+const otherLabels = {};     // sessionKey → 이름 라벨(CustomOverlay)
+const otherPinMarkers = {}; // pinId → 다른 사람 핑 마커
+const otherTrackLines = {}; // sessionKey → 다른 사람 궤적
 let currentPos = null;
 let followMode = true;
 
@@ -161,7 +172,12 @@ function getRotationTeamForCourse(data, eventId, courseId) {
 function _getEvtCfg(eventId) {
   const all = (_cache || {}).eventConfig || {};
   const c = all[eventId] || {};
-  return { teams: Array.isArray(c.teams) ? c.teams : [], vehicles: Array.isArray(c.vehicles) ? c.vehicles : [] };
+  return {
+    teams: Array.isArray(c.teams) ? c.teams : [],
+    vehicles: Array.isArray(c.vehicles) ? c.vehicles : [],
+    personMode: !!c.personMode,
+    personCount: typeof c.personCount === 'number' ? c.personCount : 0
+  };
 }
 function _hasEvtCfg(eventId) {
   return !!((_cache || {}).eventConfig || {})[eventId];
@@ -379,8 +395,15 @@ function initMap() {
       updateFollowBtn();
     }
   });
-  // 줌 레벨별 마커 크기 자동 조절
-  setupMarkerZoomScale(map, () => anchorMarkers);
+  // 줌 레벨별 마커 크기 자동 조절 (거점 + 핑 마커 모두)
+  setupMarkerZoomScale(map, () => anchorMarkers.concat(pinMarkers));
+  // 📍 전단지 핑 코스: "지도에서 핑" 무장 후 지도 클릭 → 그 자리에 핑
+  kakao.maps.event.addListener(map, 'click', function(mouseEvent) {
+    if (!__pinArmed) return;
+    const ll = mouseEvent.latLng;
+    addPin(ll.getLat(), ll.getLng(), '지도');
+    disarmMapPin();
+  });
 }
 
 let followPauseUntil = 0; // 레거시 (사용 안 함)
@@ -707,7 +730,8 @@ function openStartForm(eventId, courseId) {
   const card = document.getElementById('startFormCard');
   card.style.display = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  const hasVehicles = sortedVehicles.length > 0;
+  const pinMode = !!course.pinMode || !!_getEvtCfg(eventId).personMode;  // 코스 핑모드 OR 행사 인원별 모드
+  const hasVehicles = !pinMode && sortedVehicles.length > 0;  // 전단지/인원별은 차량 없이 회원만
   const hasTeams = teams.length > 0;
   card.innerHTML = `
     <div class="card" style="border:2px solid #3498db;">
@@ -723,7 +747,7 @@ function openStartForm(eventId, courseId) {
         </select>`;
       })() : ''}
 
-      <label>운전자 *</label>
+      <label>${pinMode ? '이름 (본인) *' : '운전자 *'}</label>
       <div style="position:relative;">
         <input id="fDriver" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
                oninput="showSuggestions('fDriver','fDriverSuggest')"
@@ -745,6 +769,7 @@ function openStartForm(eventId, courseId) {
         <label style="font-weight:700;color:#27ae60;margin-top:10px;display:block;">⚡ 차량 선택</label>
         <div style="margin-top:6px;">${vehicleButtons}</div>
       ` : `
+        ${pinMode ? '' : `
         <div style="display:flex;gap:6px;margin-top:6px;">
           <div style="flex:2;">
             <label>차량번호 (선택)</label>
@@ -754,7 +779,7 @@ function openStartForm(eventId, courseId) {
             <label>차량색 (선택)</label>
             <input id="fVehicleColor" type="text" placeholder="예: 흰색">
           </div>
-        </div>
+        </div>`}
         <div style="display:flex;gap:6px;margin-top:14px;">
           <button class="success" style="flex:1;" onclick="confirmStartForm('${eventId}','${courseId}')">▶ 시작</button>
           <button class="gray" onclick="closeStartForm()">취소</button>
@@ -969,7 +994,7 @@ function startSession(eventId, courseId, teamId, crew) {
   currentSession = {
     date, eventId, courseId, teamId,
     crew: crew || {}, // {driver, assist, vehicle}
-    completions: [], track: [], photos: [], startedAt: Date.now(), finishedAt: null,
+    completions: [], track: [], photos: [], pins: [], startedAt: Date.now(), finishedAt: null,
     key
   };
 
@@ -997,9 +1022,11 @@ function startSession(eventId, courseId, teamId, crew) {
   if (crew?.assist) subtitleParts.push(`보조 ${crew.assist}`);
   document.getElementById('opSubtitle').textContent = subtitleParts.join(' · ');
 
+  applyPinModeUI();
   renderAnchorRows();
   renderMapForSession();
   renderPhotoStrip();
+  subscribeLiveOthers();   // 🔴 다른 운영자 실시간 표시
 
   // 텔레그램: 코스 시작 알림 (기기+IP 포함)
   const vehInfo = [crew?.vehicle, crew?.vehicleColor].filter(Boolean).join(' / ');
@@ -1133,11 +1160,11 @@ let __liveIntervalMs = 5000;
 function setLiveInterval(ms) {
   __liveIntervalMs = parseInt(ms, 10) || 5000;
 }
-function publishCurrentLive() {
+function publishCurrentLive(force) {
   if (!currentSession || currentSession.finishedAt) return;
   if (!currentPos) return;
   const now = Date.now();
-  if (now - __lastLivePublish < __liveIntervalMs) return;
+  if (!force && now - __lastLivePublish < __liveIntervalMs) return;
   __lastLivePublish = now;
   const data = loadData();
   const totalAnchors = (data.anchors || []).filter(a => a.courseId === currentSession.courseId).length;
@@ -1165,7 +1192,10 @@ function publishCurrentLive() {
     completedCount: (currentSession.completions || []).length,
     totalCount: totalAnchors,
     startedAt: currentSession.startedAt,
-    device: getDeviceName() || ''
+    device: getDeviceName() || '',
+    pins: (currentSession.pins || []),
+    // 모니터링 실시간 궤적용 — 꼬리 200점만 (용량 절약)
+    track: (currentSession.track || []).slice(-200)
   });
 }
 
@@ -1218,9 +1248,12 @@ function resumeSession(s) {
   if (s.crew?.driver) subtitleParts.push(`운전 ${s.crew.driver}`);
   if (s.crew?.assist) subtitleParts.push(`보조 ${s.crew.assist}`);
   document.getElementById('opSubtitle').textContent = subtitleParts.join(' · ');
+  if (!currentSession.pins) currentSession.pins = [];
+  applyPinModeUI();
   renderAnchorRows();
   renderMapForSession();
   renderPhotoStrip();
+  subscribeLiveOthers();   // 🔴 다른 운영자 실시간 표시
   // GPS 자동 ON
   if (watchId === null) setTimeout(() => toggleGPS(), 500);
 }
@@ -1245,6 +1278,249 @@ function renderAnchorRows() {
       </div>
     `;
   }).join('');
+}
+
+// ───────── 📍 전단지 핑 (현장에서 직접 찍는 마커) ─────────
+function isPinCourse() {
+  if (!currentSession) return false;
+  const c = getCourse(loadData(), currentSession.courseId);
+  if (c && c.pinMode) return true;
+  // 행사가 인원별(개인) 모드면 어떤 코스든 핑 코스로 동작
+  return !!_getEvtCfg(currentSession.eventId).personMode;
+}
+// 핑 코스면 UI 전환 (핑 버튼 표시, 거점 요소 숨김, 카드 제목 변경)
+function applyPinModeUI() {
+  const on = isPinCourse();
+  const show = (id, vis) => { const el = document.getElementById(id); if (el) el.style.display = vis ? '' : 'none'; };
+  show('btnPinHere', on);
+  show('btnPinMap', on);
+  show('btnReqAnchor', !on);   // 거점요청 버튼은 일반 코스만
+  show('btnReqAnchor2', !on);
+  show('anchorRows', !on);
+  show('pinRows', on);
+  const title = document.getElementById('progressTitle');
+  if (title) title.textContent = on ? '📍 핑 기록' : '거점 진행';
+  if (on) renderPinRows();
+}
+// 핑 1개 추가 (lat,lng + 출처라벨)
+function addPin(lat, lng, src) {
+  if (!currentSession) { alert('먼저 운영을 시작해주세요'); return; }
+  if (!currentSession.pins) currentSession.pins = [];
+  const by = currentSession.crew?.driver || getDeviceName() || '단원';
+  const pin = { id: uid(), lat, lng, by, at: Date.now(), memo: '' };
+  currentSession.pins.push(pin);
+  saveSession();
+  publishCurrentLive(true);   // 즉시 전송 (throttle 무시)
+  renderPins();
+  renderPinRows();
+  if (navigator.vibrate) navigator.vibrate(80);
+  const st = document.getElementById('gpsStatus');
+  if (st) st.textContent = `📍 핑 추가됨 (총 ${currentSession.pins.length}개)`;
+}
+// "여기 핑" — 현재 GPS 위치에 핑
+function dropPinHere() {
+  if (!currentPos) { alert('아직 내 위치를 못 잡았어요. GPS가 켜진 뒤 잠시 후 다시 눌러주세요.'); return; }
+  addPin(currentPos.lat, currentPos.lng, '현위치');
+}
+// "지도에서 핑" — 다음 지도 클릭 위치에 핑
+function armMapPin() {
+  __pinArmed = true;
+  const btn = document.getElementById('btnPinMap');
+  if (btn) { btn.textContent = '👆 지도를 누르세요'; btn.style.background = '#e67e22'; }
+  const st = document.getElementById('gpsStatus');
+  if (st) st.textContent = '🗺️ 핑 찍을 위치를 지도에서 눌러주세요 (취소: 버튼 다시 누름)';
+  // 한 번 더 누르면 취소
+  if (btn) btn.setAttribute('onclick', 'disarmMapPin()');
+}
+function disarmMapPin() {
+  __pinArmed = false;
+  const btn = document.getElementById('btnPinMap');
+  if (btn) { btn.textContent = '🗺️ 지도에서 핑'; btn.style.background = '#27ae60'; btn.setAttribute('onclick', 'armMapPin()'); }
+}
+function editPinMemo(id) {
+  if (!currentSession) return;
+  const p = (currentSession.pins || []).find(x => x.id === id);
+  if (!p) return;
+  const memo = prompt('이 핑의 특이사항/메모', p.memo || '');
+  if (memo === null) return;
+  p.memo = memo.trim();
+  saveSession();
+  publishCurrentLive(true);
+  renderPins();
+  renderPinRows();
+}
+function deletePin(id) {
+  if (!currentSession) return;
+  if (!confirm('이 핑을 삭제할까요?')) return;
+  currentSession.pins = (currentSession.pins || []).filter(x => x.id !== id);
+  saveSession();
+  publishCurrentLive(true);
+  renderPins();
+  renderPinRows();
+}
+// 핑 목록 (카드 안)
+function renderPinRows() {
+  const box = document.getElementById('pinRows');
+  if (!box) return;
+  const pins = (currentSession?.pins || []);
+  if (!pins.length) {
+    box.innerHTML = '<div class="muted" style="font-size:13px;padding:8px 0;">아직 찍은 핑이 없습니다. <b>📍 여기 핑</b> 또는 <b>🗺️ 지도에서 핑</b>으로 추가하세요.</div>';
+    return;
+  }
+  box.innerHTML = pins.map((p, i) => {
+    const t = new Date(p.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    return `
+      <div class="anchor-row">
+        <div class="num" style="background:#16a085;">${i+1}</div>
+        <div style="flex:1;min-width:0;cursor:pointer;" onclick="focusPin('${p.id}')">
+          <div class="name">${(p.memo || '핑 ' + (i+1)).replace(/</g,'&lt;')}</div>
+          <div class="sub">${t}${p.by ? ' · ' + p.by : ''}</div>
+        </div>
+        <button class="small" onclick="editPinMemo('${p.id}')">📝</button>
+        <button class="small gray" onclick="deletePin('${p.id}')">🗑</button>
+      </div>`;
+  }).join('');
+}
+// 핑 마커를 지도에 렌더 (pinMarkers 별도 관리)
+function renderPins() {
+  if (!map) return;
+  pinMarkers.forEach(m => { try { m.setMap(null); } catch(e){} });
+  pinMarkers = [];
+  const pins = (currentSession?.pins || []);
+  const scale = getMarkerScale(map.getLevel());
+  pins.forEach((p, i) => {
+    const pos = new kakao.maps.LatLng(p.lat, p.lng);
+    const baseW = 26, baseH = 34;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${baseW}" height="${baseH}" viewBox="0 0 26 34">
+      <path d="M13 0 C6 0 0 6 0 13 C0 22 13 34 13 34 C13 34 26 22 26 13 C26 6 20 0 13 0 Z" fill="#16a085" stroke="white" stroke-width="2"/>
+      <circle cx="13" cy="13" r="5" fill="white"/>
+    </svg>`;
+    const w = Math.round(baseW * scale), h = Math.round(baseH * scale);
+    const img = new kakao.maps.MarkerImage(
+      'data:image/svg+xml;utf8,' + encodeURIComponent(svg.replace(/width="\d+"/, `width="${w}"`).replace(/height="\d+"/, `height="${h}"`)),
+      new kakao.maps.Size(w, h),
+      { offset: new kakao.maps.Point(Math.round(w/2), h) }
+    );
+    const marker = new kakao.maps.Marker({ position: pos, map, image: img, zIndex: 20 });
+    marker.__markerMeta = { type:'pin', svg, baseW, baseH };
+    const t = new Date(p.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    const pid = p.id;
+    const iw = new kakao.maps.InfoWindow({
+      zIndex: 1000, removable: true,
+      content: `<div style="padding:8px 10px;font-size:12px;max-width:200px;">
+        <div style="font-weight:700;color:#16a085;margin-bottom:3px;">📍 핑 ${i+1}</div>
+        ${p.memo ? `<div style="color:#444;white-space:pre-wrap;margin-bottom:5px;">${p.memo.replace(/</g,'&lt;')}</div>` : ''}
+        <div style="color:#888;font-size:11px;">${t}${p.by ? ' · ' + p.by.replace(/</g,'&lt;') : ''}</div>
+        <div style="display:flex;gap:4px;margin-top:6px;">
+          <a href="#" onclick="editPinMemo('${pid}');return false;" style="flex:1;background:#16a085;color:#fff;padding:5px;border-radius:5px;text-align:center;font-weight:700;text-decoration:none;font-size:11px;">📝 메모</a>
+          <a href="#" onclick="deletePin('${pid}');return false;" style="flex:1;background:#95a5a6;color:#fff;padding:5px;border-radius:5px;text-align:center;font-weight:700;text-decoration:none;font-size:11px;">🗑 삭제</a>
+        </div>
+      </div>`
+    });
+    kakao.maps.event.addListener(marker, 'click', () => toggleInfoWindow(iw, marker, map));
+    marker.__iw = iw;
+    pinMarkers.push(marker);
+  });
+}
+function focusPin(id) {
+  const pins = (currentSession?.pins || []);
+  const idx = pins.findIndex(p => p.id === id);
+  if (idx < 0 || !pinMarkers[idx] || !map) return;
+  map.setLevel(3);
+  map.panTo(pinMarkers[idx].getPosition());
+  setTimeout(() => map.panBy(0, -100), 250);
+  kakao.maps.event.trigger(pinMarkers[idx], 'click');
+  const mapEl = document.getElementById('map');
+  if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ───────── 🔴 다른 운영자 실시간 오버레이 (모니터링처럼) ─────────
+function subscribeLiveOthers() {
+  if (__othersSubscribed || typeof fbDb === 'undefined') return;
+  __othersSubscribed = true;
+  fbDb.ref('/live').on('value', snap => {
+    try { renderOthersLive(snap.val() || {}); } catch (e) { console.warn('다른운영자 표시 오류:', e); }
+  });
+}
+function unsubscribeLiveOthers() {
+  if (typeof fbDb !== 'undefined') { try { fbDb.ref('/live').off('value'); } catch (e) {} }
+  __othersSubscribed = false;
+  Object.values(otherMarkers).forEach(m => { try { m.setMap(null); } catch(e){} });
+  Object.values(otherLabels).forEach(o => { try { o.setMap(null); } catch(e){} });
+  Object.values(otherPinMarkers).forEach(m => { try { m.setMap(null); } catch(e){} });
+  Object.values(otherTrackLines).forEach(l => { try { l.setMap(null); } catch(e){} });
+  for (const k in otherMarkers) delete otherMarkers[k];
+  for (const k in otherLabels) delete otherLabels[k];
+  for (const k in otherPinMarkers) delete otherPinMarkers[k];
+  for (const k in otherTrackLines) delete otherTrackLines[k];
+}
+function __otherLabelOverlay(pos, text, color) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  div.style.cssText = `transform:translateY(-26px);background:${color};color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:9px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.35);border:1.5px solid #fff;`;
+  return new kakao.maps.CustomOverlay({ position: pos, content: div, yAnchor: 1, zIndex: 46 });
+}
+function renderOthersLive(live) {
+  if (!map) return;
+  const data = loadData();
+  const myKey = currentSession?.key;
+  const STALE = 5 * 60 * 1000, now = Date.now();
+  const activeKeys = new Set(), activePins = new Set();
+  for (const [key, sess] of Object.entries(live)) {
+    if (key === myKey) continue;                         // 내 세션은 myMarker로 이미 표시됨
+    if (!sess || typeof sess.lat !== 'number') continue;
+    if (!sess.lastUpdate || now - sess.lastUpdate > STALE) continue;
+    activeKeys.add(key);
+    const course = getCourse(data, sess.courseId);
+    const color = course?.color || '#9b59b6';
+    const team = getTeam(data, sess.teamId);
+    const who = sess.crew?.driver || team?.name || '단원';
+    const labelText = [team?.name, who].filter(Boolean).join(' ') || who;
+    const pos = new kakao.maps.LatLng(sess.lat, sess.lng);
+    // 위치 마커 (색 원)
+    let m = otherMarkers[key];
+    if (!m) {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="7.5" fill="${color}" stroke="white" stroke-width="3"/></svg>`;
+      const img = new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(22, 22), { offset: new kakao.maps.Point(11, 11) });
+      m = new kakao.maps.Marker({ position: pos, map, image: img, zIndex: 40, title: labelText });
+      const iw = new kakao.maps.InfoWindow({ removable: true,
+        content: `<div style="padding:7px 9px;font-size:12px;max-width:200px;"><div style="font-weight:700;color:${color};">${labelText.replace(/</g,'&lt;')}</div><div style="color:#888;font-size:11px;">${(course?.name||'').replace(/</g,'&lt;')}${sess.crew?.assist ? ' · 보조 ' + sess.crew.assist.replace(/</g,'&lt;') : ''}</div></div>` });
+      kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
+      otherMarkers[key] = m;
+    } else {
+      m.setPosition(pos);
+    }
+    // 이름 라벨
+    let lb = otherLabels[key];
+    if (!lb) { lb = __otherLabelOverlay(pos, labelText, color); lb.setMap(map); otherLabels[key] = lb; }
+    else { lb.setPosition(pos); }
+    // 그들의 핑
+    (sess.pins || []).forEach(p => {
+      if (typeof p.lat !== 'number') return;
+      activePins.add(p.id);
+      if (otherPinMarkers[p.id]) { otherPinMarkers[p.id].setPosition(new kakao.maps.LatLng(p.lat, p.lng)); return; }
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="26" viewBox="0 0 26 34"><path d="M13 0 C6 0 0 6 0 13 C0 22 13 34 13 34 C13 34 26 22 26 13 C26 6 20 0 13 0 Z" fill="${color}" stroke="white" stroke-width="2"/><circle cx="13" cy="13" r="5" fill="white"/></svg>`;
+      const pm = new kakao.maps.Marker({ position: new kakao.maps.LatLng(p.lat, p.lng), map, zIndex: 22, opacity: 0.85,
+        image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(20, 26), { offset: new kakao.maps.Point(10, 26) }) });
+      const t = new Date(p.at || now).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      const iw = new kakao.maps.InfoWindow({ removable: true,
+        content: `<div style="padding:6px 8px;font-size:12px;max-width:190px;"><div style="font-weight:700;color:${color};">📍 ${who.replace(/</g,'&lt;')}</div>${p.memo ? '<div style="color:#444;white-space:pre-wrap;">' + p.memo.replace(/</g,'&lt;') + '</div>' : ''}<div style="color:#888;font-size:11px;">${t}</div></div>` });
+      kakao.maps.event.addListener(pm, 'click', () => toggleInfoWindow(iw, pm, map));
+      otherPinMarkers[p.id] = pm;
+    });
+    // 그들의 궤적 (얇게)
+    if (Array.isArray(sess.track) && sess.track.length >= 2) {
+      const tp = sess.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
+      if (otherTrackLines[key]) otherTrackLines[key].setPath(tp);
+      else otherTrackLines[key] = new kakao.maps.Polyline({ path: tp, strokeWeight: 2.5, strokeColor: color, strokeOpacity: 0.45, strokeStyle: 'shortdash', map, zIndex: 1 });
+    }
+  }
+  // 정리
+  for (const k of Object.keys(otherMarkers)) if (!activeKeys.has(k)) { try { otherMarkers[k].setMap(null); } catch(e){} delete otherMarkers[k]; }
+  for (const k of Object.keys(otherLabels)) if (!activeKeys.has(k)) { try { otherLabels[k].setMap(null); } catch(e){} delete otherLabels[k]; }
+  for (const k of Object.keys(otherTrackLines)) if (!activeKeys.has(k)) { try { otherTrackLines[k].setMap(null); } catch(e){} delete otherTrackLines[k]; }
+  for (const pid of Object.keys(otherPinMarkers)) if (!activePins.has(pid)) { try { otherPinMarkers[pid].setMap(null); } catch(e){} delete otherPinMarkers[pid]; }
 }
 
 let __renderMapRetry = 0;
@@ -1435,14 +1711,16 @@ function renderMapForSession() {
     anchorMarkers.push(m);
   });
 
-  // 다닌 길 폴리라인
-  if (currentSession.track.length >= 2) {
+  // 다닌 길 폴리라인 — 핑 코스(오늘의 운영)에선 핑만 보이게 궤적 선 숨김
+  if (!isPinCourse() && currentSession.track.length >= 2) {
     const trackPath = currentSession.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
     trackLine = new kakao.maps.Polyline({
       path: trackPath, strokeWeight: 3, strokeColor: '#666',
       strokeOpacity: 0.8, strokeStyle: 'shortdash', map
     });
   }
+  // 📍 내가 찍은 핑 렌더
+  renderPins();
 }
 
 // 거점 이름 클릭 → 지도에서 해당 위치로 이동 + InfoWindow 열기
@@ -2037,6 +2315,10 @@ function finishCourse() {
   if (courseLine) { courseLine.setMap(null); courseLine = null; }
   if (trackLine) { trackLine.setMap(null); trackLine = null; }
   if (myMarker) { myMarker.setMap(null); myMarker = null; }
+  pinMarkers.forEach(m => { try { m.setMap(null); } catch(e){} });
+  pinMarkers = [];
+  disarmMapPin();
+  unsubscribeLiveOthers();   // 🔴 다른 운영자 표시 해제
   assistList = [];
   document.getElementById('opPanel').style.display = 'none';
   document.getElementById('assignmentCard').style.display = 'block';
