@@ -73,9 +73,9 @@
           <button class="map-btn" onclick="fitToCourse()" style="font-size:10px;width:auto;padding:0 6px;height:30px;">전체</button>
         </div>
         <!-- 📍 전단지 핑 버튼 (지도 오른쪽 맨 아래) -->
-        <div class="map-ctrl" id="pinMapCtrl" style="bottom:10px;right:10px;flex-direction:column;gap:6px;align-items:flex-end;display:none;">
-          <button id="btnPinMap" onclick="armMapPin()" style="background:#27ae60;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);white-space:nowrap;">🗺️ 지도에서 핑</button>
-          <button id="btnPinHere" onclick="dropPinHere()" style="background:#16a085;color:#fff;border:none;border-radius:10px;padding:14px 18px;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,0.35);white-space:nowrap;">📍 여기 핑</button>
+        <div class="map-ctrl" id="pinMapCtrl" style="bottom:10px;right:10px;flex-direction:column;gap:5px;align-items:flex-end;display:none;">
+          <button id="btnPinMap" onclick="armMapPin()" style="background:#27ae60;color:#fff;border:none;border-radius:6px;padding:0 8px;height:30px;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.25);white-space:nowrap;">🗺️ 지도핑</button>
+          <button id="btnPinHere" onclick="dropPinHere()" style="background:#16a085;color:#fff;border:none;border-radius:6px;padding:0 10px;height:32px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">📍 여기 핑</button>
         </div>
       </div>
       <div id="nextInfo" style="margin-top:8px;font-size:13px;"></div>
@@ -1405,7 +1405,11 @@ function armMapPin() {
 function disarmMapPin() {
   __pinArmed = false;
   const btn = document.getElementById('btnPinMap');
-  if (btn) { btn.textContent = '🗺️ 지도에서 핑'; btn.style.background = '#27ae60'; btn.setAttribute('onclick', 'armMapPin()'); }
+  if (btn) { btn.textContent = '🗺️ 지도핑'; btn.style.background = '#27ae60'; btn.setAttribute('onclick', 'armMapPin()'); }
+}
+// 열린 핑 InfoWindow 닫기 (삭제/수정 후 잔상 방지)
+function closeOpenIw() {
+  if (window.__openIw) { try { window.__openIw.close(); } catch (e) {} window.__openIw = null; }
 }
 function editPinMemo(id) {
   if (!currentSession) return;
@@ -1414,6 +1418,7 @@ function editPinMemo(id) {
   const memo = prompt('이 핑의 특이사항/메모', p.memo || '');
   if (memo === null) return;
   p.memo = memo.trim();
+  closeOpenIw();
   saveSession();
   publishCurrentLive(true);
   renderPins();
@@ -1422,6 +1427,7 @@ function editPinMemo(id) {
 function deletePin(id) {
   if (!currentSession) return;
   if (!confirm('이 핑을 삭제할까요?')) return;
+  closeOpenIw();   // 모달(InfoWindow) 닫기
   currentSession.pins = (currentSession.pins || []).filter(x => x.id !== id);
   saveSession();
   publishCurrentLive(true);
@@ -1471,8 +1477,17 @@ function renderPins() {
       new kakao.maps.Size(w, h),
       { offset: new kakao.maps.Point(Math.round(w/2), h) }
     );
-    const marker = new kakao.maps.Marker({ position: pos, map, image: img, zIndex: 20 });
+    const marker = new kakao.maps.Marker({ position: pos, map, image: img, zIndex: 20, draggable: true });
     marker.__markerMeta = { type:'pin', svg, baseW, baseH };
+    // 드래그로 핑 위치 이동
+    kakao.maps.event.addListener(marker, 'dragend', () => {
+      const np = marker.getPosition();
+      p.lat = np.getLat(); p.lng = np.getLng();
+      closeOpenIw();
+      saveSession();
+      publishCurrentLive(true);
+      renderPinRows();
+    });
     const t = new Date(p.at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
     const pid = p.id;
     const iw = new kakao.maps.InfoWindow({
