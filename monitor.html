@@ -189,6 +189,7 @@
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __replayTimer = null, __replayMarker = null, __replayIdx = 0;
+let __replayTrack = null, __replaySpeed = 1, __replayPaused = false, __replayBaseMs = 100;
 let __directionOverlays = [], __startEndMarkers = [];
 
 window.onAuthSuccess = () => onDataReady(loadKakaoMap);
@@ -1570,6 +1571,11 @@ function addDirectionArrows(track) {
 function startReplay(track) {
   if (!track || track.length < 2) return;
   stopReplay();
+  __replayTrack = track;
+  __replayIdx = 0;
+  __replaySpeed = 1;
+  __replayPaused = false;
+  __replayBaseMs = Math.max(30, Math.min(200, Math.round(8000 / track.length)));
   const replaySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
     <circle cx="10" cy="10" r="8" fill="#e67e22" stroke="#fff" stroke-width="2"/>
     <circle cx="10" cy="10" r="3" fill="#fff"/>
@@ -1578,34 +1584,75 @@ function startReplay(track) {
     'data:image/svg+xml;utf8,' + encodeURIComponent(replaySvg),
     new kakao.maps.Size(20, 20), { offset: new kakao.maps.Point(10, 10) }
   );
-  __replayIdx = 0;
   __replayMarker = new kakao.maps.Marker({
     position: new kakao.maps.LatLng(track[0][0], track[0][1]),
     map, image: replayImg, zIndex: 60
   });
   const replayBtn = document.getElementById('replayBtn');
   if (replayBtn) { replayBtn.textContent = '⏹ 정지'; replayBtn.style.background = '#e74c3c'; }
-  const speed = Math.max(30, Math.min(200, Math.round(8000 / track.length)));
+  __replayRunTimer();
+  renderReplayControls();
+}
+function __replaySetMarker() {
+  if (!__replayTrack || !__replayMarker) return;
+  const t = __replayTrack[__replayIdx];
+  const p = new kakao.maps.LatLng(t[0], t[1]);
+  __replayMarker.setPosition(p);
+  if (map) map.setCenter(p);
+}
+function __replayRunTimer() {
+  if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
+  if (__replayPaused || !__replayTrack) return;
   __replayTimer = setInterval(() => {
     __replayIdx++;
-    if (__replayIdx >= track.length) {
-      stopReplay();
+    if (__replayIdx >= __replayTrack.length) {
+      __replayIdx = __replayTrack.length - 1;
+      __replayPaused = true;
+      if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
+      renderReplayControls();
       return;
     }
-    const p = new kakao.maps.LatLng(track[__replayIdx][0], track[__replayIdx][1]);
-    __replayMarker.setPosition(p);
-    map.setCenter(p);
-  }, speed);
+    __replaySetMarker();
+  }, Math.max(15, __replayBaseMs / __replaySpeed));
+}
+function setReplaySpeed(s) { __replaySpeed = s; if (!__replayPaused) __replayRunTimer(); renderReplayControls(); }
+function pauseReplay() { __replayPaused = true; if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; } renderReplayControls(); }
+function resumeReplay() {
+  if (!__replayTrack) return;
+  if (__replayIdx >= __replayTrack.length - 1) __replayIdx = 0; // 끝이면 처음부터
+  __replayPaused = false; __replayRunTimer(); renderReplayControls();
+}
+function seekReplay(delta) {
+  if (!__replayTrack) return;
+  __replayIdx = Math.max(0, Math.min(__replayTrack.length - 1, __replayIdx + delta));
+  __replaySetMarker(); renderReplayControls();
 }
 function stopReplay() {
   if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
   if (__replayMarker) { __replayMarker.setMap(null); __replayMarker = null; }
-  __replayIdx = 0;
+  __replayIdx = 0; __replayTrack = null; __replayPaused = false; __replaySpeed = 1;
   const replayBtn = document.getElementById('replayBtn');
   if (replayBtn) { replayBtn.textContent = '▶ 재생'; replayBtn.style.background = '#e67e22'; }
+  renderReplayControls();
+}
+function renderReplayControls() {
+  const el = document.getElementById('replayControls');
+  if (!el) return;
+  if (!__replayTrack || !__replayMarker) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  const total = Math.max(1, __replayTrack.length - 1);
+  const pct = Math.round((__replayIdx / total) * 100);
+  const atEnd = __replayIdx >= total;
+  const btn = (label, fn, bg) => `<button onclick="${fn}" style="background:${bg||'#34495e'};color:#fff;border:none;padding:5px 9px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;">${label}</button>`;
+  const spd = [1,2,4,8].map(s => `<button onclick="setReplaySpeed(${s})" style="background:${__replaySpeed===s?'#27ae60':'#b0b8c0'};color:#fff;border:none;padding:5px 8px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;">x${s}</button>`).join('');
+  el.innerHTML = btn('⏪', 'seekReplay(-10)')
+    + (__replayPaused ? btn(atEnd ? '↻처음' : '▶', 'resumeReplay()', '#27ae60') : btn('⏸', 'pauseReplay()', '#e67e22'))
+    + btn('⏩', 'seekReplay(10)')
+    + `<span style="align-self:center;margin:0 4px;font-size:11px;color:#888;min-width:34px;">${pct}%</span>`
+    + spd;
 }
 function toggleReplay() {
-  if (__replayTimer) { stopReplay(); return; }
+  if (__replayMarker) { stopReplay(); return; }
   const logs = getFilteredLogs();
   if (selectedLogIdx === null || !logs[selectedLogIdx]) return;
   const log = logs[selectedLogIdx];
@@ -1670,6 +1717,7 @@ function drawLog(log) {
       <span><b>${event?.name} · ${course?.name}${course?.detail ? ' ('+course.detail+')' : ''}</b>${team ? ' · ' + team.name : ''}</span>
       ${replayHtml}
     </div>
+    <div id="replayControls" style="display:none;align-items:center;flex-wrap:wrap;gap:4px;margin-top:8px;"></div>
     ${driver || assist ? `운전: <b>${driver || '-'}</b>${assist ? ' · 보조: <b>' + assist + '</b>' : ''}<br>` : ''}
     완료 ${(log.completions||[]).length}/${anchors.length} ·
     이동 ${(trackDistance(log.track || []) / 1000).toFixed(2)}km ·
