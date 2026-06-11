@@ -2553,14 +2553,11 @@ function renderEvtAssign() {
     <label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid ${cfg.personMode ? '#16a085' : '#e5e7eb'};border-radius:8px;background:${cfg.personMode ? '#e8f8f5' : '#fff'};cursor:pointer;font-size:13px;">
       <input type="checkbox" ${cfg.personMode ? 'checked' : ''} onchange="toggleEvtPerson('${eventId}')">
       <span style="font-weight:700;">👤 인원별(개인) 운영</span>
-      <span style="color:#888;font-size:11px;">조·차량 없이 회원 각자가 코스를 돕니다 (전단지 등). 핑 찍기 자동 켜짐</span>
+      <span style="color:#888;font-size:11px;">조·차량 없이 회원 각자(1인 단위)가 코스를 돕니다 (전단지 등). 핑 찍기 자동 켜짐</span>
     </label>
     ${cfg.personMode ? `
-    <div style="margin-top:8px;display:flex;align-items:center;gap:8px;font-size:13px;">
-      <span style="color:#555;">참여 인원수</span>
-      <input type="number" min="0" value="${cfg.personCount || 0}" onchange="setEvtPersonCount('${eventId}', this.value)"
-        style="width:70px;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;text-align:center;"> 명
-      <span style="color:#aaa;font-size:11px;">(계획 인원 — 참고용)</span>
+    <div style="margin-top:8px;font-size:12px;color:#16a085;background:#e8f8f5;border-radius:6px;padding:8px 10px;">
+      ✅ 인원별 ON — 회원이 각자 폰에서 자기 이름으로 시작합니다. 인원수 제한 없이 참여한 만큼 모니터링·운행기록에 자동 집계돼요.
     </div>` : ''}
   </div>`;
 

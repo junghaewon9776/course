@@ -757,6 +757,7 @@ function openStartForm(eventId, courseId) {
         <div id="fDriverSuggest" class="suggestList"></div>
       </div>
 
+      ${pinMode ? '' : `
       <label>보조자</label>
       <div style="position:relative;">
         <input id="fAssist" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
@@ -764,7 +765,7 @@ function openStartForm(eventId, courseId) {
                onfocus="showSuggestions('fAssist','fAssistSuggest')"
                onblur="setTimeout(()=>document.getElementById('fAssistSuggest').style.display='none',200)">
         <div id="fAssistSuggest" class="suggestList"></div>
-      </div>
+      </div>`}
 
       ${hasVehicles ? `
         <label style="font-weight:700;color:#27ae60;margin-top:10px;display:block;">⚡ 차량 선택</label>
