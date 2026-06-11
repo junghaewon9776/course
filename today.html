@@ -751,7 +751,12 @@ function openStartForm(eventId, courseId) {
         </select>`;
       })() : ''}
 
-      <label>${pinMode ? '이름 (본인) *' : '운전자 *'}</label>
+      ${pinMode ? `
+      <label>참여자 * <span style="font-weight:400;color:#888;font-size:11px;">(조를 고르면 인원만큼 자동 입력)</span></label>
+      <div id="participantFields"></div>
+      <button type="button" onclick="addParticipantField()" style="background:#16a085;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;margin-top:2px;">+ 참여자 추가</button>
+      ` : `
+      <label>운전자 *</label>
       <div style="position:relative;">
         <input id="fDriver" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
                oninput="showSuggestions('fDriver','fDriverSuggest')"
@@ -760,7 +765,6 @@ function openStartForm(eventId, courseId) {
         <div id="fDriverSuggest" class="suggestList"></div>
       </div>
 
-      ${pinMode ? '' : `
       <label>보조자</label>
       <div style="position:relative;">
         <input id="fAssist" type="text" placeholder="이름 검색 또는 직접 입력" autocomplete="off"
@@ -801,7 +805,37 @@ function openStartForm(eventId, courseId) {
   setTimeout(() => {
     const sel = document.getElementById('fTeam');
     if (sel && sel.value) autoFillFromTeam();
+    // 인원별: 조가 안 골라졌으면 기본 인원수만큼 빈 칸
+    const pf = document.getElementById('participantFields');
+    if (pf && !pf.children.length) {
+      const n = Math.max(1, _getEvtCfg(eventId).personCount || 1);
+      __pCount = 0;
+      for (let k = 0; k < n; k++) addParticipantField('');
+    }
   }, 150);
+}
+
+// ───── 인원별: 참여자 이름칸 동적 추가 ─────
+let __pCount = 0;
+function addParticipantField(name) {
+  const box = document.getElementById('participantFields');
+  if (!box) return;
+  const i = __pCount++;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:6px;';
+  row.innerHTML = `
+    <div style="flex:1;position:relative;">
+      <input id="pMember${i}" type="text" placeholder="참여자 이름" autocomplete="off" value="${(name||'').replace(/"/g,'&quot;')}"
+        oninput="showSuggestions('pMember${i}','pMemberSug${i}')" onfocus="showSuggestions('pMember${i}','pMemberSug${i}')"
+        onblur="setTimeout(()=>{const e=document.getElementById('pMemberSug${i}');if(e)e.style.display='none'},200)">
+      <div id="pMemberSug${i}" class="suggestList"></div>
+    </div>
+    <button type="button" onclick="this.parentElement.remove()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;width:32px;height:32px;cursor:pointer;font-size:16px;line-height:1;flex:none;">×</button>`;
+  box.appendChild(row);
+}
+function getParticipantNames() {
+  return Array.from(document.querySelectorAll('#participantFields input'))
+    .map(x => x.value.trim()).filter(Boolean);
 }
 
 function showSuggestions(inputId, listId) {
@@ -851,6 +885,17 @@ function autoFillFromTeam() {
   const data = loadData();
   const team = getTeam(data, teamId);
   if (!team) return;
+
+  // 인원별: 그 조의 인원수만큼 참여자 칸 자동 채움 (조장+부조장+조원, 중복 제거)
+  const pf = document.getElementById('participantFields');
+  if (pf) {
+    const ids = [team.leaderId, team.viceLeaderId, ...(team.memberIds || [])].filter(Boolean);
+    const seen = new Set(); const names = [];
+    ids.forEach(id => { const m = getMember(data, id); if (m && !seen.has(m.id)) { seen.add(m.id); names.push(m.name); } });
+    pf.innerHTML = ''; __pCount = 0;
+    (names.length ? names : ['']).forEach(n => addParticipantField(n));
+    return;
+  }
 
   const leader = getMember(data, team.leaderId);
   const vice = getMember(data, team.viceLeaderId);
@@ -922,6 +967,21 @@ function autoFillFromVehicle() {
 
 function confirmStartForm(eventId, courseId) {
   const teamId = document.getElementById('fTeam')?.value || '';  // 선택사항 — 차량 버튼 모드에서는 아예 없음
+  const data0 = loadData();
+  // 인원별: 참여자 칸에서 이름들 수집 (운전자 단일 필수 아님)
+  if (document.getElementById('participantFields')) {
+    const names = getParticipantNames();
+    if (!names.length) { alert('참여자를 1명 이상 입력하세요'); return; }
+    const findPhone0 = (n) => ((data0.members || []).find(x => (x.name||'').trim() === n.trim())?.phone || '');
+    closeStartForm();
+    startSession(eventId, courseId, teamId, {
+      driver: names[0],
+      assist: names.slice(1).join(', '),
+      members: names,
+      driverPhone: findPhone0(names[0])
+    });
+    return;
+  }
   const driver = document.getElementById('fDriver').value.trim();
   if (!driver) { alert('운전자 이름을 입력하세요'); return; }
   const assist = (document.getElementById('fAssist')?.value || '').trim();
@@ -1023,8 +1083,12 @@ function startSession(eventId, courseId, teamId, crew) {
   document.getElementById('opTitle').textContent = `${event.name} - ${course.name}${course.detail ? ' ('+course.detail+')' : ''}`;
   const subtitleParts = [];
   if (team) subtitleParts.push(team.name);
-  if (crew?.driver) subtitleParts.push(`운전 ${crew.driver}`);
-  if (crew?.assist) subtitleParts.push(`보조 ${crew.assist}`);
+  if (crew?.members && crew.members.length) {
+    subtitleParts.push(`👥 ${crew.members.join(', ')}`);   // 인원별: 참여자 전원
+  } else {
+    if (crew?.driver) subtitleParts.push(`운전 ${crew.driver}`);
+    if (crew?.assist) subtitleParts.push(`보조 ${crew.assist}`);
+  }
   document.getElementById('opSubtitle').textContent = subtitleParts.join(' · ');
 
   applyPinModeUI();
