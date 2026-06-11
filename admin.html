@@ -1806,13 +1806,36 @@ function renderNoSprayZones() {
   }).join('');
 }
 
+// 위치를 모달 지도로 표시 (민원·방역금지 공용)
+function openLocationModal(lat, lng, title, color) {
+  if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) { alert('위치 정보가 없습니다'); return; }
+  const ex = document.getElementById('__locModal'); if (ex) ex.remove();
+  const ov = document.createElement('div');
+  ov.id = '__locModal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.onclick = function (e) { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:520px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.35);">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:' + color + ';color:#fff;">'
+    + '<b style="font-size:15px;">📍 ' + title + '</b>'
+    + '<button onclick="document.getElementById(\'__locModal\').remove()" style="background:rgba(255,255,255,0.25);color:#fff;border:none;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;line-height:1;">✕</button>'
+    + '</div>'
+    + '<div id="__locModalMap" style="width:100%;height:380px;background:#eee;"></div>'
+    + '<div style="padding:10px 16px;">'
+    + '<a href="https://map.kakao.com/link/to/' + encodeURIComponent(title) + ',' + lat + ',' + lng + '" target="_blank" rel="noopener" style="display:block;text-align:center;background:#fee500;color:#000;padding:11px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">🗺 카카오맵으로 길찾기</a>'
+    + '</div></div>';
+  document.body.appendChild(ov);
+  const pos = new kakao.maps.LatLng(lat, lng);
+  const modalMap = new kakao.maps.Map(document.getElementById('__locModalMap'), { center: pos, level: 3 });
+  new kakao.maps.Marker({ position: pos, map: modalMap });
+  modalMap.addControl(new kakao.maps.MapTypeControl(), kakao.maps.ControlPosition.TOPRIGHT);
+  modalMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+  setTimeout(function () { modalMap.relayout(); modalMap.setCenter(pos); }, 120);
+}
 function centerOnNoSpray(id) {
   const data = loadData();
   const z = (data.noSprayZones || []).find(x => x.id === id);
-  if (!z || !map) return;
-  map.setCenter(new kakao.maps.LatLng(z.lat, z.lng));
-  map.setLevel(3);
-  scrollToMap();
+  if (!z) return;
+  openLocationModal(z.lat, z.lng, '방역금지 위치', '#e74c3c');
 }
 
 // ────── 민원 ──────
@@ -1916,10 +1939,8 @@ function scrollToMap() {
 function centerOnComplaint(id) {
   const data = loadData();
   const c = (data.complaints || []).find(x => x.id === id);
-  if (!c || !map) return;
-  map.setCenter(new kakao.maps.LatLng(c.lat, c.lng));
-  map.setLevel(3);
-  scrollToMap();
+  if (!c) return;
+  openLocationModal(c.lat, c.lng, '민원 위치', '#f1c40f');
 }
 
 function toggleComplaintStatus(id) {
