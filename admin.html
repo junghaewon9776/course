@@ -1807,6 +1807,7 @@ function centerOnNoSpray(id) {
   if (!z || !map) return;
   map.setCenter(new kakao.maps.LatLng(z.lat, z.lng));
   map.setLevel(3);
+  scrollToMap();
 }
 
 // ────── 민원 ──────
