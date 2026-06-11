@@ -558,9 +558,11 @@ function initFirebaseSync() {
 
     if (!_cacheReady) {
       _cacheReady = true;
+      try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
       _readyCallbacks.forEach(cb => cb());
       _readyCallbacks.length = 0;
     }
+    try { checkAccessGate(); } catch (e) {}
     if (window.onDataChanged) window.onDataChanged();
   }, (err) => {
     // 로그아웃 중이면 무시 (signOut → signInAnonymously 사이에 발생)
@@ -575,6 +577,52 @@ function stopFirebaseSync() {
   }
   _syncInitialized = false;
   _cacheReady = false;
+}
+
+// ───────── 🔒 접근 비밀번호 게이트 (첫 실행 1회 인증) ─────────
+function checkAccessGate() {
+  const gate = (_cache && _cache.accessGate) || null;
+  if (!gate || !gate.enabled || !gate.pin) {
+    const ex = document.getElementById('__accessGate');
+    if (ex) ex.remove();
+    return;
+  }
+  const authedV = localStorage.getItem('__gateAuthV');
+  if (authedV && parseInt(authedV, 10) === (gate.version || 1)) return; // 이미 인증됨
+  showAccessGate();
+}
+function showAccessGate() {
+  if (document.getElementById('__accessGate')) return;
+  if (!document.body) { document.addEventListener('DOMContentLoaded', showAccessGate); return; }
+  const ov = document.createElement('div');
+  ov.id = '__accessGate';
+  ov.style.cssText = 'position:fixed;inset:0;background:#2c3e50;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML = '<div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:320px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.4);">'
+    + '<div style="font-size:40px;margin-bottom:8px;">🔒</div>'
+    + '<h2 style="color:#2c3e50;margin:0 0 6px;font-size:18px;">접근 인증</h2>'
+    + '<p style="color:#888;font-size:13px;margin:0 0 16px;line-height:1.5;">단원 공통 비밀번호를 입력하세요<br>(이 기기에서 처음 한 번만)</p>'
+    + '<input id="__gatePin" type="text" maxlength="40" placeholder="비밀번호" autocomplete="off" autocapitalize="off" autocorrect="off" '
+    + 'style="width:100%;box-sizing:border-box;padding:13px;border:2px solid #ddd;border-radius:8px;font-size:16px;text-align:center;margin-bottom:12px;">'
+    + '<button id="__gateBtn" style="width:100%;padding:13px;background:#2980b9;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;">확인</button>'
+    + '<p id="__gateErr" style="color:#e74c3c;font-size:12px;margin:10px 0 0;height:14px;"></p>'
+    + '</div>';
+  document.body.appendChild(ov);
+  const pin = document.getElementById('__gatePin');
+  document.getElementById('__gateBtn').addEventListener('click', submitAccessGate);
+  pin.addEventListener('keydown', e => { if (e.key === 'Enter') submitAccessGate(); });
+  setTimeout(() => pin.focus(), 100);
+}
+function submitAccessGate() {
+  const gate = (_cache && _cache.accessGate) || null;
+  if (!gate) { const g = document.getElementById('__accessGate'); if (g) g.remove(); return; }
+  const input = (document.getElementById('__gatePin').value || '').trim();
+  if (input === String(gate.pin)) {
+    localStorage.setItem('__gateAuthV', String(gate.version || 1));
+    const g = document.getElementById('__accessGate'); if (g) g.remove();
+  } else {
+    document.getElementById('__gateErr').textContent = '비밀번호가 틀립니다';
+    const p = document.getElementById('__gatePin'); p.value = ''; p.focus();
+  }
 }
 
 function loadData() {

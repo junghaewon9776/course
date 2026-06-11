@@ -199,6 +199,18 @@
         <div id="teamList"></div>
       </div>
 
+      <!-- 앱 접근 비밀번호 (super 전용) -->
+      <div class="card super-only" style="border-left:4px solid #e74c3c;">
+        <h2>🔒 앱 접근 비밀번호</h2>
+        <p class="muted" style="font-size:12px;margin-bottom:8px;">공개 배포 시 단원만 쓰게 막는 공통 비밀번호입니다. 첫 실행 때 1회 인증하면 이후엔 바로 사용하고, <b>비밀번호를 바꾸면 모든 기기가 다시 인증</b>합니다.</p>
+        <label style="display:flex;align-items:center;gap:6px;margin:8px 0;cursor:pointer;">
+          <input type="checkbox" id="agEnabled" style="width:auto;"> <span>사용 (체크 시 비밀번호 필요)</span>
+        </label>
+        <label>비밀번호</label>
+        <input id="agPin" type="text" placeholder="예: bangyeok2026" autocomplete="off">
+        <button class="small" onclick="saveAccessGate()" style="background:#e74c3c;color:#fff;margin-top:8px;">저장 (변경 시 전원 재인증)</button>
+      </div>
+
       <!-- 텔레그램 알림 -->
       <div class="card super-only" style="border-left:4px solid #0088cc;">
         <h2>📱 텔레그램 알림</h2>
@@ -318,7 +330,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260609e"></script>
+<script src="common.js?v=20260611a"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -914,12 +926,38 @@ function fitAllAnchors() {
   map.setBounds(bounds, 50);
 }
 
+// 🔒 앱 접근 비밀번호 (super 전용)
+function renderAccessGate() {
+  const data = loadData();
+  const g = data.accessGate || {};
+  const en = document.getElementById('agEnabled');
+  const pin = document.getElementById('agPin');
+  if (en) en.checked = !!g.enabled;
+  if (pin) pin.value = g.pin || '';
+}
+function saveAccessGate() {
+  if (getMyRole() !== 'super') { alert('super 계정만 변경할 수 있습니다'); return; }
+  const data = loadData();
+  const enabled = document.getElementById('agEnabled').checked;
+  const pin = (document.getElementById('agPin').value || '').trim();
+  if (enabled && !pin) { alert('비밀번호를 입력하세요'); return; }
+  const old = data.accessGate || { version: 0, pin: '', enabled: false };
+  const changed = (pin !== (old.pin || '')) || (enabled !== !!old.enabled);
+  data.accessGate = { enabled: enabled, pin: pin, version: (old.version || 0) + (changed ? 1 : 0) };
+  // 설정하는 본인 기기는 자동 인증 (안 잠기게)
+  if (enabled && pin) localStorage.setItem('__gateAuthV', String(data.accessGate.version));
+  saveData(data);
+  alert('저장됐습니다.' + (changed ? '\n\n비밀번호가 변경되어 모든 기기가 다음 접속 시 다시 인증합니다.' : ''));
+  refreshAll();
+}
+
 function refreshAll() {
   // super 전용 카드 표시
   const myRole = getMyRole();
   document.querySelectorAll('.super-only').forEach(el => {
     el.style.display = myRole === 'super' ? '' : 'none';
   });
+  renderAccessGate();
   renderRequests();
   renderEvents();
   renderEventSelect('viewSelect', true);
