@@ -1599,9 +1599,9 @@ function __replaySetMarker() {
   const p = new kakao.maps.LatLng(t[0], t[1]);
   __replayMarker.setPosition(p);
   if (map) map.setCenter(p);
-  // 진행 바·% 업데이트 (전체 재렌더 없이 — 드래그 끊김 방지)
+  // 진행 바·% 실시간 업데이트 (전체 재렌더 없이). 드래그 중(__replaySeeking)일 때만 건너뜀
   const slider = document.getElementById('__replaySlider');
-  if (slider && document.activeElement !== slider) slider.value = __replayIdx;
+  if (slider && !window.__replaySeeking) slider.value = __replayIdx;
   const pctEl = document.getElementById('__replayPct');
   if (pctEl) pctEl.textContent = Math.round((__replayIdx / Math.max(1, __replayTrack.length - 1)) * 100) + '%';
 }
@@ -1653,7 +1653,7 @@ function renderReplayControls() {
   const spd = [1,2,4,8].map(s => `<button onclick="setReplaySpeed(${s})" style="background:${__replaySpeed===s?'#27ae60':'#b0b8c0'};color:#fff;border:none;padding:5px 8px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;">x${s}</button>`).join('');
   el.innerHTML =
     (__replayPaused ? btn(atEnd ? '↻처음' : '▶', 'resumeReplay()', '#27ae60') : btn('⏸', 'pauseReplay()', '#e67e22'))
-    + `<input type="range" id="__replaySlider" min="0" max="${total}" value="${__replayIdx}" oninput="seekReplayTo(this.value)" style="flex:1;min-width:130px;accent-color:#27ae60;cursor:pointer;">`
+    + `<input type="range" id="__replaySlider" min="0" max="${total}" value="${__replayIdx}" oninput="seekReplayTo(this.value)" onpointerdown="window.__replaySeeking=true" onpointerup="window.__replaySeeking=false" onpointercancel="window.__replaySeeking=false" onblur="window.__replaySeeking=false" style="flex:1;min-width:130px;accent-color:#27ae60;cursor:pointer;">`
     + `<span id="__replayPct" style="align-self:center;font-size:11px;color:#888;min-width:34px;">${pct}%</span>`
     + spd;
 }
