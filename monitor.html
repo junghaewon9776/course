@@ -12,6 +12,14 @@
     /* PC에서 모니터링 지도 세로로 크게 */
     #map.map-compact { height: 720px; }
     @media (max-width: 600px) { #map.map-compact { height: 320px; } }
+    /* PC에서 운행 목록 세로로 길게 + 항목 크게 (많아져도 옆에서 스크롤로 보기) */
+    @media (min-width: 601px) {
+      #logList { max-height: 820px; overflow-y: auto; }
+      #logList .anchor-row { padding: 13px 12px; }
+      #logList .name { font-size: 15px; }
+      #logList .sub { font-size: 13px; }
+      #logList .num { width: 40px; height: 40px; font-size: 17px; }
+    }
   </style>
 </head>
 <body>
