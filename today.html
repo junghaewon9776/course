@@ -1561,9 +1561,19 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && watchId && !wakeLock) requestWakeLock();
 });
 
+// 앱(Capacitor) 환경이면 백그라운드 위치 플러그인 사용
+function getBgGeo() {
+  return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) || null;
+}
 function stopGPS() {
   if (watchId === null) return;
-  navigator.geolocation.clearWatch(watchId);
+  const BG = getBgGeo();
+  if (BG && window.__bgWatcherId) {
+    BG.removeWatcher({ id: window.__bgWatcherId });
+    window.__bgWatcherId = null;
+  } else if (typeof watchId === 'number') {
+    navigator.geolocation.clearWatch(watchId);
+  }
   watchId = null;
   releaseWakeLock();
   const btn = document.getElementById('gpsToggle');
@@ -1577,11 +1587,35 @@ function toggleGPS() {
     stopGPS();
     return;
   }
-  if (!navigator.geolocation) { alert('GPS 미지원 브라우저'); return; }
+  const BG = getBgGeo();
+  if (!BG && !navigator.geolocation) { alert('GPS 미지원 브라우저'); return; }
   followMode = true;
   updateFollowBtn();
-  watchId = navigator.geolocation.watchPosition(onGpsUpdate, onGpsError,
-    { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
+  if (BG) {
+    // 앱: 백그라운드 추적 — 화면 꺼도, 다른 앱 써도 위치 계속 기록
+    BG.addWatcher({
+      backgroundMessage: "방역 차량 위치를 기록 중입니다",
+      backgroundTitle: "🚐 방역코스 운행 중",
+      requestPermissions: true,
+      stale: false,
+      distanceFilter: 5
+    }, function (location, error) {
+      if (error) { console.warn('백그라운드 GPS 오류:', error); return; }
+      if (location) {
+        onGpsUpdate({ coords: {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          heading: (location.bearing != null ? location.bearing : null),
+          accuracy: location.accuracy
+        }});
+      }
+    }).then(function (id) { window.__bgWatcherId = id; });
+    watchId = 'bg';
+  } else {
+    // 웹: 일반 GPS (화면 켜진 상태에서만)
+    watchId = navigator.geolocation.watchPosition(onGpsUpdate, onGpsError,
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 });
+  }
   requestWakeLock();
   btn.textContent = '⏸ GPS 중지';
   document.getElementById('gpsStatus').textContent = 'GPS 추적 중...';
