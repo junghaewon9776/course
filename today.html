@@ -44,8 +44,6 @@
         </div>
         <div class="op-toolbar">
           <button class="small" id="gpsToggle" onclick="toggleGPS()">📍 GPS 시작</button>
-          <button class="small" id="btnPinHere" onclick="dropPinHere()" style="display:none;background:#16a085;font-weight:700;">📍 여기 핑</button>
-          <button class="small" id="btnPinMap" onclick="armMapPin()" style="display:none;background:#27ae60;">🗺️ 지도에서 핑</button>
           <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 데이터 전송 주기 (지도는 항상 실시간)">
             <option value="0">전송:실시간</option>
             <option value="3000">전송:3초</option>
@@ -73,6 +71,11 @@
         <div class="map-ctrl" style="bottom:10px;left:10px;gap:4px;">
           <button class="map-btn" id="followToggle" onclick="toggleFollow()" style="font-size:10px;width:auto;padding:0 6px;height:30px;">따라가기해제</button>
           <button class="map-btn" onclick="fitToCourse()" style="font-size:10px;width:auto;padding:0 6px;height:30px;">전체</button>
+        </div>
+        <!-- 📍 전단지 핑 버튼 (지도 오른쪽 맨 아래) -->
+        <div class="map-ctrl" id="pinMapCtrl" style="bottom:10px;right:10px;flex-direction:column;gap:6px;align-items:flex-end;display:none;">
+          <button id="btnPinMap" onclick="armMapPin()" style="background:#27ae60;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);white-space:nowrap;">🗺️ 지도에서 핑</button>
+          <button id="btnPinHere" onclick="dropPinHere()" style="background:#16a085;color:#fff;border:none;border-radius:10px;padding:14px 18px;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,0.35);white-space:nowrap;">📍 여기 핑</button>
         </div>
       </div>
       <div id="nextInfo" style="margin-top:8px;font-size:13px;"></div>
@@ -1294,8 +1297,8 @@ function isPinCourse() {
 function applyPinModeUI() {
   const on = isPinCourse();
   const show = (id, vis) => { const el = document.getElementById(id); if (el) el.style.display = vis ? '' : 'none'; };
-  show('btnPinHere', on);
-  show('btnPinMap', on);
+  const pinCtrl = document.getElementById('pinMapCtrl');
+  if (pinCtrl) pinCtrl.style.display = on ? 'flex' : 'none';   // 지도 위 핑 버튼 (오른쪽 아래)
   show('btnReqAnchor', !on);   // 거점요청 버튼은 일반 코스만
   show('btnReqAnchor2', !on);
   show('anchorRows', !on);
