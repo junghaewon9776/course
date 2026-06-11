@@ -1599,6 +1599,17 @@ function __replaySetMarker() {
   const p = new kakao.maps.LatLng(t[0], t[1]);
   __replayMarker.setPosition(p);
   if (map) map.setCenter(p);
+  // 진행 바·% 업데이트 (전체 재렌더 없이 — 드래그 끊김 방지)
+  const slider = document.getElementById('__replaySlider');
+  if (slider && document.activeElement !== slider) slider.value = __replayIdx;
+  const pctEl = document.getElementById('__replayPct');
+  if (pctEl) pctEl.textContent = Math.round((__replayIdx / Math.max(1, __replayTrack.length - 1)) * 100) + '%';
+}
+// 진행 바 드래그 → 해당 위치로 이동
+function seekReplayTo(v) {
+  if (!__replayTrack) return;
+  __replayIdx = Math.max(0, Math.min(__replayTrack.length - 1, parseInt(v) || 0));
+  __replaySetMarker();
 }
 function __replayRunTimer() {
   if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
@@ -1622,11 +1633,6 @@ function resumeReplay() {
   if (__replayIdx >= __replayTrack.length - 1) __replayIdx = 0; // 끝이면 처음부터
   __replayPaused = false; __replayRunTimer(); renderReplayControls();
 }
-function seekReplay(delta) {
-  if (!__replayTrack) return;
-  __replayIdx = Math.max(0, Math.min(__replayTrack.length - 1, __replayIdx + delta));
-  __replaySetMarker(); renderReplayControls();
-}
 function stopReplay() {
   if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
   if (__replayMarker) { __replayMarker.setMap(null); __replayMarker = null; }
@@ -1643,12 +1649,12 @@ function renderReplayControls() {
   const total = Math.max(1, __replayTrack.length - 1);
   const pct = Math.round((__replayIdx / total) * 100);
   const atEnd = __replayIdx >= total;
-  const btn = (label, fn, bg) => `<button onclick="${fn}" style="background:${bg||'#34495e'};color:#fff;border:none;padding:5px 9px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;">${label}</button>`;
+  const btn = (label, fn, bg) => `<button onclick="${fn}" style="background:${bg||'#34495e'};color:#fff;border:none;padding:6px 11px;border-radius:5px;font-size:13px;font-weight:700;cursor:pointer;">${label}</button>`;
   const spd = [1,2,4,8].map(s => `<button onclick="setReplaySpeed(${s})" style="background:${__replaySpeed===s?'#27ae60':'#b0b8c0'};color:#fff;border:none;padding:5px 8px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;">x${s}</button>`).join('');
-  el.innerHTML = btn('⏪', 'seekReplay(-10)')
-    + (__replayPaused ? btn(atEnd ? '↻처음' : '▶', 'resumeReplay()', '#27ae60') : btn('⏸', 'pauseReplay()', '#e67e22'))
-    + btn('⏩', 'seekReplay(10)')
-    + `<span style="align-self:center;margin:0 4px;font-size:11px;color:#888;min-width:34px;">${pct}%</span>`
+  el.innerHTML =
+    (__replayPaused ? btn(atEnd ? '↻처음' : '▶', 'resumeReplay()', '#27ae60') : btn('⏸', 'pauseReplay()', '#e67e22'))
+    + `<input type="range" id="__replaySlider" min="0" max="${total}" value="${__replayIdx}" oninput="seekReplayTo(this.value)" style="flex:1;min-width:130px;accent-color:#27ae60;cursor:pointer;">`
+    + `<span id="__replayPct" style="align-self:center;font-size:11px;color:#888;min-width:34px;">${pct}%</span>`
     + spd;
 }
 function toggleReplay() {
