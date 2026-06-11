@@ -482,7 +482,8 @@ function previewCourse(eventId, courseId) {
       removable: true,
       content: `<div style="padding:8px 10px;font-size:12px;max-width:200px;">
         <div style="font-weight:700;color:${course.color};margin-bottom:3px;font-size:13px;">${i+1}. ${(a.name||'').replace(/</g,'&lt;')}</div>
-        ${a.memo ? '<div style="color:#444;white-space:pre-wrap;font-size:11px;">' + a.memo.replace(/</g,'&lt;') + '</div>' : ''}
+        ${a.memo ? '<div style="color:#444;white-space:pre-wrap;font-size:11px;margin-bottom:5px;">' + a.memo.replace(/</g,'&lt;') + '</div>' : ''}
+        <a href="#" onclick="navTo('${a.id}');return false;" style="display:block;margin-top:4px;background:#3498db;color:#fff;padding:6px;border-radius:5px;text-align:center;font-weight:700;text-decoration:none;font-size:11px;">🧭 내비</a>
       </div>`
     });
     kakao.maps.event.addListener(marker, 'click', () => toggleInfoWindow(iw, marker, map));
@@ -512,6 +513,7 @@ function previewCourse(eventId, courseId) {
     m.__markerMeta = { type:'circle', svg };
     const phoneTel = (c.phone||'').replace(/[^0-9+]/g,'');
     const iw = new kakao.maps.InfoWindow({
+      zIndex: 1000, removable: true,
       content: `<div style="padding:10px;font-size:12px;max-width:240px;"><div style="font-weight:700;color:#b7950b;margin-bottom:4px;">📞 민원</div><div style="color:#444;">${(c.content||'').replace(/</g,'&lt;')}</div>${c.phone ? '<div style="margin-top:6px;"><a href="tel:'+phoneTel+'" style="color:#27ae60;">📞 '+c.phone+'</a></div>' : ''}</div>`
     });
     kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
@@ -528,6 +530,7 @@ function previewCourse(eventId, courseId) {
     });
     m.__markerMeta = { type:'circle', svg };
     const iw = new kakao.maps.InfoWindow({
+      zIndex: 1000, removable: true,
       content: `<div style="padding:8px;font-size:12px;max-width:220px;"><div style="font-weight:700;color:#e67e22;">📌 거점요청</div><div>${(r.name||'').replace(/</g,'&lt;')}</div>${r.memo ? '<div style="color:#888;">'+r.memo.replace(/</g,'&lt;')+'</div>' : ''}</div>`
     });
     kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
@@ -551,6 +554,7 @@ function previewCourse(eventId, courseId) {
     });
     m.__markerMeta = { type:'circle', svg };
     const iw = new kakao.maps.InfoWindow({
+      zIndex: 1000, removable: true,
       content: `<div style="padding:8px;font-size:12px;max-width:220px;"><div style="font-weight:700;color:#e74c3c;">⛔ 방역 금지</div><div>${(z.name||'').replace(/</g,'&lt;')}</div>${z.reason ? '<div style="color:#888;">'+z.reason.replace(/</g,'&lt;')+'</div>' : ''}<div style="font-size:11px;color:#aaa;">반경 ${radius}m</div></div>`
     });
     kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
@@ -1347,6 +1351,7 @@ function renderMapForSession() {
     });
     m.__markerMeta = { type:'circle', svg };
     const iw = new kakao.maps.InfoWindow({
+      zIndex: 1000, removable: true,
       content: `<div style="padding:4px 8px;font-size:12px;"><b>[요청] ${r.name}</b><br>${r.memo || ''}</div>`
     });
     kakao.maps.event.addListener(m, 'click', () => toggleInfoWindow(iw, m, map));
@@ -1382,6 +1387,7 @@ function renderMapForSession() {
         <button onclick="resolveComplaintFromMap('${c.id}')" style="flex:1;padding:6px 4px;background:#27ae60;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">✓ 처리완료</button>
       </div>`;
     const iw = new kakao.maps.InfoWindow({
+      zIndex: 1000, removable: true,
       content: `<div style="padding:10px;font-size:12px;max-width:240px;">
         <div style="font-weight:700;color:#b7950b;margin-bottom:4px;">📞 민원</div>
         <div style="color:#444;white-space:pre-wrap;">${(c.content||'').replace(/</g,'&lt;')}</div>
@@ -1416,6 +1422,7 @@ function renderMapForSession() {
     });
     m.__markerMeta = { type:'circle', svg };
     const iw = new kakao.maps.InfoWindow({
+      zIndex: 1000, removable: true,
       content: `<div style="padding:8px 10px;font-size:12px;max-width:220px;">
         <div style="font-weight:700;color:#e74c3c;margin-bottom:4px;">⛔ 방역 금지</div>
         <div><b>${(z.name || '').replace(/</g,'&lt;')}</b></div>
