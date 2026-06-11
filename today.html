@@ -1593,7 +1593,7 @@ function toggleGPS() {
   updateFollowBtn();
   if (BG) {
     // 앱: 백그라운드 추적 — 화면 꺼도, 다른 앱 써도 위치 계속 기록
-    BG.addWatcher({
+    var __bgRet = BG.addWatcher({
       backgroundMessage: "방역 차량 위치를 기록 중입니다",
       backgroundTitle: "🚐 방역코스 운행 중",
       requestPermissions: true,
@@ -1609,7 +1609,13 @@ function toggleGPS() {
           accuracy: location.accuracy
         }});
       }
-    }).then(function (id) { window.__bgWatcherId = id; });
+    });
+    // addWatcher 반환값이 Promise일 수도, watcher id 문자열일 수도 있음 (버전별 차이)
+    if (__bgRet && typeof __bgRet.then === 'function') {
+      __bgRet.then(function (id) { window.__bgWatcherId = id; });
+    } else {
+      window.__bgWatcherId = __bgRet;
+    }
     watchId = 'bg';
   } else {
     // 웹: 일반 GPS (화면 켜진 상태에서만)
