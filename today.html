@@ -1720,6 +1720,8 @@ function showMapSettings() {
         ${naviMode ? '🧭 내비모드 ON (끄기)' : '🧭 내비모드 OFF (켜기)'}
       </button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">진행방향으로 지도가 회전합니다</p>
+      <button onclick="testNspAlert()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:#e74c3c;color:#fff;">🔔 방역금지 알람 테스트</button>
+      <p style="font-size:11px;color:#888;margin:0 0 12px;">진동·음성·경고 배너를 미리 확인</p>
       <button onclick="this.closest('#mapSettingsOverlay').remove()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#34495e;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">닫기</button>
     </div>
   `;
@@ -1766,6 +1768,9 @@ function checkNoSprayProximity(lat, lng) {
       __nspState[z.id] = false;  // 반경+여유 15m 벗어나면 리셋 (경계 깜빡임 방지)
     }
   }
+}
+function testNspAlert() {
+  triggerNoSprayAlert({ name: '테스트 구역', radius: 50 });
 }
 function triggerNoSprayAlert(zone) {
   // 진동 (강하게)
