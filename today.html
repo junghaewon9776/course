@@ -736,7 +736,7 @@ function openStartForm(eventId, courseId) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
   const pinMode = !!course.pinMode || !!_getEvtCfg(eventId).personMode;  // 코스 핑모드 OR 행사 인원별 모드
   const hasVehicles = !pinMode && sortedVehicles.length > 0;  // 전단지/인원별은 차량 없이 회원만
-  const hasTeams = teams.length > 0;
+  const hasTeams = !pinMode && teams.length > 0;              // 인원별은 조 없이 완전 개인 단위
   card.innerHTML = `
     <div class="card" style="border:2px solid #3498db;">
       <h2>📝 ${event.name} · ${course.name}${course.detail ? ' <span style="font-size:13px;color:#666;font-weight:400;">('+course.detail+')</span>' : ''}</h2>
@@ -752,7 +752,7 @@ function openStartForm(eventId, courseId) {
       })() : ''}
 
       ${pinMode ? `
-      <label>참여자 * <span style="font-weight:400;color:#888;font-size:11px;">(조를 고르면 인원만큼 자동 입력)</span></label>
+      <label>참여자 * <span style="font-weight:400;color:#888;font-size:11px;">(시간 되는 사람끼리 · 1명만 채워도 시작)</span></label>
       <div id="participantFields"></div>
       <button type="button" onclick="addParticipantField()" style="background:#16a085;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer;margin-top:2px;">+ 참여자 추가</button>
       ` : `
@@ -983,7 +983,7 @@ function confirmStartForm(eventId, courseId) {
     return;
   }
   const driver = document.getElementById('fDriver').value.trim();
-  if (!driver) { alert('운전자 이름을 입력하세요'); return; }
+  if (!driver) { alert(document.getElementById('fAssist') ? '운전자 이름을 입력하세요' : '이름을 입력하세요'); return; }
   const assist = (document.getElementById('fAssist')?.value || '').trim();
   const vehicle = (document.getElementById('fVehicle')?.value || '').trim();
   const vehicleColor = (document.getElementById('fVehicleColor')?.value || '').trim();

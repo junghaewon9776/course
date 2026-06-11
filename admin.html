@@ -2557,12 +2557,12 @@ function renderEvtAssign() {
     </label>
     ${cfg.personMode ? `
     <div style="margin-top:8px;display:flex;align-items:center;gap:8px;font-size:13px;flex-wrap:wrap;">
-      <span style="color:#555;">기본 참여 인원수</span>
+      <span style="color:#555;">참여 인원수(이름칸)</span>
       <input type="number" min="1" value="${cfg.personCount || 1}" onchange="setEvtPersonCount('${eventId}', this.value)"
         style="width:64px;padding:5px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;text-align:center;"> 명
       <span style="color:#aaa;font-size:11px;">숫자 입력 후 다른 곳 한 번 클릭 = 저장</span>
     </div>
-    <div style="margin-top:6px;font-size:11px;color:#16a085;">시작할 때 <b>조</b>를 고르면 그 조 인원수만큼 이름칸이 자동으로 나와요. (운전자 필수 아님)</div>` : ''}
+    <div style="margin-top:6px;font-size:11px;color:#16a085;">조 없이 개인. 시작할 때 이름칸이 <b>이 숫자만큼</b> 나오고, <b>1명만 채워도 시작</b>돼요 (혼자/여럿 자유).</div>` : ''}
   </div>`;
 
   // 차량 추가 간편 UI
