@@ -974,11 +974,12 @@ function confirmStartForm(eventId, courseId) {
     if (!names.length) { alert('참여자를 1명 이상 입력하세요'); return; }
     const findPhone0 = (n) => ((data0.members || []).find(x => (x.name||'').trim() === n.trim())?.phone || '');
     closeStartForm();
+    // 인원별은 운전자/보조자 구분 없이 모두 참여자. 보조자 칸 안 만들고 driver에 전원 표기.
     startSession(eventId, courseId, teamId, {
-      driver: names[0],
-      assist: names.slice(1).join(', '),
+      driver: names.join(', '),
+      assist: '',
       members: names,
-      driverPhone: findPhone0(names[0])
+      driverPhone: names.length === 1 ? findPhone0(names[0]) : ''
     });
     return;
   }
