@@ -82,18 +82,7 @@
       <div id="nextInfo" style="margin-top:8px;font-size:13px;"></div>
     </div>
 
-    <div class="card" id="progressCard">
-      <h2 id="progressTitle">거점 진행</h2>
-      <div id="anchorRows"></div>
-      <div id="pinRows" style="display:none;"></div>
-      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스완료</button>
-        <button id="btnReqAnchor2" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
-        <button class="gray" onclick="resetCourse()">진행 초기화</button>
-      </div>
-    </div>
-
-    <!-- 사진 자료 (현장사진 + 영수증) -->
+    <!-- 사진 자료 (현장사진 + 영수증) — 거점/핑 위로 올림: 내려가지 않고 바로 촬영 -->
     <div class="card" id="photoCard">
       <div class="flex-between">
         <h2>📷 사진 자료 <span id="photoCount" class="muted" style="font-size:12px;font-weight:400;"></span></h2>
@@ -106,6 +95,17 @@
       </div>
       <p class="muted" style="font-size:11px;margin-top:4px;">자동 압축(1024px). 본부에서 운행기록과 함께 보입니다. 영수증은 별도 태그 + 구글시트 동기화(설정 시).</p>
       <div id="photoStrip" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+    </div>
+
+    <div class="card" id="progressCard">
+      <h2 id="progressTitle">거점 진행</h2>
+      <div id="anchorRows"></div>
+      <div id="pinRows" style="display:none;"></div>
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스완료</button>
+        <button id="btnReqAnchor2" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
+        <button class="gray" onclick="resetCourse()">진행 초기화</button>
+      </div>
     </div>
   </div>
 </div>
