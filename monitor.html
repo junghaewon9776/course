@@ -671,33 +671,31 @@ function renderMonRequestList() {
     </div>`;
   }).join('');
 }
+// 모달 대신 메인 지도로 이동 + 그 자리 정보창 표시 (핀은 이미 메인 지도에 있음)
+let __locFocusIw = null;
 function openLocationModal(lat, lng, title, color) {
   if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) { alert('위치 정보가 없습니다'); return; }
-  document.getElementById('__locModal')?.remove();
-  const ov = document.createElement('div');
-  ov.id = '__locModal';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
-  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
-  ov.innerHTML = `
-    <div style="background:#fff;border-radius:12px;width:100%;max-width:520px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.35);">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:${color};color:#fff;">
-        <b style="font-size:15px;">📍 ${title}</b>
-        <button onclick="document.getElementById('__locModal').remove()" style="background:rgba(255,255,255,0.25);color:#fff;border:none;width:30px;height:30px;border-radius:50%;font-size:16px;cursor:pointer;line-height:1;">✕</button>
-      </div>
-      <div id="__locModalMap" style="width:100%;height:380px;background:#eee;"></div>
-      <div style="padding:10px 16px;">
-        <a href="https://map.kakao.com/link/to/${encodeURIComponent(title)},${lat},${lng}" target="_blank" rel="noopener" style="display:block;text-align:center;background:#fee500;color:#000;padding:11px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;">🗺 카카오맵으로 길찾기</a>
-      </div>
-    </div>`;
-  document.body.appendChild(ov);
+  if (!map) { alert('지도가 준비 중입니다. 잠시 후 다시'); return; }
   const pos = new kakao.maps.LatLng(lat, lng);
-  const modalMap = new kakao.maps.Map(document.getElementById('__locModalMap'), { center: pos, level: 3 });
-  new kakao.maps.Marker({ position: pos, map: modalMap });
-  // 지도/위성 전환 + 확대/축소 컨트롤
-  modalMap.addControl(new kakao.maps.MapTypeControl(), kakao.maps.ControlPosition.TOPRIGHT);
-  modalMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
-  // 모달이 그려진 뒤 지도 크기 재인식
-  setTimeout(() => { modalMap.relayout(); modalMap.setCenter(pos); }, 120);
+  // 지도로 스크롤 후 그 위치로 이동
+  const mapEl = document.getElementById('map');
+  if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => {
+    map.relayout();
+    map.setLevel(3);
+    map.setCenter(pos);
+    setTimeout(() => map.panBy(0, -70), 180);   // 위쪽에 정보창 공간 확보
+  }, 80);
+  // 위치 정보창 (재사용 — 이전 것 닫고 새로)
+  if (__locFocusIw) { try { __locFocusIw.close(); } catch (e) {} }
+  __locFocusIw = new kakao.maps.InfoWindow({
+    position: pos, removable: true, zIndex: 2000,
+    content: `<div style="padding:8px 10px;font-size:12px;max-width:210px;">
+      <div style="font-weight:700;color:${color};margin-bottom:5px;">📍 ${title}</div>
+      <a href="https://map.kakao.com/link/to/${encodeURIComponent(title)},${lat},${lng}" target="_blank" rel="noopener" style="display:block;text-align:center;background:#fee500;color:#000;padding:7px;border-radius:6px;text-decoration:none;font-weight:700;font-size:12px;">🗺 카카오맵 길찾기</a>
+    </div>`
+  });
+  setTimeout(() => { try { __locFocusIw.open(map); } catch (e) {} }, 280);
 }
 let __monComplaintOpen = true, __monRequestOpen = true;
 function toggleMonComplaintCard() {
