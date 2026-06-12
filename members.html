@@ -1440,19 +1440,15 @@ function renderTeams() {
     const vice = getMember(data, t.viceLeaderId);
     const total = (t.leaderId?1:0) + (t.viceLeaderId?1:0) + (t.memberIds || []).length;
 
-    // 조원: 가로 칩(이름)으로 한 줄에 wrap 표시
+    // 조원: 가로 칩(이름)으로 한 줄에 wrap 표시 — 이름 위주로 컴팩트
     const memberChips = (t.memberIds || []).map((id) => {
       const m = getMember(data, id);
       if (!m) return '';
       const isFixed = fixed.has(id);
-      const otherTeams = (data.teams || []).filter(ot => ot.id !== t.id);
-      const moveOpts = otherTeams.map(ot => `<option value="${ot.id}">${ot.name}</option>`).join('');
       return `
-        <span style="display:inline-flex;align-items:center;gap:3px;background:${isFixed ? '#fff8e1' : '#f1f5f9'};border:1px solid ${isFixed ? '#fde68a' : '#e2e8f0'};border-radius:14px;padding:3px 8px;font-size:13px;white-space:nowrap;">
-          <b>${m.name.replace(/</g,'&lt;')}</b>
-          <span onclick="togglePinMember('${t.id}','${id}')" style="cursor:pointer;font-size:13px;" title="고정/해제">${isFixed ? '📌' : '📍'}</span>
-          <select class="admin-only" onchange="moveToTeam('${t.id}','${id}',this.value);this.selectedIndex=0;" style="font-size:10px;padding:0 1px;border:none;background:transparent;color:#2980b9;cursor:pointer;" title="다른 조로 이동"><option value="">⇄</option>${moveOpts}</select>
-          <span onclick="removeFromTeam('${t.id}','${id}')" style="cursor:pointer;color:#e74c3c;" title="조에서 제거">✕</span>
+        <span style="display:inline-flex;align-items:center;gap:3px;background:${isFixed ? '#fff8e1' : '#f1f5f9'};border:1px solid ${isFixed ? '#fde68a' : '#e2e8f0'};border-radius:13px;padding:2px 4px 2px 9px;font-size:13px;white-space:nowrap;line-height:1.4;">
+          <b onclick="togglePinMember('${t.id}','${id}')" style="cursor:pointer;" title="클릭 = 고정/해제">${m.name.replace(/</g,'&lt;')}${isFixed ? ' 📌' : ''}</b>
+          <span class="admin-only" onclick="removeFromTeam('${t.id}','${id}')" style="cursor:pointer;color:#e74c3c;font-size:11px;padding:0 2px;" title="조에서 제거">✕</span>
         </span>`;
     }).join('');
 
