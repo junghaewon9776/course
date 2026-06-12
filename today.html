@@ -74,6 +74,7 @@
         </div>
         <!-- 📍 전단지 핑 버튼 (지도 오른쪽 맨 아래) -->
         <div class="map-ctrl" id="pinMapCtrl" style="bottom:10px;right:10px;flex-direction:column;gap:5px;align-items:flex-end;display:none;">
+          <button id="btnPastPins" onclick="togglePastPins()" style="background:#7f8c8d;color:#fff;border:none;border-radius:6px;padding:0 8px;height:26px;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.25);white-space:nowrap;">👁 이전 핑</button>
           <button id="btnPinMap" onclick="armMapPin()" style="background:#27ae60;color:#fff;border:none;border-radius:6px;padding:0 8px;height:30px;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,0.25);white-space:nowrap;">🗺️ 지도핑</button>
           <button id="btnPinHere" onclick="dropPinHere()" style="background:#16a085;color:#fff;border:none;border-radius:6px;padding:0 10px;height:32px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">📍 여기 핑</button>
         </div>
@@ -122,9 +123,11 @@
 #pinMapCtrl button{line-height:1 !important;white-space:nowrap !important;}
 #btnPinHere{height:30px !important;padding:0 10px !important;font-size:12px !important;}
 #btnPinMap{height:26px !important;padding:0 8px !important;font-size:11px !important;}
+#btnPastPins{height:24px !important;padding:0 8px !important;font-size:10px !important;}
 @media (max-width:600px){
   #btnPinHere{height:30px !important;font-size:12px !important;}
   #btnPinMap{height:25px !important;font-size:10px !important;}
+  #btnPastPins{height:23px !important;font-size:10px !important;}
 }</style>
 <div id="errBar"></div>
 <script>
@@ -148,6 +151,9 @@ let watchId = null;
 let map, anchorMarkers = [], myMarker, trackLine, courseLine;
 let pinMarkers = [];        // 📍 전단지 핑 마커들
 let __pinArmed = false;     // "지도에서 핑" 모드 — 다음 지도 클릭 시 핑 추가
+let __pastPinMarkers = [];  // 👁 이전(끝난) 운행기록의 핑 — 같은 코스, 회색 참고용
+let __showPastPins = true;  // 인원별 코스는 기본으로 이전 핑 표시
+let __pastPinsRendered = false;
 // 🔴 오늘의 운영에 다른 운영자(다른 조 포함) 실시간 표시 — 모니터링처럼
 let __othersSubscribed = false;
 const otherMarkers = {};    // sessionKey → 위치 마커
@@ -1380,6 +1386,7 @@ function applyPinModeUI() {
   const title = document.getElementById('progressTitle');
   if (title) title.textContent = on ? '📍 핑 기록' : '거점 진행';
   if (on) renderPinRows();
+  __pastPinsRendered = false;   // 시작/재개 시 이전 핑 새로 그리도록
 }
 // 핑 1개 추가 (lat,lng + 출처라벨)
 function addPin(lat, lng, src) {
@@ -1526,6 +1533,57 @@ function focusPin(id) {
   kakao.maps.event.trigger(pinMarkers[idx], 'click');
   const mapEl = document.getElementById('map');
   if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ───────── 👁 이전(끝난) 핑 불러오기 — 같은 코스의 지난 운행기록 핑 ─────────
+function getPastPinsForCourse() {
+  if (!currentSession) return [];
+  const data = loadData();
+  const out = [];
+  (data.logs || []).forEach(l => {
+    if (l.courseId !== currentSession.courseId) return;
+    if (l.key && l.key === currentSession.key) return;   // 내 현재 세션 제외
+    (l.pins || []).forEach(p => {
+      if (typeof p.lat === 'number') out.push({ ...p, _date: l.date || '', _by: p.by || (l.crew?.driver) || '단원' });
+    });
+  });
+  return out;
+}
+function renderPastPins() {
+  if (!map) return;
+  __pastPinMarkers.forEach(m => { try { m.setMap(null); } catch(e){} });
+  __pastPinMarkers = [];
+  if (!__showPastPins || !isPinCourse()) { updatePastPinBtn(0); return; }
+  const past = getPastPinsForCourse();
+  past.forEach(p => {
+    const pos = new kakao.maps.LatLng(p.lat, p.lng);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="26" viewBox="0 0 26 34"><path d="M13 0 C6 0 0 6 0 13 C0 22 13 34 13 34 C13 34 26 22 26 13 C26 6 20 0 13 0 Z" fill="#7f8c8d" stroke="white" stroke-width="2"/><circle cx="13" cy="13" r="5" fill="white"/></svg>`;
+    const marker = new kakao.maps.Marker({
+      position: pos, map, zIndex: 12, opacity: 0.7,
+      image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(20, 26), { offset: new kakao.maps.Point(10, 26) })
+    });
+    const t = new Date(p.at || Date.now()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    const iw = new kakao.maps.InfoWindow({ removable: true,
+      content: `<div style="padding:7px 9px;font-size:12px;max-width:200px;">
+        <div style="font-weight:700;color:#7f8c8d;margin-bottom:2px;">👁 이전 핑</div>
+        ${p.memo ? `<div style="color:#444;white-space:pre-wrap;margin-bottom:3px;">${p.memo.replace(/</g,'&lt;')}</div>` : ''}
+        <div style="color:#888;font-size:11px;">${(p._date||'')} ${t} · ${String(p._by).replace(/</g,'&lt;')}</div>
+      </div>` });
+    kakao.maps.event.addListener(marker, 'click', () => toggleInfoWindow(iw, marker, map));
+    __pastPinMarkers.push(marker);
+  });
+  updatePastPinBtn(past.length);
+}
+function updatePastPinBtn(count) {
+  const btn = document.getElementById('btnPastPins');
+  if (!btn) return;
+  if (__showPastPins) { btn.textContent = `👁 이전 핑 ${count}`; btn.style.background = '#7f8c8d'; }
+  else { btn.textContent = '👁 이전 핑'; btn.style.background = '#bdc3c7'; }
+}
+function togglePastPins() {
+  __showPastPins = !__showPastPins;
+  renderPastPins();
 }
 
 // ───────── 🔴 다른 운영자 실시간 오버레이 (모니터링처럼) ─────────
@@ -1815,6 +1873,8 @@ function renderMapForSession() {
   }
   // 📍 내가 찍은 핑 렌더
   renderPins();
+  // 👁 이전(끝난) 핑 — 세션당 1회 (토글로 갱신)
+  if (isPinCourse() && !__pastPinsRendered) { renderPastPins(); __pastPinsRendered = true; }
 }
 
 // 거점 이름 클릭 → 지도에서 해당 위치로 이동 + InfoWindow 열기
@@ -2411,6 +2471,8 @@ function finishCourse() {
   if (myMarker) { myMarker.setMap(null); myMarker = null; }
   pinMarkers.forEach(m => { try { m.setMap(null); } catch(e){} });
   pinMarkers = [];
+  __pastPinMarkers.forEach(m => { try { m.setMap(null); } catch(e){} });
+  __pastPinMarkers = [];
   disarmMapPin();
   unsubscribeLiveOthers();   // 🔴 다른 운영자 표시 해제
   assistList = [];
