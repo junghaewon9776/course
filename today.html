@@ -1962,7 +1962,7 @@ function toggleGPS() {
       backgroundTitle: "🚐 방역코스 운행 중",
       requestPermissions: true,
       stale: false,
-      distanceFilter: 0    // 0 = 위치 갱신마다 보고 (실시간). 5m 필터 때문에 ~3초마다 끊겨 보이던 것 해결
+      distanceFilter: 1    // 1m 이상 움직이면 보고. 걸으면 사실상 실시간, 멈추면 떨림 없음 (0은 정지 시 지터)
     }, function (location, error) {
       if (error) { console.warn('백그라운드 GPS 오류:', error); return; }
       if (location) {
