@@ -1440,34 +1440,20 @@ function renderTeams() {
     const vice = getMember(data, t.viceLeaderId);
     const total = (t.leaderId?1:0) + (t.viceLeaderId?1:0) + (t.memberIds || []).length;
 
-    const memberRows = (t.memberIds || []).map((id, idx) => {
+    // 조원: 가로 칩(이름)으로 한 줄에 wrap 표시
+    const memberChips = (t.memberIds || []).map((id) => {
       const m = getMember(data, id);
       if (!m) return '';
       const isFixed = fixed.has(id);
-      const phoneTel = (m.phone || '').replace(/[^0-9+]/g, '');
-      const phoneCell = m.phone
-        ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;">📞 ${m.phone}</a>`
-        : '';
-      // 다른 조 목록 (밀어내기용)
       const otherTeams = (data.teams || []).filter(ot => ot.id !== t.id);
       const moveOpts = otherTeams.map(ot => `<option value="${ot.id}">${ot.name}</option>`).join('');
       return `
-        <tr style="${isFixed ? 'background:#fff8e1;' : ''}">
-          <td style="color:#888;font-size:11px;width:50px;padding:6px 4px;">회원${idx+1}</td>
-          <td style="padding:6px 4px;"><b>${m.name}</b></td>
-          <td style="padding:6px 4px;font-size:11px;color:#666;white-space:nowrap;">${phoneCell}</td>
-          <td class="admin-only" style="width:120px;text-align:right;padding:4px;">
-            <div style="display:flex;align-items:center;justify-content:flex-end;gap:2px;">
-              <select onchange="moveToTeam('${t.id}','${id}',this.value);this.selectedIndex=0;" style="font-size:10px;padding:1px;width:54px;color:#2980b9;" title="다른 조로 이동">
-                <option value="">→조</option>
-                ${moveOpts}
-              </select>
-              <span onclick="togglePinMember('${t.id}','${id}')" style="cursor:pointer;font-size:14px;" title="고정/해제">${isFixed ? '📌' : '📍'}</span>
-              <span onclick="removeFromTeam('${t.id}','${id}')" style="cursor:pointer;color:#e74c3c;margin-left:1px;" title="조에서 제거">✕</span>
-            </div>
-          </td>
-        </tr>
-      `;
+        <span style="display:inline-flex;align-items:center;gap:3px;background:${isFixed ? '#fff8e1' : '#f1f5f9'};border:1px solid ${isFixed ? '#fde68a' : '#e2e8f0'};border-radius:14px;padding:3px 8px;font-size:13px;white-space:nowrap;">
+          <b>${m.name.replace(/</g,'&lt;')}</b>
+          <span onclick="togglePinMember('${t.id}','${id}')" style="cursor:pointer;font-size:13px;" title="고정/해제">${isFixed ? '📌' : '📍'}</span>
+          <select class="admin-only" onchange="moveToTeam('${t.id}','${id}',this.value);this.selectedIndex=0;" style="font-size:10px;padding:0 1px;border:none;background:transparent;color:#2980b9;cursor:pointer;" title="다른 조로 이동"><option value="">⇄</option>${moveOpts}</select>
+          <span onclick="removeFromTeam('${t.id}','${id}')" style="cursor:pointer;color:#e74c3c;" title="조에서 제거">✕</span>
+        </span>`;
     }).join('');
 
     return `
@@ -1502,8 +1488,10 @@ function renderTeams() {
               </select>
             </td>
           </tr>
-          ${memberRows || '<tr><td colspan="4" style="padding:14px;text-align:center;color:#aaa;font-size:12px;">조원 없음<br>(팀짜기 또는 직접 추가)</td></tr>'}
         </table>
+        <div style="padding:8px 10px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+          ${memberChips || '<span style="color:#aaa;font-size:12px;padding:4px;">조원 없음 (팀짜기 또는 직접 추가)</span>'}
+        </div>
         <div class="admin-only" style="padding:6px;background:#f8f9fa;display:flex;gap:4px;border-top:1px solid #eee;">
           <select id="addToTeam_${t.id}" style="flex:1;font-size:12px;padding:3px;">
             <option value="">조원 추가...</option>
