@@ -1426,6 +1426,7 @@ function renderCourses() {
         <div class="sub" style="margin-top:2px;margin-left:20px;">${anchorCnt}개 거점</div>
       </div>
       <input type="color" value="${c.color}" style="width:30px;height:30px;padding:0;border:1px solid #ddd;border-radius:6px;cursor:pointer;" onchange="setCourseColor('${c.id}',this.value)">
+      <button class="small ${isCourseVisible(c.id) ? '' : 'gray'}" onclick="toggleCourseVisible('${c.id}')" title="공개/숨김 (오늘의 운영·목록에서 보이기)">${isCourseVisible(c.id) ? '👁' : '🚫'}</button>
       <button class="small" onclick="openCourseEditModal('${c.id}')">수정</button>
       <button class="small danger" onclick="deleteCourse('${c.id}')">삭제</button>
     </div>
