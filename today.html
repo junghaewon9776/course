@@ -2269,7 +2269,7 @@ function triggerNoSprayAlert(zone) {
 
 // ───────── 📞 민원지역 근접 알람 (방역금지와 동일 방식) ─────────
 let __cmpState = {};            // 민원id -> 진입 여부
-const CMP_NEAR_RADIUS = 60;     // 민원 근접 반경(m)
+const CMP_NEAR_RADIUS = 50;     // 민원 근접 반경(m) — 적당히 (방역금지 기본값과 동일)
 function checkComplaintProximity(lat, lng) {
   const data = loadData();
   for (const c of (data.complaints || [])) {
