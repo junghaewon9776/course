@@ -2193,6 +2193,7 @@ function showMapSettings() {
       </button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">진행방향으로 지도가 회전합니다</p>
       <button onclick="testNspAlert()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:#e74c3c;color:#fff;">🔔 방역금지 알람 테스트</button>
+      <button onclick="testCmpAlert()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:#f39c12;color:#fff;">📞 민원지역 알람 테스트</button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">진동·음성·경고 배너를 미리 확인</p>
       <button onclick="this.closest('#mapSettingsOverlay').remove()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#34495e;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">닫기</button>
     </div>
@@ -2266,11 +2267,55 @@ function triggerNoSprayAlert(zone) {
   window.__nspBannerTimer = setTimeout(() => { if (b) b.style.display = 'none'; }, 8000);
 }
 
+// ───────── 📞 민원지역 근접 알람 (방역금지와 동일 방식) ─────────
+let __cmpState = {};            // 민원id -> 진입 여부
+const CMP_NEAR_RADIUS = 60;     // 민원 근접 반경(m)
+function checkComplaintProximity(lat, lng) {
+  const data = loadData();
+  for (const c of (data.complaints || [])) {
+    if (c.status === 'resolved') continue;          // 처리된 민원은 알람 X
+    if (c.lat == null || c.lng == null) continue;
+    const d = distance(lat, lng, c.lat, c.lng);
+    if (d <= CMP_NEAR_RADIUS) {
+      if (!__cmpState[c.id]) { __cmpState[c.id] = true; triggerComplaintAlert(c); }
+    } else if (d > CMP_NEAR_RADIUS + 20) {
+      __cmpState[c.id] = false;                      // 벗어나면 리셋
+    }
+  }
+}
+function testCmpAlert() {
+  triggerComplaintAlert({ content: '테스트 민원', phone: '' });
+}
+function triggerComplaintAlert(c) {
+  if (navigator.vibrate) navigator.vibrate([300, 120, 300]);
+  try {
+    if (window.speechSynthesis) {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance('민원 지역입니다');
+      u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
+      speechSynthesis.speak(u);
+    }
+  } catch (e) {}
+  let b = document.getElementById('cmpAlertBanner');
+  if (!b) {
+    b = document.createElement('div'); b.id = 'cmpAlertBanner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#f39c12;color:#fff;padding:18px 16px;text-align:center;font-weight:800;font-size:17px;box-shadow:0 3px 14px rgba(0,0,0,0.45);animation:nspFlash 0.5s ease-in-out infinite;cursor:pointer;';
+    document.body.appendChild(b);
+  }
+  const memo = c.content ? String(c.content).slice(0, 30).replace(/</g, '&lt;') : '';
+  b.innerHTML = `📞 민원지역입니다${memo ? ' — <b>' + memo + '</b>' : ''}<br><span style="font-size:13px;font-weight:600;">${c.phone ? '연락처 ' + c.phone : '민원 위치 근처'}</span>`;
+  b.onclick = () => { b.style.display = 'none'; };
+  b.style.display = 'block';
+  clearTimeout(window.__cmpBannerTimer);
+  window.__cmpBannerTimer = setTimeout(() => { if (b) b.style.display = 'none'; }, 8000);
+}
+
 function onGpsUpdate(pos) {
   const lat = pos.coords.latitude, lng = pos.coords.longitude;
   const heading = pos.coords.heading; // 0~360 또는 null
   currentPos = { lat, lng, heading };
   checkNoSprayProximity(lat, lng);  // ⛔ 방역금지구역 근접 알람
+  checkComplaintProximity(lat, lng);  // 📞 민원지역 근접 알람
   document.getElementById('gpsStatus').textContent =
     `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} (정확도 ${Math.round(pos.coords.accuracy)}m)`;
 
