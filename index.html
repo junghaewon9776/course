@@ -37,6 +37,11 @@
       <div class="title">본부 모니터링</div>
       <div class="desc">실시간 차량 + 운행기록</div>
     </a>
+    <a href="monitor.html?logs=1" class="menu-card" id="logsCard" style="display:none;">
+      <div class="icon">📋</div>
+      <div class="title">운행기록</div>
+      <div class="desc">지난 운행·궤적·핑 기록</div>
+    </a>
     <a href="teams.html" class="menu-card" style="grid-column:span 2;background:#3498db;color:#fff;">
       <div class="icon">👥</div>
       <div class="title">조별 현황</div>
@@ -115,6 +120,15 @@
     document.querySelectorAll('.super-only').forEach(el => {
       el.style.display = role2 === 'super' ? '' : 'none';
     });
+    // 📋 운행기록 타일: 로그인 사용자 중 간부 + (회원은 권한 켜졌을 때)
+    const logsCard = document.getElementById('logsCard');
+    if (logsCard) {
+      const u2 = fbAuth.currentUser;
+      const loggedIn2 = u2 && !u2.isAnonymous;
+      const isMember2 = role2 === 'member';
+      const canLogs = loggedIn2 && (!isMember2 || (typeof getAccessCfg === 'function' && getAccessCfg().memberLogs));
+      logsCard.style.display = canLogs ? '' : 'none';
+    }
     const u = fbAuth.currentUser;
     if (u && !u.isAnonymous) {
       const data = loadData();
