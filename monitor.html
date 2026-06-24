@@ -31,6 +31,7 @@
     <a href="members.html">인원</a>
     <a href="today.html">오늘운영</a>
     <a href="monitor.html" class="active">모니터링</a>
+    <a href="monitor.html?logs=1">운행기록</a>
     <a href="stats.html">통계</a>
     <a href="accounts.html" class="super-nav" style="display:none;">계정</a>
     <a href="#" onclick="adminLogout();return false;">로그아웃</a>
@@ -88,7 +89,7 @@
 
   <!-- 민원 / 거점요청 내역 -->
   <!-- 공개 모니터링 링크 (관리/공유용) — 간부만 -->
-  <div class="card admin-only" style="border-left:4px solid #9b59b6;">
+  <div class="card admin-only" id="pubMonCard" style="border-left:4px solid #9b59b6;">
     <h2>🌐 공개 모니터링 링크</h2>
     <p class="muted" style="font-size:11px;margin-bottom:6px;">
       외부 사람이 로그인 없이 차량 위치만 보게 하는 링크. <b>운영 끝나면 반드시 끄세요.</b>
@@ -1151,9 +1152,10 @@ function buildVehicleInfoHtml(sess) {
 }
 function renderLive(live) {
   window.__liveCache = live;  // focusLiveMarker에서 참조
-  // 회원(간부 아님)은 실시간 차량/핑/궤적을 지도에 표시하지 않음 (로그만 열람)
+  // 회원(간부 아님) 또는 운행기록 전용 모드(?logs=1)는 실시간 차량/핑/궤적 표시 안 함
   const __role = getMyRole();
-  if (__role !== 'admin' && __role !== 'super') {
+  const __logsMode = new URLSearchParams(location.search).get('logs') === '1';
+  if (__logsMode || (__role !== 'admin' && __role !== 'super')) {
     Object.values(liveMarkers).forEach(m => { try { m.setMap(null); } catch (e) {} });
     for (const k in liveMarkers) delete liveMarkers[k];
     Object.values(liveNameOverlays).forEach(o => { try { o.setMap(null); } catch (e) {} });
@@ -1628,6 +1630,14 @@ function render() {
   const isAdmin = role === 'admin' || role === 'super';
   document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
   document.querySelectorAll('.super-only').forEach(el => el.style.display = role === 'super' ? '' : 'none');
+
+  // 운행기록 전용 모드(?logs=1): 실시간 관련 카드 숨김 (간부 포함 모두)
+  if (new URLSearchParams(location.search).get('logs') === '1') {
+    const lc = document.getElementById('liveCard'); if (lc) lc.style.display = 'none';
+    const pc = document.getElementById('pubMonCard'); if (pc) pc.style.display = 'none';
+    const h1 = document.querySelector('header h1'); if (h1) h1.textContent = '📋 운행기록';
+    document.title = '운행기록';
+  }
 
   renderEventFilterOptions();
   const data = loadData();
