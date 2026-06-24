@@ -1032,12 +1032,9 @@ function deriveHochaName(sess) {
   }
   return raw;  // 매칭 실패 시 원본 (카니발 흰색 등) 반환
 }
-// 줌 레벨별 차 마커 크기 (멀리 볼수록 작게, 단 너무 작진 않게)
+// 줌 레벨별 차 마커 크기 — 거점/민원 마커와 동일하게 (멀리 보면 작아져 거점을 안 가림)
 function vehicleScale(level) {
-  if (level <= 4) return 1.0;
-  if (level <= 6) return 0.7;
-  if (level <= 8) return 0.55;
-  return 0.45;
+  return getMarkerScale(level);  // 가까이=1.0, 멀리=0.3 (민원·거점과 동일)
 }
 function vehicleMarkerSvg(color, label, heading, scale) {
   const s = scale || 1;
