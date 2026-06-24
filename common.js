@@ -834,6 +834,16 @@ function isMemberUser() {
 // 회원이 접근 가능한 페이지 (파일명)
 const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor.html', 'monitor-public.html', 'print.html', 'inquiry.html', 'teams.html', 'stats.html'];
 
+// 🛡️ 권한 설정 (super가 accounts.html에서 변경) — 기본값 = 현재 동작
+function getAccessCfg() {
+  const a = (typeof _cache !== 'undefined' && _cache && _cache.access) || {};
+  return {
+    memberLogs: a.memberLogs !== false,    // 운행기록 회원 열람 (기본 허용)
+    memberLive: !!a.memberLive,             // 모니터링 실시간 회원 열람 (기본 비허용)
+    complaintWrite: a.complaintWrite || 'all'  // 민원 작성: all | member | admin
+  };
+}
+
 // 네비게이션 접근 제어
 function applyMemberNav() {
   const u = fbAuth.currentUser;
@@ -850,7 +860,10 @@ function applyMemberNav() {
 
     if (isMember) {
       // 회원: 허용 목록에 없으면 숨김
-      a.style.display = MEMBER_NAV_PAGES.includes(href) ? '' : 'none';
+      let show = MEMBER_NAV_PAGES.includes(href);
+      // 운행기록/모니터링(monitor.html)은 권한 설정(memberLogs) 꺼지면 회원에게 숨김
+      if (href === 'monitor.html' && !getAccessCfg().memberLogs) show = false;
+      a.style.display = show ? '' : 'none';
     } else {
       // 관리자: 계정관리는 super만
       if (href === 'accounts.html') {
@@ -888,6 +901,12 @@ function blockMemberAccess() {
   // 회원 → 허용 페이지만
   if (isMemberUser() && !MEMBER_ALLOWED_PAGES.includes(page)) {
     alert('관리자만 접근 가능한 페이지입니다.');
+    location.href = 'index.html';
+    return true;
+  }
+  // 운행기록(monitor.html) 회원 접근은 권한 설정에 따름
+  if (isMemberUser() && page === 'monitor.html' && !getAccessCfg().memberLogs) {
+    alert('운행기록 열람 권한이 없습니다.');
     location.href = 'index.html';
     return true;
   }

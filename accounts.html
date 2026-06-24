@@ -53,6 +53,25 @@
     <button class="small" onclick="saveAccessGate()" style="background:#e74c3c;color:#fff;margin-top:8px;">저장 (변경 시 전원 재인증)</button>
   </div>
 
+  <!-- 🛡️ 권한 설정 (super 전용) -->
+  <div class="card" style="border-left:4px solid #16a085;">
+    <h2>🛡️ 권한 설정 <span class="muted" style="font-size:12px;font-weight:400;">(super만 변경)</span></h2>
+    <p class="muted" style="font-size:12px;margin-bottom:8px;">회원(단원)이 무엇을 볼 수 있는지, 민원은 누가 쓸 수 있는지 정합니다.</p>
+    <label style="display:flex;align-items:center;gap:6px;margin:8px 0;cursor:pointer;">
+      <input type="checkbox" id="acMemberLogs" style="width:auto;"> <span>📋 <b>운행기록</b> — 회원도 열람 허용</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;margin:8px 0;cursor:pointer;">
+      <input type="checkbox" id="acMemberLive" style="width:auto;"> <span>🟢 <b>모니터링 실시간</b> — 회원도 보기 허용 <span class="muted" style="font-size:11px;">(끄면 간부만)</span></span>
+    </label>
+    <label style="margin-top:10px;">📞 민원 작성 권한</label>
+    <select id="acComplaintWrite" style="width:auto;">
+      <option value="all">모든 사용자</option>
+      <option value="member">회원 이상</option>
+      <option value="admin">간부만</option>
+    </select>
+    <div><button class="small" onclick="saveAccessCfg()" style="background:#16a085;color:#fff;margin-top:10px;">권한 저장</button></div>
+  </div>
+
   <!-- 기기 관리 -->
   <div class="card">
     <div class="flex-between">
@@ -115,7 +134,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260613a"></script>
+<script src="common.js?v=20260613b"></script>
 <script>
 // 계정 생성용 보조 Firebase 앱 (현재 로그인 유지하기 위함)
 let secondaryApp = null;
@@ -135,7 +154,28 @@ function refreshAll() {
   renderMe();
   renderAccounts();
   renderAccessGate();
+  renderAccessCfg();
   if (!__logInit) { __logInit = true; initLogListener(); }
+}
+
+// 🛡️ 권한 설정 (super만)
+function renderAccessCfg() {
+  const a = loadData().access || {};
+  const e1 = document.getElementById('acMemberLogs'); if (e1) e1.checked = a.memberLogs !== false;  // 기본 허용
+  const e2 = document.getElementById('acMemberLive'); if (e2) e2.checked = !!a.memberLive;           // 기본 비허용
+  const e3 = document.getElementById('acComplaintWrite'); if (e3) e3.value = a.complaintWrite || 'all';
+}
+function saveAccessCfg() {
+  if (getMyRole() !== 'super') { alert('super 계정만 변경할 수 있습니다'); return; }
+  const data = loadData();
+  data.access = {
+    memberLogs: document.getElementById('acMemberLogs').checked,
+    memberLive: document.getElementById('acMemberLive').checked,
+    complaintWrite: document.getElementById('acComplaintWrite').value
+  };
+  saveData(data);
+  alert('✅ 권한 설정이 저장됐습니다.');
+  refreshAll();
 }
 
 // 🔒 앱 접근 비밀번호 (공통, super만 변경)
