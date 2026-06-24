@@ -12,12 +12,6 @@
     /* PC에서 모니터링 지도 세로로 크게 */
     #map.map-compact { height: 720px; }
     @media (max-width: 600px) { #map.map-compact { height: 320px; } }
-    /* 모바일: 운행 항목 버튼을 아래로 내려 가운데 글자가 한 줄로 펴지게 */
-    @media (max-width: 600px) {
-      .live-item { flex-wrap: wrap !important; }
-      .live-btns { flex-direction: row !important; flex-basis: 100% !important; margin-top: 6px; }
-      .live-btns button { flex: 1; padding: 9px 6px !important; }
-    }
     /* PC에서 운행 목록 세로로 길게 + 항목 크게 (많아져도 옆에서 스크롤로 보기) */
     @media (min-width: 601px) {
       #logList { max-height: 820px; overflow-y: auto; }
@@ -1340,21 +1334,21 @@ function renderLive(live) {
       const hochaName = deriveHochaName(it.sess) || '';
       // 좌측 호차 배지 — 호차 있으면 큼직, 없으면 운전자 이니셜 동그라미 (폴백)
       const leftBadge = hochaName
-        ? `<div style="background:${it.color};color:#fff;padding:8px 12px;border-radius:8px;font-weight:800;font-size:16px;flex:none;min-width:62px;text-align:center;line-height:1.1;box-shadow:0 1px 3px rgba(0,0,0,0.15);">${escapeHtml(hochaName)}</div>`
-        : `<div style="background:${it.color};color:#fff;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none;">${(it.driver||'?').slice(0,1)}</div>`;
+        ? `<div style="background:${it.color};color:#fff;padding:3px 7px;border-radius:6px;font-weight:800;font-size:12px;flex:none;text-align:center;line-height:1.15;">${escapeHtml(hochaName)}</div>`
+        : `<div style="background:${it.color};color:#fff;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none;">${(it.driver||'?').slice(0,1)}</div>`;
       return `
-        <div class="live-item" style="display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid #eee;${isFollowing ? 'background:#e8f8f5;' : ''}">
-          <div onclick="focusLiveMarker('${safeKey}')" style="cursor:pointer;display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+        <div class="live-item" style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid #eee;${isFollowing ? 'background:#e8f8f5;' : ''}">
+          <div onclick="focusLiveMarker('${safeKey}')" style="cursor:pointer;display:flex;align-items:center;gap:7px;flex:1;min-width:0;">
             ${leftBadge}
-            <div style="flex:1;min-width:0;">
-              <div class="name" style="font-weight:600;color:#2c3e50;">${(it.event && it.course) ? escapeHtml(it.event.name) + ' · ' + escapeHtml(it.course.name) + (it.course.detail ? ' <span style="font-weight:400;color:#666;font-size:12px;">(' + escapeHtml(it.course.detail) + ')</span>' : '') : ''}${it.team ? ' · ' + escapeHtml(it.team.name) : ''}</div>
-              <div style="font-size:12px;color:#34495e;">운전 ${it.sess.crew?.driverPhone ? '<a href="tel:' + escapeHtml(it.sess.crew.driverPhone) + '" style="color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞' + escapeHtml(it.driver) + '</a>' : escapeHtml(it.driver)}${it.sess.crew?.assist ? ' / 보조 ' + (it.sess.crew?.assistPhone ? '<a href="tel:' + escapeHtml(it.sess.crew.assistPhone) + '" style="color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞' + escapeHtml(it.sess.crew.assist) + '</a>' : escapeHtml(it.sess.crew.assist)) : ''}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}</div>
-              <div class="sub" style="font-size:12px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${it.sess.device ? ' · 로컬: ' + escapeHtml(it.sess.device) : ''}</div>
+            <div style="flex:1;min-width:0;line-height:1.45;">
+              <div class="name" style="font-weight:700;color:#2c3e50;font-size:13px;">${(it.event && it.course) ? escapeHtml(it.event.name) + ' · ' + escapeHtml(it.course.name) + (it.course.detail ? ' <span style="font-weight:400;color:#666;font-size:11px;">(' + escapeHtml(it.course.detail) + ')</span>' : '') : ''}${it.team ? ' · ' + escapeHtml(it.team.name) : ''}</div>
+              <div style="font-size:11px;color:#34495e;">운전 ${it.sess.crew?.driverPhone ? '<a href="tel:' + escapeHtml(it.sess.crew.driverPhone) + '" style="color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞' + escapeHtml(it.driver) + '</a>' : escapeHtml(it.driver)}${it.sess.crew?.assist ? ' / 보조 ' + (it.sess.crew?.assistPhone ? '<a href="tel:' + escapeHtml(it.sess.crew.assistPhone) + '" style="color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞' + escapeHtml(it.sess.crew.assist) + '</a>' : escapeHtml(it.sess.crew.assist)) : ''}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}</div>
+              <div class="sub" style="font-size:11px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${it.sess.device ? ' · 로컬: ' + escapeHtml(it.sess.device) : ''}</div>
             </div>
           </div>
-          <div class="live-btns" style="display:flex;flex-direction:column;gap:4px;flex:none;">
-            <button onclick="toggleFollowDriver('${safeKey}')" style="background:${followBg};color:#fff;border:none;padding:6px 10px;border-radius:5px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">${followLabel}</button>
-            <button onclick="fitDriverCourse('${safeKey}')" style="background:#7f8c8d;color:#fff;border:none;padding:6px 10px;border-radius:5px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">🗺 코스 전체</button>
+          <div class="live-btns" style="display:flex;flex-direction:column;gap:3px;flex:none;">
+            <button onclick="toggleFollowDriver('${safeKey}')" title="${isFollowing ? '따라가는 중 (해제)' : '따라가기'}" style="background:${followBg};color:#fff;border:none;padding:4px 8px;border-radius:5px;font-size:14px;cursor:pointer;line-height:1;">${isFollowing ? '🎯' : '📍'}</button>
+            <button onclick="fitDriverCourse('${safeKey}')" title="코스 전체 보기" style="background:#7f8c8d;color:#fff;border:none;padding:4px 8px;border-radius:5px;font-size:14px;cursor:pointer;line-height:1;">🗺</button>
           </div>
         </div>
       `;
