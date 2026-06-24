@@ -855,14 +855,18 @@ function applyMemberNav() {
   const MEMBER_NAV_PAGES = ['index.html', 'today.html', 'monitor.html', 'inquiry.html', 'teams.html', 'print.html', 'stats.html'];
 
   document.querySelectorAll('nav a').forEach(a => {
-    const href = (a.getAttribute('href') || '').split('?')[0];
+    const rawHref = a.getAttribute('href') || '';
+    const href = rawHref.split('?')[0];
     if (!href || href === '#') return; // 로그아웃 등 기능 링크는 건너뜀
 
     if (isMember) {
       // 회원: 허용 목록에 없으면 숨김
       let show = MEMBER_NAV_PAGES.includes(href);
-      // 운행기록/모니터링(monitor.html)은 권한 설정(memberLogs) 꺼지면 회원에게 숨김
-      if (href === 'monitor.html' && !getAccessCfg().memberLogs) show = false;
+      if (href === 'monitor.html') {
+        // 회원은 '모니터링'(실시간) 링크 숨김, '운행기록'(?logs=1)만 표시 (운행기록 권한 있을 때)
+        const isLogsLink = rawHref.indexOf('logs=1') >= 0;
+        show = isLogsLink && getAccessCfg().memberLogs;
+      }
       a.style.display = show ? '' : 'none';
     } else {
       // 관리자: 계정관리는 super만
