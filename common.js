@@ -832,7 +832,7 @@ function isMemberUser() {
 }
 
 // 회원이 접근 가능한 페이지 (파일명)
-const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor-public.html', 'print.html', 'inquiry.html', 'teams.html', 'stats.html'];
+const MEMBER_ALLOWED_PAGES = ['index.html', 'today.html', 'monitor.html', 'monitor-public.html', 'print.html', 'inquiry.html', 'teams.html', 'stats.html'];
 
 // 네비게이션 접근 제어
 function applyMemberNav() {
@@ -842,7 +842,7 @@ function applyMemberNav() {
   const myRole = (data.users || {})[u?.uid]?.role || '';
 
   // 회원이 nav에서 볼 수 있는 페이지
-  const MEMBER_NAV_PAGES = ['index.html', 'today.html', 'inquiry.html', 'teams.html', 'print.html', 'stats.html'];
+  const MEMBER_NAV_PAGES = ['index.html', 'today.html', 'monitor.html', 'inquiry.html', 'teams.html', 'print.html', 'stats.html'];
 
   document.querySelectorAll('nav a').forEach(a => {
     const href = (a.getAttribute('href') || '').split('?')[0];
