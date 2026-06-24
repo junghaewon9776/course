@@ -252,6 +252,11 @@ function initMonitorMap() {
   renderMonRequestList();
   // 줌 레벨별 마커 크기 자동 조절
   setupMarkerZoomScale(map, () => [...__alwaysOnAnchors, ...__complaintMarkers, ...__requestMarkers, ...__noSprayMarkers]);
+  // 줌 바꾸면 차 마커도 즉시 다시 그려 크기 반영
+  if (!window.__liveZoomHooked) {
+    window.__liveZoomHooked = true;
+    kakao.maps.event.addListener(map, 'zoom_changed', () => { if (window.__liveCache) renderLive(window.__liveCache); });
+  }
   // 버튼/체크박스 상태 sync
   updateAllCoursesBtn();
   const cb2 = document.getElementById('cnsAlwaysOn');
@@ -1027,7 +1032,16 @@ function deriveHochaName(sess) {
   }
   return raw;  // 매칭 실패 시 원본 (카니발 흰색 등) 반환
 }
-function vehicleMarkerSvg(color, label, heading) {
+// 줌 레벨별 차 마커 크기 (멀리 볼수록 작게, 단 너무 작진 않게)
+function vehicleScale(level) {
+  if (level <= 4) return 1.0;
+  if (level <= 6) return 0.7;
+  if (level <= 8) return 0.55;
+  return 0.45;
+}
+function vehicleMarkerSvg(color, label, heading, scale) {
+  const s = scale || 1;
+  const sz = Math.round(30 * s);
   // label은 "1호차"/"10호차" 형식 우선 — 숫자만 추출, 없으면 첫 2글자
   const num = extractHochaNum(label);
   const safe = num || (String(label || '?').replace(/\s/g,'').slice(0, 2));
@@ -1035,7 +1049,7 @@ function vehicleMarkerSvg(color, label, heading) {
   const angle = (typeof heading === 'number' && !isNaN(heading)) ? heading : 0;
   const hasDir = (typeof heading === 'number' && !isNaN(heading));
   // 위에서 본 차량 (Top-down car) — heading 방향으로 회전, 진행방향 표시 화살표
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 30 30">
     <g transform="rotate(${angle} 15 15)">
       ${hasDir ? `<path d="M15 1 L19 7 L11 7 Z" fill="${color}" stroke="white" stroke-width="1"/>` : ''}
       <ellipse cx="15" cy="26" rx="6" ry="1.2" fill="rgba(0,0,0,0.25)"/>
@@ -1051,8 +1065,8 @@ function vehicleMarkerSvg(color, label, heading) {
   </svg>`;
   return new kakao.maps.MarkerImage(
     'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-    new kakao.maps.Size(30, 30),
-    { offset: new kakao.maps.Point(15, 15) }
+    new kakao.maps.Size(sz, sz),
+    { offset: new kakao.maps.Point(Math.round(sz/2), Math.round(sz/2)) }
   );
 }
 // 이전 위치 캐시 — heading 없을 때 폴백 계산용
@@ -1159,7 +1173,7 @@ function renderLive(live) {
     }
     if (heading === null && prev && prev.heading != null) heading = prev.heading;  // 정지시 마지막 방향 유지
     prevPos[key] = { lat: sess.lat, lng: sess.lng, heading: heading };
-    const img = vehicleMarkerSvg(color, markerLabel, heading);
+    const img = vehicleMarkerSvg(color, markerLabel, heading, vehicleScale(map.getLevel()));
     let m = liveMarkers[key];
     if (!m) {
       m = new kakao.maps.Marker({ position: pos, map, image: img, title: driver, zIndex: 50 });
