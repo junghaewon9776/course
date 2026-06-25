@@ -558,32 +558,61 @@ function initPushNotifications() {
     }).catch(e => console.warn('푸시 권한 오류', e));
   } catch (e) { console.warn('푸시 초기화 오류', e); }
 }
+// 푸시 수신 비프음 (앱 켜둔 상태)
+function playPushBeep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ac = new Ctx();
+    const beep = (freq, start, dur) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(0.0001, ac.currentTime + start);
+      g.gain.exponentialRampToValueAtTime(0.3, ac.currentTime + start + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + start + dur);
+      o.start(ac.currentTime + start); o.stop(ac.currentTime + start + dur);
+    };
+    beep(880, 0, 0.18); beep(1175, 0.2, 0.22);  // 카톡 비슷한 띵-동
+    setTimeout(() => { try { ac.close(); } catch (e) {} }, 800);
+  } catch (e) {}
+}
 // 카톡 스타일 상단 배너 (앱 켜둔 상태에서 푸시 수신 시)
 function showPushBanner(title, body) {
-  try {
-    let el = document.getElementById('__pushBanner');
-    if (el) el.remove();
-    el = document.createElement('div');
-    el.id = '__pushBanner';
-    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
-      + 'background:#1565c0;color:#fff;padding:14px 16px;'
-      + 'box-shadow:0 4px 12px rgba(0,0,0,.3);cursor:pointer;'
-      + 'font-family:inherit;transform:translateY(-110%);transition:transform .25s ease;';
-    const safeTitle = String(title || '').replace(/</g, '&lt;');
-    const safeBody = String(body || '').replace(/</g, '&lt;');
-    el.innerHTML = '<div style="font-weight:700;font-size:15px;margin-bottom:2px;">'
-      + safeTitle + '</div>'
-      + '<div style="font-size:13px;opacity:.95;">' + safeBody + '</div>';
-    el.onclick = function () { try { location.href = 'inquiry.html'; } catch (e) {} };
-    document.body.appendChild(el);
-    requestAnimationFrame(() => { el.style.transform = 'translateY(0)'; });
-    setTimeout(() => {
-      try {
-        el.style.transform = 'translateY(-110%)';
-        setTimeout(() => { try { el.remove(); } catch (e) {} }, 300);
-      } catch (e) {}
-    }, 5000);
-  } catch (e) {}
+  const draw = () => {
+    try {
+      if (!document.body) return;
+      let el = document.getElementById('__pushBanner');
+      if (el) el.remove();
+      el = document.createElement('div');
+      el.id = '__pushBanner';
+      el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;'
+        + 'background:#1565c0;color:#fff;padding:16px 18px;'
+        + 'box-shadow:0 6px 18px rgba(0,0,0,.4);cursor:pointer;'
+        + 'font-family:inherit;transform:translateY(-130%);transition:transform .28s ease;';
+      const safeTitle = String(title || '🔔 알림').replace(/</g, '&lt;');
+      const safeBody = String(body || '').replace(/</g, '&lt;');
+      el.innerHTML = '<div style="display:flex;align-items:flex-start;gap:10px;">'
+        + '<div style="font-size:22px;line-height:1;">🔔</div>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-weight:700;font-size:16px;margin-bottom:3px;">' + safeTitle + '</div>'
+        + '<div style="font-size:14px;opacity:.95;word-break:break-all;">' + safeBody + '</div>'
+        + '<div style="font-size:11px;opacity:.8;margin-top:5px;">탭하면 민원게시판으로 이동</div>'
+        + '</div></div>';
+      el.onclick = function () { try { location.href = 'inquiry.html'; } catch (e) {} };
+      document.body.appendChild(el);
+      requestAnimationFrame(() => { el.style.transform = 'translateY(0)'; });
+      setTimeout(() => {
+        try {
+          el.style.transform = 'translateY(-130%)';
+          setTimeout(() => { try { el.remove(); } catch (e) {} }, 320);
+        } catch (e) {}
+      }, 6000);
+    } catch (e) {}
+  };
+  try { playPushBeep(); } catch (e) {}
+  if (document.body) draw();
+  else document.addEventListener('DOMContentLoaded', draw);
 }
 function savePushToken(token) {
   if (typeof fbDb === 'undefined' || !token) return;
