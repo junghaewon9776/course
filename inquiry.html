@@ -331,7 +331,7 @@ function submitInquiry() {
   // 텔레그램 알림
   sendTelegram(`📋 <b>회원민원 접수</b>\n분류: ${cat?.icon || ''} ${cat?.name || ''}\n항목: ${selectedSub || '-'}\n내용: ${(content || '-').slice(0, 80)}\n접수자: ${writerName}${phone ? '\n연락처: ' + phone : ''}`);
   // 📲 앱 푸시 (간부)
-  if (typeof sendAppPush === 'function') sendAppPush(`📋 새 민원 (${cat?.name || ''})`, `${selectedSub ? selectedSub + ' · ' : ''}${(content || '').slice(0, 50)} — ${writerName}`, 'admin');
+  if (typeof sendAppPush === 'function') sendAppPush(`📋 새 민원 (${cat?.name || ''})`, `${selectedSub ? selectedSub + ' · ' : ''}${(content || '').slice(0, 50)} — ${writerName}`, 'all');
 
   // 초기화
   selectedCat = ''; selectedSub = '';

@@ -498,6 +498,7 @@ function addNoSprayAt(lat, lng, areaHint = '') {
     });
     saveData(data); refreshAll();
     sendTelegram(`🚫 <b>방역불가 추가</b>\n이름: ${r.name.trim()}\n반경: ${radius}m`);
+    if (typeof sendAppPush === 'function') sendAppPush('🚫 방역금지 추가', r.name.trim() + ' (반경 ' + radius + 'm)', 'all');
   });
 }
 
