@@ -115,7 +115,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260613i"></script>
+<script src="common.js?v=20260613j"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2920,6 +2920,15 @@ function submitAnchorRequest() {
     requestedAssist: currentSession.crew?.assist || '',
     requestedAt: Date.now(),
     status: 'pending'
+  });
+  // 민원게시판에도 쌓이게 — 거점요청을 게시판 항목으로 추가
+  if (!Array.isArray(data.inquiries)) data.inquiries = [];
+  data.inquiries.push({
+    id: uid(), category: 'anchor', categoryName: '📌 거점요청', subCategory: '',
+    content: '거점 추가 요청: ' + (name || '(이름 미정)') + (reason ? ' — ' + reason : '') + (address ? ' (' + address + ')' : ''),
+    phone: '', writer: currentSession.crew?.driver || '운영자',
+    writerUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || '',
+    status: 'pending', adminMemo: '', comments: [], createdAt: Date.now()
   });
   try { saveData(data); }
   catch (e) { alert('저장 실패: ' + (e.message || e)); return; }

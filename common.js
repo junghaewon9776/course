@@ -541,6 +541,10 @@ function initPushNotifications() {
       // 포그라운드 수신 시 진동 (앱 켜둔 상태)
       try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
     });
+    // 알림 누르면 민원게시판으로 이동
+    P.addListener('pushNotificationActionPerformed', () => {
+      try { location.href = 'inquiry.html'; } catch (e) {}
+    });
     P.checkPermissions().then(perm => {
       if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') return P.requestPermissions();
       return perm;
