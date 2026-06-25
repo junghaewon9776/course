@@ -527,6 +527,39 @@ async function sendTelegram(text, opts) {
   }
 }
 
+// ───────── 📲 푸시 알림 (앱 전용) ─────────
+let __pushInited = false;
+function initPushNotifications() {
+  try {
+    if (__pushInited) return;
+    const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+    if (!P) return;  // 웹/플러그인 없으면 스킵
+    __pushInited = true;
+    P.addListener('registration', token => { savePushToken(token && token.value); });
+    P.addListener('registrationError', err => console.warn('푸시 등록 오류', err));
+    P.addListener('pushNotificationReceived', notif => {
+      // 포그라운드 수신 시 진동 (앱 켜둔 상태)
+      try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+    });
+    P.checkPermissions().then(perm => {
+      if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') return P.requestPermissions();
+      return perm;
+    }).then(perm => {
+      if (perm && perm.receive === 'granted') P.register();
+    }).catch(e => console.warn('푸시 권한 오류', e));
+  } catch (e) { console.warn('푸시 초기화 오류', e); }
+}
+function savePushToken(token) {
+  if (typeof fbDb === 'undefined' || !token) return;
+  const deviceId = getDeviceId();
+  const u = (typeof fbAuth !== 'undefined' && fbAuth.currentUser) || {};
+  let role = 'anon';
+  try { role = getMyRole() || 'anon'; } catch (e) {}
+  fbDb.ref('/pushTokens/' + deviceId).set({
+    token: token, role: role, uid: u.uid || '', name: getDeviceName() || getDeviceType(), updatedAt: Date.now()
+  }).catch(e => console.warn('푸시토큰 저장 실패', e));
+}
+
 // ───────── Firebase 동기화 캐시 ─────────
 let _cache = null;
 let _cacheReady = false;
@@ -559,6 +592,7 @@ function initFirebaseSync() {
     if (!_cacheReady) {
       _cacheReady = true;
       try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
+      try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
       _readyCallbacks.forEach(cb => cb());
       _readyCallbacks.length = 0;
     }
