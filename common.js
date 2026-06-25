@@ -538,8 +538,13 @@ function initPushNotifications() {
     P.addListener('registration', token => { window.__pushToken = (token && token.value) || ''; savePushToken(window.__pushToken); });
     P.addListener('registrationError', err => console.warn('푸시 등록 오류', err));
     P.addListener('pushNotificationReceived', notif => {
-      // 포그라운드 수신 시 진동 (앱 켜둔 상태)
+      // 포그라운드 수신 시 진동 + 화면 상단 배너 (앱 켜둔 상태)
       try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+      try {
+        const t = (notif && notif.title) || '🔔 알림';
+        const b = (notif && notif.body) || '';
+        showPushBanner(t, b);
+      } catch (e) {}
     });
     // 알림 누르면 민원게시판으로 이동
     P.addListener('pushNotificationActionPerformed', () => {
@@ -552,6 +557,33 @@ function initPushNotifications() {
       if (perm && perm.receive === 'granted') P.register();
     }).catch(e => console.warn('푸시 권한 오류', e));
   } catch (e) { console.warn('푸시 초기화 오류', e); }
+}
+// 카톡 스타일 상단 배너 (앱 켜둔 상태에서 푸시 수신 시)
+function showPushBanner(title, body) {
+  try {
+    let el = document.getElementById('__pushBanner');
+    if (el) el.remove();
+    el = document.createElement('div');
+    el.id = '__pushBanner';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
+      + 'background:#1565c0;color:#fff;padding:14px 16px;'
+      + 'box-shadow:0 4px 12px rgba(0,0,0,.3);cursor:pointer;'
+      + 'font-family:inherit;transform:translateY(-110%);transition:transform .25s ease;';
+    const safeTitle = String(title || '').replace(/</g, '&lt;');
+    const safeBody = String(body || '').replace(/</g, '&lt;');
+    el.innerHTML = '<div style="font-weight:700;font-size:15px;margin-bottom:2px;">'
+      + safeTitle + '</div>'
+      + '<div style="font-size:13px;opacity:.95;">' + safeBody + '</div>';
+    el.onclick = function () { try { location.href = 'inquiry.html'; } catch (e) {} };
+    document.body.appendChild(el);
+    requestAnimationFrame(() => { el.style.transform = 'translateY(0)'; });
+    setTimeout(() => {
+      try {
+        el.style.transform = 'translateY(-110%)';
+        setTimeout(() => { try { el.remove(); } catch (e) {} }, 300);
+      } catch (e) {}
+    }, 5000);
+  } catch (e) {}
 }
 function savePushToken(token) {
   if (typeof fbDb === 'undefined' || !token) return;
