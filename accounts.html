@@ -199,13 +199,31 @@ function renderPushTemplates() {
   box.innerHTML = PUSH_EVENTS.map(e => {
     const t = tpl[e.key] || {};
     const esc = s => String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const tokens = e.ph.split(/\s+/).filter(Boolean);
+    const btns = tokens.map(tk =>
+      `<button type="button" onclick="insertPlaceholder('${tk}')" style="background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:12px;padding:3px 10px;font-size:12px;cursor:pointer;margin:2px 4px 2px 0;">${tk}</button>`
+    ).join('');
     return `<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:2px;">${e.label}</div>
-      <div class="muted" style="font-size:11px;margin-bottom:6px;">치환: ${e.ph}</div>
-      <input id="pt_${e.key}_title" placeholder="${esc(e.dt)}" value="${esc(t.title||'')}" style="width:100%;box-sizing:border-box;font-size:13px;margin-bottom:5px;">
-      <input id="pt_${e.key}_body"  placeholder="${esc(e.db)}" value="${esc(t.body||'')}" style="width:100%;box-sizing:border-box;font-size:13px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:6px;">${e.label}</div>
+      <label style="font-size:11px;color:#888;">제목</label>
+      <input id="pt_${e.key}_title" placeholder="${esc(e.dt)}" value="${esc(t.title||'')}" onfocus="window.__ptFocus=this" style="width:100%;box-sizing:border-box;font-size:13px;margin-bottom:5px;">
+      <label style="font-size:11px;color:#888;">내용</label>
+      <input id="pt_${e.key}_body"  placeholder="${esc(e.db)}" value="${esc(t.body||'')}" onfocus="window.__ptFocus=this" style="width:100%;box-sizing:border-box;font-size:13px;">
+      <div style="margin-top:6px;font-size:11px;color:#888;">↓ 넣을 단어 (칸 누른 뒤 클릭)</div>
+      <div>${btns}</div>
     </div>`;
   }).join('');
+}
+// 마지막으로 누른 입력칸(제목/내용)에 {단어} 끼워넣기
+function insertPlaceholder(token) {
+  const el = window.__ptFocus;
+  if (!el) { alert('먼저 위의 제목 또는 내용 칸을 한 번 누르세요'); return; }
+  let s = (el.selectionStart != null) ? el.selectionStart : el.value.length;
+  let e2 = (el.selectionEnd != null) ? el.selectionEnd : el.value.length;
+  el.value = el.value.slice(0, s) + token + el.value.slice(e2);
+  el.focus();
+  const pos = s + token.length;
+  try { el.setSelectionRange(pos, pos); } catch (e) {}
 }
 function savePushTemplates() {
   if (getMyRole() !== 'super') { alert('super 계정만 변경할 수 있습니다'); return; }
