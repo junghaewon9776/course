@@ -576,6 +576,34 @@ function sendAppPush(title, body, target) {
   } catch (e) { console.warn('푸시 발송 오류', e); }
 }
 
+// ───────── 🔄 인앱 업데이트 (앱 켤 때 새 버전 있으면 물어봄) ─────────
+function checkInAppUpdate() {
+  try {
+    const AU = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AppUpdate;
+    if (!AU) return;  // 웹/플러그인 없으면 스킵
+    AU.getAppUpdateInfo().then(info => {
+      if (!info || info.updateAvailability !== 2) return;  // 2 = 업데이트 있음
+      if (!confirm('🔔 새 업데이트가 있습니다.\n지금 업데이트할까요?')) return;
+      if (info.immediateUpdateAllowed) {
+        AU.performImmediateUpdate().catch(() => { try { AU.openAppStore(); } catch (e) {} });
+      } else if (info.flexibleUpdateAllowed) {
+        AU.startFlexibleUpdate()
+          .then(() => { try { AU.completeFlexibleUpdate(); } catch (e) {} })
+          .catch(() => { try { AU.openAppStore(); } catch (e) {} });
+      } else {
+        try { AU.openAppStore(); } catch (e) {}
+      }
+    }).catch(e => console.warn('업데이트 확인 실패', e));
+  } catch (e) {}
+}
+function maybeCheckUpdate() {
+  try {
+    if (sessionStorage.getItem('__updChecked')) return;  // 앱 세션당 1회만
+    sessionStorage.setItem('__updChecked', '1');
+  } catch (e) {}
+  checkInAppUpdate();
+}
+
 // ───────── Firebase 동기화 캐시 ─────────
 let _cache = null;
 let _cacheReady = false;
@@ -609,6 +637,7 @@ function initFirebaseSync() {
       _cacheReady = true;
       try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
       try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
+      try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
       _readyCallbacks.forEach(cb => cb());
       _readyCallbacks.length = 0;
     }
