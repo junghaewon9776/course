@@ -166,7 +166,9 @@ const DEFAULT_CATEGORIES = [
   { id: 'fuel',    icon: '⛽', name: '주유·충전',   subs: ['기름 부족', '주유소 위치 문의', '충전 필요', '주유카드 문제'] },
   { id: 'payment', icon: '💳', name: '결제·비용',   subs: ['법인카드 문의', '영수증 처리', '식비 정산', '자재 구매', '기타 결제'] },
   { id: 'safety',  icon: '⚠️', name: '안전·사고',  subs: ['부상', '벌쏘임', '미끄러짐', '열사병', '기타 사고'] },
-  { id: 'resident',icon: '🏠', name: '주민 민원',   subs: ['소음 민원', '약제 피해', '주차 민원', '방역 요청'] },
+  { id: 'resident',icon: '🏠', name: '주민민원',   subs: ['소음 민원', '약제 피해', '주차 민원', '방역 요청'] },
+  { id: 'anchorReq', icon: '📌', name: '거점추가요청', subs: [] },
+  { id: 'noSprayReq',icon: '🚫', name: '방역금지구역', subs: [] },
   { id: 'etc',     icon: '💬', name: '기타',        subs: [] }
 ];
 
@@ -242,6 +244,7 @@ function getCategories() {
     const courseCat = DEFAULT_CATEGORIES.find(c => c.id === 'course');
     if (courseCat) cats = [JSON.parse(JSON.stringify(courseCat)), ...cats];
   }
+  ['resident','anchorReq','noSprayReq'].forEach(function(id){ if(!cats.some(function(c){return c.id===id;})){ var d=DEFAULT_CATEGORIES.find(function(c){return c.id===id;}); if(d) cats.push(JSON.parse(JSON.stringify(d))); } });
   return cats;
 }
 

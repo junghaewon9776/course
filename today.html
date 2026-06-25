@@ -2924,7 +2924,7 @@ function submitAnchorRequest() {
   // 민원게시판에도 쌓이게 — 거점요청을 게시판 항목으로 추가
   if (!Array.isArray(data.inquiries)) data.inquiries = [];
   data.inquiries.push({
-    id: uid(), category: 'anchor', categoryName: '📌 거점요청', subCategory: '',
+    id: uid(), category: 'anchorReq', categoryName: '거점추가요청', subCategory: '',
     content: '거점 추가 요청: ' + (name || '(이름 미정)') + (reason ? ' — ' + reason : '') + (address ? ' (' + address + ')' : ''),
     phone: '', writer: currentSession.crew?.driver || '운영자',
     writerUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || '',
@@ -3201,6 +3201,7 @@ function submitComplaint() {
     reportedAssist: currentSession.crew?.assist || '',
     createdAt: Date.now()
   });
+  if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:fullContent,phone:phone,writer:(currentSession.crew&&currentSession.crew.driver)||'운영자',writerUid:'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
   try { saveData(data); }
   catch (e) { alert('저장 실패: ' + (e.message || e)); return; }
 

@@ -496,6 +496,7 @@ function addNoSprayAt(lat, lng, areaHint = '') {
       radius,
       createdAt: Date.now()
     });
+    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'noSprayReq',categoryName:'방역금지구역',subCategory:'',content:r.name.trim()+(r.reason?' — '+r.reason.trim():'')+' (반경 '+radius+'m)',phone:'',writer:'관리자',writerUid:'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
     saveData(data); refreshAll();
     sendTelegram(`🚫 <b>방역불가 추가</b>\n이름: ${r.name.trim()}\n반경: ${radius}m`);
     { var __pt=pushTemplate('noSpray',{이름:r.name.trim(),반경:radius},'🚫 방역금지 추가','{이름} (반경 {반경}m)'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'all','noSpray'); }
@@ -1877,6 +1878,7 @@ function addComplaintAt(lat, lng, areaHint = '') {
       createdAt: Date.now(),
       createdBy: uInfo?.name || u?.email || ''
     });
+    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:(r.content||'').trim(),phone:(r.phone||'').trim(),writer:(uInfo&&uInfo.name)||(u&&u.email)||'관리자',writerUid:(u&&u.uid)||'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()}); if(typeof sendAppPush==='function'){var __mp=pushTemplate('field',{유형:'주민민원',코스:'',내용:(r.content||'').slice(0,60)},'📞 주민민원 추가','{내용}'); sendAppPush(__mp.title,__mp.body,'all','complaint');}
     saveData(data); refreshAll();
     sendTelegram(`📞 <b>민원 추가</b> (관리자)\n연락처: ${(r.phone || '-')}\n내용: ${(r.content || '-').slice(0, 50)}`);
   });
