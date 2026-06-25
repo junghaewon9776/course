@@ -560,6 +560,22 @@ function savePushToken(token) {
   }).catch(e => console.warn('푸시토큰 저장 실패', e));
 }
 
+// 앱 푸시 발송 (GAS 웹앱 경유) — target: 'admin'(간부) | 'all'
+const PUSH_WEBHOOK_DEFAULT = 'https://script.google.com/macros/s/AKfycbxaaLoXv7rA-OR_PEIazbYq44zahdiCu6ZtMDa3N3bbrruqxQz0yclWHU7Esl5_yHL2/exec';
+function sendAppPush(title, body, target) {
+  try {
+    const cfg = (typeof _cache !== 'undefined' && _cache && _cache.pushWebhook) || {};
+    const url = cfg.url || PUSH_WEBHOOK_DEFAULT;
+    const secret = cfg.secret || 'bsp_push_2026';
+    if (!url) return;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // CORS preflight 회피
+      body: JSON.stringify({ secret: secret, title: title || '알림', body: body || '', target: target || 'admin' })
+    }).catch(e => console.warn('푸시 발송 실패', e));
+  } catch (e) { console.warn('푸시 발송 오류', e); }
+}
+
 // ───────── Firebase 동기화 캐시 ─────────
 let _cache = null;
 let _cacheReady = false;
