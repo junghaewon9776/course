@@ -86,6 +86,16 @@
     <div><button class="small" onclick="saveAccessCfg()" style="background:#16a085;color:#fff;margin-top:10px;">권한 저장</button></div>
   </div>
 
+  <!-- 🔔 알림 문구 설정 (super) -->
+  <div class="card" style="border-left:4px solid #f39c12;">
+    <details>
+      <summary style="cursor:pointer;font-weight:700;font-size:15px;color:#2c3e50;">🔔 알림 문구 설정 <span class="muted" style="font-size:12px;font-weight:400;">(눌러 펼치기 · super만)</span></summary>
+      <p class="muted" style="font-size:12px;margin:8px 0;"><b>{ }</b> 안의 단어는 자동으로 채워져요. 비우면 기본 문구가 쓰입니다.</p>
+      <div id="pushTplBox"></div>
+      <button class="small" onclick="savePushTemplates()" style="background:#f39c12;color:#fff;margin-top:10px;">알림 문구 저장</button>
+    </details>
+  </div>
+
   <!-- 기기 관리 -->
   <div class="card">
     <div class="flex-between">
@@ -148,7 +158,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260613h"></script>
+<script src="common.js?v=20260613i"></script>
 <script>
 // 계정 생성용 보조 Firebase 앱 (현재 로그인 유지하기 위함)
 let secondaryApp = null;
@@ -169,7 +179,47 @@ function refreshAll() {
   renderAccounts();
   renderAccessGate();
   renderAccessCfg();
+  renderPushTemplates();
   if (!__logInit) { __logInit = true; initLogListener(); }
+}
+
+// 🔔 알림 문구 설정 (super)
+const PUSH_EVENTS = [
+  { key:'inq',         label:'📋 회원민원 접수',     ph:'{분류} {항목} {내용} {작성자}', dt:'📋 새 민원 ({분류})',   db:'{항목} · {내용} — {작성자}' },
+  { key:'field',       label:'📞 현장 민원',         ph:'{유형} {코스} {내용}',        dt:'📞 현장 민원 ({유형})', db:'{코스} · {내용}' },
+  { key:'anchor',      label:'📌 거점 추가 요청',     ph:'{이름} {이유}',              dt:'📌 거점 추가 요청',     db:'{이름} · {이유}' },
+  { key:'noSpray',     label:'🚫 방역금지 추가',      ph:'{이름} {반경}',              dt:'🚫 방역금지 추가',      db:'{이름} (반경 {반경}m)' },
+  { key:'courseStart', label:'▶ 코스 시작',          ph:'{행사} {코스}',              dt:'▶ 코스 시작',           db:'{행사} · {코스}' },
+  { key:'courseDone',  label:'✅ 코스 완료',          ph:'{행사} {코스}',              dt:'✅ 코스 완료',          db:'{행사} · {코스}' }
+];
+function renderPushTemplates() {
+  const box = document.getElementById('pushTplBox');
+  if (!box) return;
+  const tpl = (loadData().pushTemplates) || {};
+  box.innerHTML = PUSH_EVENTS.map(e => {
+    const t = tpl[e.key] || {};
+    const esc = s => String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    return `<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:8px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:2px;">${e.label}</div>
+      <div class="muted" style="font-size:11px;margin-bottom:6px;">치환: ${e.ph}</div>
+      <input id="pt_${e.key}_title" placeholder="${esc(e.dt)}" value="${esc(t.title||'')}" style="width:100%;box-sizing:border-box;font-size:13px;margin-bottom:5px;">
+      <input id="pt_${e.key}_body"  placeholder="${esc(e.db)}" value="${esc(t.body||'')}" style="width:100%;box-sizing:border-box;font-size:13px;">
+    </div>`;
+  }).join('');
+}
+function savePushTemplates() {
+  if (getMyRole() !== 'super') { alert('super 계정만 변경할 수 있습니다'); return; }
+  const data = loadData();
+  const out = {};
+  PUSH_EVENTS.forEach(e => {
+    const ti = (document.getElementById('pt_'+e.key+'_title')||{}).value || '';
+    const bo = (document.getElementById('pt_'+e.key+'_body')||{}).value || '';
+    if (ti.trim() || bo.trim()) out[e.key] = { title: ti.trim(), body: bo.trim() };
+  });
+  data.pushTemplates = out;
+  saveData(data);
+  alert('✅ 알림 문구가 저장됐습니다.');
+  refreshAll();
 }
 
 // 🛡️ 권한 설정 (super만)

@@ -324,7 +324,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260613h"></script>
+<script src="common.js?v=20260613i"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -498,7 +498,7 @@ function addNoSprayAt(lat, lng, areaHint = '') {
     });
     saveData(data); refreshAll();
     sendTelegram(`🚫 <b>방역불가 추가</b>\n이름: ${r.name.trim()}\n반경: ${radius}m`);
-    if (typeof sendAppPush === 'function') sendAppPush('🚫 방역금지 추가', r.name.trim() + ' (반경 ' + radius + 'm)', 'all', 'noSpray');
+    { var __pt=pushTemplate('noSpray',{이름:r.name.trim(),반경:radius},'🚫 방역금지 추가','{이름} (반경 {반경}m)'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'all','noSpray'); }
   });
 }
 

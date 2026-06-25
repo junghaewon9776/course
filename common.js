@@ -570,6 +570,20 @@ function maybeResavePushToken() {
   savePushToken(window.__pushToken);
 }
 
+// 알림 문구 템플릿: data.pushTemplates[key] 우선, 없으면 기본값. {플레이스홀더} 치환.
+function pushTemplate(key, ctx, defTitle, defBody) {
+  const t = (typeof _cache !== 'undefined' && _cache && _cache.pushTemplates && _cache.pushTemplates[key]) || {};
+  let title = (t.title != null && t.title !== '') ? t.title : defTitle;
+  let body = (t.body != null && t.body !== '') ? t.body : defBody;
+  const c = ctx || {};
+  for (const k in c) {
+    const v = (c[k] == null) ? '' : String(c[k]);
+    title = title.split('{' + k + '}').join(v);
+    body = body.split('{' + k + '}').join(v);
+  }
+  return { title: title, body: body };
+}
+
 // 앱 푸시 발송 (GAS 웹앱 경유) — target: 'admin'(간부) | 'all'
 const PUSH_WEBHOOK_DEFAULT = 'https://script.google.com/macros/s/AKfycbxaaLoXv7rA-OR_PEIazbYq44zahdiCu6ZtMDa3N3bbrruqxQz0yclWHU7Esl5_yHL2/exec';
 function sendAppPush(title, body, target, category) {

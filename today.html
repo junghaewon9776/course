@@ -115,7 +115,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260613h"></script>
+<script src="common.js?v=20260613i"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1118,7 +1118,7 @@ function startSession(eventId, courseId, teamId, crew) {
   getClientIP().then(ip => {
     const dev = getDeviceType();
     sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${tgPersonLink(crew?.driver, crew?.driverPhone)}${crew?.assist ? '\n보조: ' + tgPersonLink(crew.assist, crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시작: ${new Date().toLocaleString('ko-KR')}\n접속: ${dev} · IP ${ip}`);
-    if (typeof sendAppPush === 'function') sendAppPush('▶ 코스 시작', (event && event.name ? event.name : '') + ' · ' + (course && course.name ? course.name : ''), 'admin');
+    { var __pt=pushTemplate('courseStart',{행사:(event&&event.name)||'',코스:(course&&course.name)||''},'▶ 코스 시작','{행사} · {코스}'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'admin'); }
   });
 
   // 시작하면 GPS 자동 ON
@@ -2503,7 +2503,7 @@ function finishCourse() {
     .filter(Boolean).join('\n');
   const autoLine = autoList ? `\n\n📍 <b>자동완료 거점:</b>\n${autoList}` : '';
   sendTelegram(`✅ <b>코스 완료</b>\n${event?.name || ''} · ${course?.name || ''}\n운전: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / 보조: ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}${vehInfoFinish ? '\n차량: ' + vehInfoFinish : ''}\n진행: ${(currentSession.completions || []).length}/${totalA} 거점\n이동: ${dist}km · 소요: ${dur}분${autoLine}`);
-  if (typeof sendAppPush === 'function') sendAppPush('✅ 코스 완료', (event && event.name ? event.name : '') + ' · ' + (course && course.name ? course.name : ''), 'admin');
+  { var __pt=pushTemplate('courseDone',{행사:(event&&event.name)||'',코스:(course&&course.name)||''},'✅ 코스 완료','{행사} · {코스}'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'admin'); }
 
   alert('✅ 코스 완료 보고됨');
   if (watchId !== null) stopGPS();
@@ -2929,7 +2929,7 @@ function submitAnchorRequest() {
   renderMapForSession();
   const addrLine = address ? `\n주소: ${address}` : '';
   sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name || '(이름 미정)'}\n이유: ${reason}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
-  if (typeof sendAppPush === 'function') sendAppPush('📌 거점 추가 요청', (name || '(이름 미정)') + (reason ? ' · ' + reason : ''), 'all', 'anchor');
+  { var __pt=pushTemplate('anchor',{이름:name||'(이름 미정)',이유:reason||''},'📌 거점 추가 요청','{이름} · {이유}'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'all','anchor'); }
   alert('✅ 관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
 }
 
@@ -3206,7 +3206,7 @@ function submitComplaint() {
   const addrLine = address ? `\n주소: ${address}` : '';
   sendTelegram(`📞 <b>민원 접수</b>\n유형: ${type}\n${ev?.name || ''} · 배정: ${courseName}\n연락처: ${phoneStr}\n내용: ${content || '-'}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   // 📲 앱 푸시 (간부)
-  if (typeof sendAppPush === 'function') sendAppPush(`📞 현장 민원 (${type})`, `${courseName} · ${content || ''}`.slice(0, 60), 'all', 'complaint');
+  { var __pt=pushTemplate('field',{유형:type||'',코스:courseName||'',내용:(content||'').slice(0,60)},'📞 현장 민원 ({유형})','{코스} · {내용}'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'all','complaint'); }
   alert('✅ 민원 접수됨\n관리자가 확인할 수 있습니다.');
 }
 
