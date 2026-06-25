@@ -535,7 +535,7 @@ function initPushNotifications() {
     const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
     if (!P) return;  // 웹/플러그인 없으면 스킵
     __pushInited = true;
-    P.addListener('registration', token => { savePushToken(token && token.value); });
+    P.addListener('registration', token => { window.__pushToken = (token && token.value) || ''; savePushToken(window.__pushToken); });
     P.addListener('registrationError', err => console.warn('푸시 등록 오류', err));
     P.addListener('pushNotificationReceived', notif => {
       // 포그라운드 수신 시 진동 (앱 켜둔 상태)
@@ -551,13 +551,23 @@ function initPushNotifications() {
 }
 function savePushToken(token) {
   if (typeof fbDb === 'undefined' || !token) return;
+  window.__pushToken = token;
   const deviceId = getDeviceId();
   const u = (typeof fbAuth !== 'undefined' && fbAuth.currentUser) || {};
   let role = 'anon';
   try { role = getMyRole() || 'anon'; } catch (e) {}
+  window.__pushTokenRole = role;
   fbDb.ref('/pushTokens/' + deviceId).set({
     token: token, role: role, uid: u.uid || '', name: getDeviceName() || getDeviceType(), updatedAt: Date.now()
   }).catch(e => console.warn('푸시토큰 저장 실패', e));
+}
+// 로그인 등으로 역할이 바뀌면 토큰을 새 역할로 다시 저장 (anon→super 등)
+function maybeResavePushToken() {
+  if (!window.__pushToken) return;
+  let role = 'anon';
+  try { role = getMyRole() || 'anon'; } catch (e) {}
+  if (role === window.__pushTokenRole) return;
+  savePushToken(window.__pushToken);
 }
 
 // 앱 푸시 발송 (GAS 웹앱 경유) — target: 'admin'(간부) | 'all'
@@ -642,6 +652,7 @@ function initFirebaseSync() {
       _readyCallbacks.length = 0;
     }
     try { checkAccessGate(); } catch (e) {}
+    try { maybeResavePushToken(); } catch (e) {}
     if (window.onDataChanged) window.onDataChanged();
   }, (err) => {
     // 로그아웃 중이면 무시 (signOut → signInAnonymously 사이에 발생)
@@ -976,6 +987,8 @@ function applyMemberNav() {
   showDeviceNameBar();
   // super가 기기이름 삭제했으면 재등록 유도
   checkDeviceNameSync();
+  // 로그인 역할 반영해 푸시 토큰 갱신 (anon→super 등)
+  try { maybeResavePushToken(); } catch (e) {}
 }
 
 // 관리자 전용 페이지에서 회원 차단
