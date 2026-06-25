@@ -115,7 +115,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260613g"></script>
+<script src="common.js?v=20260613h"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2929,7 +2929,7 @@ function submitAnchorRequest() {
   renderMapForSession();
   const addrLine = address ? `\n주소: ${address}` : '';
   sendTelegram(`📌 <b>거점 추가 요청</b>\n이름: ${name || '(이름 미정)'}\n이유: ${reason}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n요청자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
-  if (typeof sendAppPush === 'function') sendAppPush('📌 거점 추가 요청', (name || '(이름 미정)') + (reason ? ' · ' + reason : ''), 'all');
+  if (typeof sendAppPush === 'function') sendAppPush('📌 거점 추가 요청', (name || '(이름 미정)') + (reason ? ' · ' + reason : ''), 'all', 'anchor');
   alert('✅ 관리자에게 요청되었습니다.\n승인되면 정식 거점으로 추가됩니다.');
 }
 
@@ -3206,7 +3206,7 @@ function submitComplaint() {
   const addrLine = address ? `\n주소: ${address}` : '';
   sendTelegram(`📞 <b>민원 접수</b>\n유형: ${type}\n${ev?.name || ''} · 배정: ${courseName}\n연락처: ${phoneStr}\n내용: ${content || '-'}${addrLine}\n위치: ${lat.toFixed(5)}, ${lng.toFixed(5)}\n접수자: ${tgPersonLink(currentSession.crew?.driver, currentSession.crew?.driverPhone)}${currentSession.crew?.assist ? ' / ' + tgPersonLink(currentSession.crew.assist, currentSession.crew?.assistPhone) : ''}`);
   // 📲 앱 푸시 (간부)
-  if (typeof sendAppPush === 'function') sendAppPush(`📞 현장 민원 (${type})`, `${courseName} · ${content || ''}`.slice(0, 60), 'all');
+  if (typeof sendAppPush === 'function') sendAppPush(`📞 현장 민원 (${type})`, `${courseName} · ${content || ''}`.slice(0, 60), 'all', 'complaint');
   alert('✅ 민원 접수됨\n관리자가 확인할 수 있습니다.');
 }
 

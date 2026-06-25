@@ -572,8 +572,13 @@ function maybeResavePushToken() {
 
 // 앱 푸시 발송 (GAS 웹앱 경유) — target: 'admin'(간부) | 'all'
 const PUSH_WEBHOOK_DEFAULT = 'https://script.google.com/macros/s/AKfycbxaaLoXv7rA-OR_PEIazbYq44zahdiCu6ZtMDa3N3bbrruqxQz0yclWHU7Esl5_yHL2/exec';
-function sendAppPush(title, body, target) {
+function sendAppPush(title, body, target, category) {
   try {
+    // 회원용 카테고리(anchor/noSpray/complaint)인데 super가 껐으면 간부에게만
+    if (target === 'all' && category) {
+      const prefs = (typeof _cache !== 'undefined' && _cache && _cache.pushPrefs) || {};
+      if (prefs[category] === false) target = 'admin';
+    }
     const cfg = (typeof _cache !== 'undefined' && _cache && _cache.pushWebhook) || {};
     const url = cfg.url || PUSH_WEBHOOK_DEFAULT;
     const secret = cfg.secret || 'bsp_push_2026';
