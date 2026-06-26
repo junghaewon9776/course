@@ -2235,6 +2235,22 @@ function applyNaviRotation(heading) {
   if (map) setTimeout(() => map.relayout(), 600);
 }
 
+// 한국어 음성 멘트 (네비처럼) — 음성 목록에서 한국어 보이스 선택
+function speakKo(text) {
+  try {
+    if (!window.speechSynthesis || !text) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ko-KR'; u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+    const voices = speechSynthesis.getVoices() || [];
+    const ko = voices.find(v => /ko[-_]?KR/i.test(v.lang)) || voices.find(v => /ko/i.test(v.lang));
+    if (ko) u.voice = ko;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+// 보이스 목록 미리 로드 (일부 브라우저/웹뷰는 처음에 비어있음)
+try { if (window.speechSynthesis) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } } catch (e) {}
+
 // ───────── ⛔ 방역금지구역 근접 알람 ─────────
 let __nspState = {};  // zoneId -> 진입 여부 (중복 알람 방지)
 function checkNoSprayProximity(lat, lng) {
@@ -2256,15 +2272,8 @@ function testNspAlert() {
 function triggerNoSprayAlert(zone) {
   // 진동 (강하게)
   if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
-  // 음성: "방역 금지 구역입니다"
-  try {
-    if (window.speechSynthesis) {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance('방역 금지 구역입니다');
-      u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
-      speechSynthesis.speak(u);
-    }
-  } catch (e) {}
+  // 음성 멘트 (지역 이름 포함)
+  speakKo((zone.name ? zone.name + ', ' : '') + '방역 금지 구역입니다. 방역을 중단하세요.');
   // 깜박이는 화면 경고 배너
   let b = document.getElementById('nspAlertBanner');
   if (!b) { b = document.createElement('div'); b.id = 'nspAlertBanner'; document.body.appendChild(b); }
@@ -2296,14 +2305,8 @@ function testCmpAlert() {
 }
 function triggerComplaintAlert(c) {
   if (navigator.vibrate) navigator.vibrate([300, 120, 300]);
-  try {
-    if (window.speechSynthesis) {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance('민원 지역입니다');
-      u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
-      speechSynthesis.speak(u);
-    }
-  } catch (e) {}
+  // 음성 멘트 (민원 내용 포함)
+  { const _m = c.content ? String(c.content).slice(0, 30) : ''; speakKo('민원 지역입니다.' + (_m ? ' ' + _m : '')); }
   let b = document.getElementById('cmpAlertBanner');
   if (!b) {
     b = document.createElement('div'); b.id = 'cmpAlertBanner';
