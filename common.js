@@ -587,17 +587,16 @@ function showPushBanner(title, body) {
       el = document.createElement('div');
       el.id = '__pushBanner';
       el.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;'
-        + 'background:#1565c0;color:#fff;padding:16px 18px;'
-        + 'box-shadow:0 6px 18px rgba(0,0,0,.4);cursor:pointer;'
-        + 'font-family:inherit;transform:translateY(-130%);transition:transform .28s ease;';
+        + 'background:#1565c0;color:#fff;padding:8px 12px;'
+        + 'box-shadow:0 3px 10px rgba(0,0,0,.3);cursor:pointer;'
+        + 'font-family:inherit;transform:translateY(-130%);transition:transform .25s ease;';
       const safeTitle = String(title || '🔔 알림').replace(/</g, '&lt;');
       const safeBody = String(body || '').replace(/</g, '&lt;');
-      el.innerHTML = '<div style="display:flex;align-items:flex-start;gap:10px;">'
-        + '<div style="font-size:22px;line-height:1;">🔔</div>'
+      el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<div style="font-size:16px;line-height:1;">🔔</div>'
         + '<div style="flex:1;min-width:0;">'
-        + '<div style="font-weight:700;font-size:16px;margin-bottom:3px;">' + safeTitle + '</div>'
-        + '<div style="font-size:14px;opacity:.95;word-break:break-all;">' + safeBody + '</div>'
-        + '<div style="font-size:11px;opacity:.8;margin-top:5px;">탭하면 민원게시판으로 이동</div>'
+        + '<div style="font-weight:700;font-size:13px;line-height:1.3;">' + safeTitle + '</div>'
+        + '<div style="font-size:12px;opacity:.95;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + safeBody + '</div>'
         + '</div></div>';
       el.onclick = function () { try { location.href = 'inquiry.html'; } catch (e) {} };
       document.body.appendChild(el);
