@@ -57,6 +57,7 @@
           <button class="small" onclick="showHistoryModal('requests')" style="background:#d35400;">📌 거점요청내역</button>
         </div>
       </div>
+      <div id="curAddr" style="display:none;margin-top:8px;padding:8px 12px;background:#eaf2fb;border-left:4px solid #2980b9;border-radius:6px;font-weight:700;font-size:14px;color:#1c3d5a;">📍 현재 위치 확인 중...</div>
       <div id="gpsStatus" class="muted" style="margin-top:6px;">GPS 대기중</div>
     </div>
 
@@ -2017,6 +2018,7 @@ function stopGPS() {
   const btn = document.getElementById('gpsToggle');
   if (btn) btn.textContent = '📍 GPS 시작';
   document.getElementById('gpsStatus').textContent = 'GPS 중지됨';
+  { const _ca = document.getElementById('curAddr'); if (_ca) _ca.style.display = 'none'; }
 }
 function toggleGPS() {
   const btn = document.getElementById('gpsToggle');
@@ -2316,6 +2318,28 @@ function triggerComplaintAlert(c) {
   window.__cmpBannerTimer = setTimeout(() => { if (b) b.style.display = 'none'; }, 8000);
 }
 
+// 네비처럼 현재 위치 주소 표시 (5초/30m 간격으로만 변환 — 호출 절약)
+let __lastAddrAt = 0, __lastAddrPos = null;
+function updateCurrentAddress(lat, lng) {
+  try {
+    if (!window.kakao || !kakao.maps || !kakao.maps.services) return;
+    const now = Date.now();
+    if (__lastAddrPos) {
+      const moved = Math.abs(__lastAddrPos.lat - lat) + Math.abs(__lastAddrPos.lng - lng);
+      if (now - __lastAddrAt < 5000 && moved < 0.0003) return;  // 약 30m
+    }
+    __lastAddrAt = now; __lastAddrPos = { lat, lng };
+    const gc = new kakao.maps.services.Geocoder();
+    gc.coord2Address(lng, lat, (result, status) => {
+      if (status !== kakao.maps.services.Status.OK || !result || !result[0]) return;
+      const r = result[0];
+      const addr = (r.road_address && r.road_address.address_name) || (r.address && r.address.address_name) || '';
+      const el = document.getElementById('curAddr');
+      if (el && addr) { el.style.display = 'block'; el.textContent = '📍 ' + addr; }
+    });
+  } catch (e) {}
+}
+
 function onGpsUpdate(pos) {
   const lat = pos.coords.latitude, lng = pos.coords.longitude;
   const heading = pos.coords.heading; // 0~360 또는 null
@@ -2324,6 +2348,7 @@ function onGpsUpdate(pos) {
   checkComplaintProximity(lat, lng);  // 📞 민원지역 근접 알람
   document.getElementById('gpsStatus').textContent =
     `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} (정확도 ${Math.round(pos.coords.accuracy)}m)`;
+  updateCurrentAddress(lat, lng);  // 네비처럼 현재 위치 주소 표시
 
   // 내 위치 마커 (방향 화살표 포함)
   if (map) {
