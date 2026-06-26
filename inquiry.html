@@ -155,7 +155,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260625b"></script>
+<script src="common.js?v=20260626a"></script>
 <script>
 // ────── 기본 분류 데이터 ──────
 const DEFAULT_CATEGORIES = [
@@ -391,6 +391,16 @@ function renderMemberBoard() {
   el.innerHTML = all.map(q => renderInquiryCard(q, false, false, true)).join('');
 }
 
+// 작성자 표시: admin/super 계정은 '관리자', 그 외(회원/주민)는 등록된 성명/닉네임
+function writerLabel(uid, name) {
+  try {
+    const data = loadData();
+    const ui = (data.users || {})[uid];
+    if (ui && (ui.role === 'admin' || ui.role === 'super')) return '관리자';
+  } catch (e) {}
+  return name || '익명';
+}
+
 // renderInquiryCard(q, isAdmin, isOwner, isMemberView)
 function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
   const cats = getCategories();
@@ -401,6 +411,10 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
   const phoneTel = (q.phone || '').replace(/[^0-9+]/g, '');
   const u = fbAuth.currentUser;
   const loggedIn = u && !u.isAnonymous;
+  const myUid = (u && u.uid) || '';
+  let myRole = null; try { myRole = getMyRole(); } catch (e) {}
+  const canModerate = isAdmin || myRole === 'super' || myRole === 'admin';
+  const isPostOwner = !!(myUid && q.writerUid && q.writerUid === myUid);
 
   // 답변/댓글 영역
   let replyHtml = '';
@@ -425,13 +439,19 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
   if (comments.length) {
     commentsHtml = `<div style="margin-top:10px;border-top:1px solid #eee;padding-top:8px;">
       <div style="font-size:12px;font-weight:700;color:#555;margin-bottom:6px;">💬 댓글 (${comments.length})</div>
-      ${comments.map(c => `
+      ${comments.map((c, ci) => {
+        const canEditC = (c.writerUid && c.writerUid === myUid) || canModerate;
+        return `
         <div style="padding:8px 10px;background:#f8f9fa;border-radius:6px;margin-bottom:4px;font-size:13px;">
-          <span style="font-weight:700;color:#2c3e50;">${(c.writer||'').replace(/</g,'&lt;')}</span>
+          <span style="font-weight:700;color:#2c3e50;">${writerLabel(c.writerUid, c.writer).replace(/</g,'&lt;')}</span>
           <span style="color:#aaa;font-size:11px;margin-left:6px;">${c.createdAt ? new Date(c.createdAt).toLocaleString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : ''}</span>
+          ${canEditC ? `<span style="float:right;display:flex;gap:6px;">
+            <button onclick="editComment('${q.id}',${ci})" style="background:none;border:none;color:#3498db;font-size:12px;cursor:pointer;padding:0;">✏ 수정</button>
+            <button onclick="deleteComment('${q.id}',${ci})" style="background:none;border:none;color:#e74c3c;font-size:12px;cursor:pointer;padding:0;">🗑 삭제</button>
+          </span>` : ''}
           <div style="margin-top:4px;color:#444;white-space:pre-wrap;">${(c.text||'').replace(/</g,'&lt;')}</div>
         </div>
-      `).join('')}
+      `;}).join('')}
     </div>`;
   }
 
@@ -462,7 +482,7 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
       ${q.content ? `<div style="margin:8px 0;color:#444;font-size:14px;white-space:pre-wrap;line-height:1.5;">${q.content.replace(/</g,'&lt;')}</div>` : ''}
       <div style="font-size:12px;color:#999;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
         <span>🕐 ${when}</span>
-        <span>👤 ${(q.writer||'익명').replace(/</g,'&lt;')}</span>
+        <span>👤 ${writerLabel(q.writerUid, q.writer).replace(/</g,'&lt;')}</span>
         ${q.phone ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;" onclick="event.stopPropagation()">📞 ${q.phone}</a>` : ''}
         ${q.deviceName ? `<span>📱 ${q.deviceName}</span>` : ''}
       </div>
@@ -482,7 +502,12 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
           <button class="small" onclick="editInqContent('${q.id}')" style="background:#3498db;color:#fff;">✏ 수정</button>
           <button class="small danger" onclick="deleteInquiry('${q.id}')">🗑 삭제</button>
         </div>
-      ` : ''}
+      ` : (isPostOwner ? `
+        <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;">
+          <button class="small" onclick="editInqContent('${q.id}')" style="background:#3498db;color:#fff;">✏ 수정</button>
+          <button class="small danger" onclick="deleteInquiry('${q.id}')">🗑 삭제</button>
+        </div>
+      ` : '')}
     </div>
   `;
 }
@@ -513,9 +538,57 @@ function submitComment(id) {
     createdAt: Date.now()
   });
   saveData(data);
+  // 📲 글 작성자에게 푸시 (본인이 본인 글에 단 경우는 제외)
+  try {
+    const authorUid = q.writerUid || '';
+    if (authorUid && authorUid !== (u?.uid || '') && typeof sendAppPush === 'function') {
+      const fromName = writerLabel(u?.uid || '', writerName);
+      const t = pushTemplate('inqReply', { 작성자: fromName, 내용: text.slice(0, 40) }, '💬 내 글에 답변이 달렸어요', '{작성자}: {내용}');
+      sendAppPush(t.title, t.body, 'user', null, authorUid);
+    }
+  } catch (e) {}
+  if (document.getElementById('commentText_' + id)) document.getElementById('commentText_' + id).value = '';
   renderMyInquiries();
   renderMemberBoard();
   renderAdminBoard();
+}
+
+// 댓글 수정
+function editComment(id, ci) {
+  const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q || !Array.isArray(q.comments) || !q.comments[ci]) return;
+  const c = q.comments[ci];
+  const u = fbAuth.currentUser;
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  const canMod = role === 'admin' || role === 'super';
+  const isMine = c.writerUid && u && c.writerUid === u.uid;
+  if (!canMod && !isMine) { alert('수정 권한이 없습니다'); return; }
+  const next = prompt('댓글 수정', c.text || '');
+  if (next == null) return;
+  const v = next.trim();
+  if (!v) { alert('내용을 입력해주세요'); return; }
+  c.text = v;
+  c.editedAt = Date.now();
+  saveData(data);
+  renderMyInquiries(); renderMemberBoard(); renderAdminBoard();
+}
+
+// 댓글 삭제
+function deleteComment(id, ci) {
+  const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q || !Array.isArray(q.comments) || !q.comments[ci]) return;
+  const c = q.comments[ci];
+  const u = fbAuth.currentUser;
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  const canMod = role === 'admin' || role === 'super';
+  const isMine = c.writerUid && u && c.writerUid === u.uid;
+  if (!canMod && !isMine) { alert('삭제 권한이 없습니다'); return; }
+  if (!confirm('이 댓글을 삭제할까요?')) return;
+  q.comments.splice(ci, 1);
+  saveData(data);
+  renderMyInquiries(); renderMemberBoard(); renderAdminBoard();
 }
 
 // ────── 관리자 게시판 ──────
@@ -584,6 +657,8 @@ function editInqContent(id) {
   const data = loadData();
   const q = (data.inquiries || []).find(x => x.id === id);
   if (!q) return;
+  let _role = null; try { _role = getMyRole(); } catch (e) {}
+  const amAdmin = _role === 'admin' || _role === 'super';
 
   const cats = getCategories();
   const catOptions = cats.map(c =>
@@ -611,9 +686,9 @@ function editInqContent(id) {
       <label style="font-size:13px;font-weight:700;">연락처</label>
       <input id="editPhone" type="tel" value="${(q.phone||'').replace(/"/g,'&quot;')}"
         style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
-      <label style="font-size:13px;font-weight:700;">관리자 메모</label>
+      ${amAdmin ? `<label style="font-size:13px;font-weight:700;">관리자 메모</label>
       <input id="editMemo" type="text" value="${(q.adminMemo||'').replace(/"/g,'&quot;')}" placeholder="메모 (접수자에게 표시)"
-        style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+        style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">` : ''}
       <div style="display:flex;gap:8px;">
         <button onclick="saveEditInq('${id}')" style="flex:1;background:#27ae60;color:#fff;border:none;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;">💾 저장</button>
         <button onclick="document.getElementById('editInqModal').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:12px;border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;">취소</button>
@@ -635,16 +710,26 @@ function saveEditInq(id) {
   q.subCategory = (document.getElementById('editSub').value || '').trim();
   q.content = (document.getElementById('editContent').value || '').trim();
   q.phone = (document.getElementById('editPhone').value || '').trim();
-  q.adminMemo = (document.getElementById('editMemo').value || '').trim();
+  const memoEl = document.getElementById('editMemo');
+  if (memoEl) q.adminMemo = (memoEl.value || '').trim();
   saveData(data);
   document.getElementById('editInqModal').remove();
+  renderMyInquiries(); renderMemberBoard(); renderAdminBoard();
 }
 
 function deleteInquiry(id) {
-  if (!confirm('이 민원을 삭제할까요?')) return;
   const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q) return;
+  const u = fbAuth.currentUser;
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  const isAdmin = role === 'admin' || role === 'super';
+  const isOwner = u && q.writerUid && q.writerUid === u.uid;
+  if (!isAdmin && !isOwner) { alert('삭제 권한이 없습니다'); return; }
+  if (!confirm('이 민원을 삭제할까요?')) return;
   data.inquiries = (data.inquiries || []).filter(x => x.id !== id);
   saveData(data);
+  renderMyInquiries(); renderMemberBoard(); renderAdminBoard();
 }
 
 // ────── 답변 / 해결법 (글 + 사진) ──────
@@ -750,8 +835,17 @@ function saveReply(id) {
   q.repliedBy = uInfo?.name || u?.email || '';
   if (q.status === 'pending') q.status = 'progress';
   saveData(data);
+  // 📲 글 작성자에게 답변 푸시
+  try {
+    const authorUid = q.writerUid || '';
+    if (authorUid && authorUid !== (u?.uid || '') && typeof sendAppPush === 'function') {
+      const t = pushTemplate('inqReply', { 작성자: '관리자', 내용: (text || '사진 답변').slice(0, 40) }, '💬 내 글에 답변이 달렸어요', '{작성자}: {내용}');
+      sendAppPush(t.title, t.body, 'user', null, authorUid);
+    }
+  } catch (e) {}
   document.getElementById('replyModal').remove();
   __replyImages = [];
+  renderMyInquiries(); renderMemberBoard(); renderAdminBoard();
 }
 
 function viewReplyImage(id, idx) {

@@ -651,7 +651,7 @@ function pushTemplate(key, ctx, defTitle, defBody) {
 
 // 앱 푸시 발송 (GAS 웹앱 경유) — target: 'admin'(간부) | 'all'
 const PUSH_WEBHOOK_DEFAULT = 'https://script.google.com/macros/s/AKfycbxaaLoXv7rA-OR_PEIazbYq44zahdiCu6ZtMDa3N3bbrruqxQz0yclWHU7Esl5_yHL2/exec';
-function sendAppPush(title, body, target, category) {
+function sendAppPush(title, body, target, category, targetUid) {
   try {
     // 회원용 카테고리(anchor/noSpray/complaint)인데 super가 껐으면 간부에게만
     if (target === 'all' && category) {
@@ -665,7 +665,7 @@ function sendAppPush(title, body, target, category) {
     fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // CORS preflight 회피
-      body: JSON.stringify({ secret: secret, title: title || '알림', body: body || '', target: target || 'admin' })
+      body: JSON.stringify({ secret: secret, title: title || '알림', body: body || '', target: target || 'admin', uid: targetUid || '' })
     }).catch(e => console.warn('푸시 발송 실패', e));
   } catch (e) { console.warn('푸시 발송 오류', e); }
 }
