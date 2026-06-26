@@ -2241,15 +2241,10 @@ function speakKo(text) {
     if (!window.speechSynthesis || !text) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'ko-KR'; u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
-    const voices = speechSynthesis.getVoices() || [];
-    const ko = voices.find(v => /ko[-_]?KR/i.test(v.lang)) || voices.find(v => /ko/i.test(v.lang));
-    if (ko) u.voice = ko;
-    speechSynthesis.speak(u);
+    u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
+    speechSynthesis.speak(u);   // 보이스는 시스템 기본에 맡김 (웹뷰 호환)
   } catch (e) {}
 }
-// 보이스 목록 미리 로드 (일부 브라우저/웹뷰는 처음에 비어있음)
-try { if (window.speechSynthesis) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } } catch (e) {}
 
 // ───────── ⛔ 방역금지구역 근접 알람 ─────────
 let __nspState = {};  // zoneId -> 진입 여부 (중복 알람 방지)
