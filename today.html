@@ -2026,8 +2026,8 @@ function toggleGPS() {
   if (BG) {
     // 앱: 백그라운드 추적 — 화면 꺼도, 다른 앱 써도 위치 계속 기록
     var __bgRet = BG.addWatcher({
-      backgroundMessage: "방역 차량 위치를 기록 중입니다",
-      backgroundTitle: "🚐 방역코스 운행 중",
+      backgroundMessage: "운영이 끝나면 \"코스 완료\"를 눌러주세요",
+      backgroundTitle: "🚐 방역코스 운행 중입니다",
       requestPermissions: true,
       stale: false,
       distanceFilter: 1    // 1m 이상 움직이면 보고. 걸으면 사실상 실시간, 멈추면 떨림 없음 (0은 정지 시 지터)
