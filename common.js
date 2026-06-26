@@ -546,9 +546,12 @@ function initPushNotifications() {
         showPushBanner(t, b);
       } catch (e) {}
     });
-    // 알림 누르면 민원게시판으로 이동
-    P.addListener('pushNotificationActionPerformed', () => {
-      try { location.href = 'inquiry.html'; } catch (e) {}
+    // 알림 누르면 종류에 맞는 화면으로 (민원→게시판, 코스→모니터링[간부], 그외→이동 X)
+    P.addListener('pushNotificationActionPerformed', action => {
+      try {
+        const n = (action && action.notification) || {};
+        routePushTap((n.title || '') + ' ' + (n.body || ''));
+      } catch (e) {}
     });
     P.checkPermissions().then(perm => {
       if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') return P.requestPermissions();
@@ -577,6 +580,26 @@ function playPushBeep() {
     setTimeout(() => { try { ac.close(); } catch (e) {} }, 800);
   } catch (e) {}
 }
+// 알림 탭 시 종류별 이동 (민원게시판 관련 → inquiry, 코스 → 모니터링[간부만], 그 외 → 이동 안 함)
+function routePushTap(txt) {
+  try {
+    txt = txt || '';
+    // 민원/댓글/답변/거점/방역금지 → 민원게시판 (회원도 접근 가능)
+    if (/💬|답변|댓글|민원|거점|방역금지|📋|📞|🚫/.test(txt)) {
+      if (location.pathname.indexOf('inquiry') < 0) location.href = 'inquiry.html';
+      return true;
+    }
+    // 코스 시작/완료 → 모니터링 (간부만 받고 접근 가능)
+    if (/코스 시작|코스 완료|▶|운행/.test(txt)) {
+      let role = null; try { role = getMyRole(); } catch (e) {}
+      if (role === 'admin' || role === 'super') {
+        if (location.pathname.indexOf('monitor') < 0) location.href = 'monitor.html';
+        return true;
+      }
+    }
+    return false; // 그 외: 이동 안 함 (앱만 열림)
+  } catch (e) { return false; }
+}
 // 카톡 스타일 상단 배너 (앱 켜둔 상태에서 푸시 수신 시)
 function showPushBanner(title, body) {
   const draw = () => {
@@ -598,7 +621,7 @@ function showPushBanner(title, body) {
         + '<div style="font-weight:700;font-size:13px;line-height:1.3;">' + safeTitle + '</div>'
         + '<div style="font-size:12px;opacity:.95;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + safeBody + '</div>'
         + '</div></div>';
-      el.onclick = function () { try { location.href = 'inquiry.html'; } catch (e) {} };
+      el.onclick = function () { try { if (!routePushTap((title || '') + ' ' + (body || ''))) el.remove(); } catch (e) {} };
       document.body.appendChild(el);
       requestAnimationFrame(() => { el.style.transform = 'translateY(0)'; });
       setTimeout(() => {
