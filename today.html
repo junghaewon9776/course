@@ -1116,7 +1116,13 @@ function startSession(eventId, courseId, teamId, crew) {
   getClientIP().then(ip => {
     const dev = getDeviceType();
     sendTelegram(`▶ <b>코스 시작</b>\n${event?.name || ''} · ${course?.name || ''}\n${team ? '조: ' + team.name + '\n' : ''}운전: ${tgPersonLink(crew?.driver, crew?.driverPhone)}${crew?.assist ? '\n보조: ' + tgPersonLink(crew.assist, crew?.assistPhone) : ''}${vehInfo ? '\n차량: ' + vehInfo : ''}\n시작: ${new Date().toLocaleString('ko-KR')}\n접속: ${dev} · IP ${ip}`);
-    { var __pt=pushTemplate('courseStart',{행사:(event&&event.name)||'',코스:(course&&course.name)||''},'▶ 코스 시작','{행사} · {코스}'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'admin'); }
+    {
+      var __teamName = team ? team.name : '';
+      var __crewNames = (crew && crew.members && crew.members.length) ? crew.members.join(', ') : [crew && crew.driver, crew && crew.assist].filter(Boolean).join(', ');
+      var __who = __teamName ? (__teamName + (__crewNames ? ' (' + __crewNames + ')' : '')) : __crewNames;
+      var __pt = pushTemplate('courseStart', { 행사:(event&&event.name)||'', 코스:(course&&course.name)||'', 조:__teamName, 인원:__who }, '▶ 코스 시작', '{행사} · {코스}\n{인원}');
+      if (typeof sendAppPush==='function') sendAppPush(__pt.title, __pt.body, 'admin');
+    }
   });
 
   // 시작하면 GPS 자동 ON
