@@ -831,6 +831,24 @@ function maybeCheckUpdate() {
 }
 
 // ───────── Firebase 동기화 캐시 ─────────
+// ───────── 🔄 페이지 항상 최신으로 (앱 웹뷰 HTML 캐시 무력화) ─────────
+// 내부 *.html 링크에 캐시버스터(_cb)를 붙여 클릭 시 매번 새 HTML을 받아오게 함
+function __bustNavLinks() {
+  try {
+    const stamp = Date.now();
+    document.querySelectorAll('a[href]').forEach(a => {
+      const href = a.getAttribute('href');
+      if (!href) return;
+      if (/^(https?:)?\/\//.test(href) || href[0] === '#' || href.indexOf('javascript:') === 0 || href.indexOf('tel:') === 0 || href.indexOf('mailto:') === 0) return;
+      if (!/\.html(\?|#|$)/.test(href)) return;
+      if (/[?&]_cb=/.test(href)) return;
+      a.setAttribute('href', href + (href.indexOf('?') >= 0 ? '&' : '?') + '_cb=' + stamp);
+    });
+  } catch (e) {}
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', __bustNavLinks);
+else __bustNavLinks();
+
 let _cache = null;
 let _cacheReady = false;
 const _readyCallbacks = [];
