@@ -2491,6 +2491,58 @@ function formatDist(m) {
   return m < 1000 ? `${Math.round(m)}m` : `${(m/1000).toFixed(2)}km`;
 }
 
+// 🔧 날아간 운행로그 복구 — 이 기기 localStorage에 남은 "완료된" 세션을 /logs로 다시 저장
+function scanRecoverableLogs() {
+  const data = loadData();
+  const existingKeys = new Set((data.logs || []).map(l => l && l.key).filter(Boolean));
+  const out = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || k.indexOf('session_') !== 0) continue;
+    try {
+      const s = JSON.parse(localStorage.getItem(k));
+      if (s && s.finishedAt && s.key && !existingKeys.has(s.key)) out.push(s);
+    } catch (e) {}
+  }
+  return out.sort((a, b) => (a.finishedAt || 0) - (b.finishedAt || 0));
+}
+function recoverLocalLogs() {
+  const list = scanRecoverableLogs();
+  if (!list.length) { alert('이 기기에 복구할 로그가 없습니다.\n(운행을 했던 바로 그 폰에서 실행해야 해요)'); return; }
+  const data = loadData();
+  const names = list.map(s => {
+    const ev = getEvent(data, s.eventId), co = getCourse(data, s.courseId);
+    return `· ${(ev && ev.name) || '?'} ${(co && co.name) || ''} — ${new Date(s.finishedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+  }).join('\n');
+  if (!confirm(`복구 가능한 운행 ${list.length}건:\n\n${names}\n\n모두 운행기록에 복구할까요?`)) return;
+  let n = 0;
+  list.forEach(s => {
+    try {
+      fbDb.ref('/logs').push(s);
+      if (_cache) { if (!Array.isArray(_cache.logs)) _cache.logs = _cache.logs ? Object.values(_cache.logs) : []; _cache.logs.push(s); }
+      n++;
+    } catch (e) { console.warn('복구 실패', e); }
+  });
+  alert(`✅ ${n}건 복구 완료!\n운행기록(모니터링)에서 확인하세요.`);
+  const b = document.getElementById('__logRecoverBanner'); if (b) b.remove();
+}
+// 복구할 로그가 있으면 상단에 배너 표시
+function maybeShowLogRecovery() {
+  try {
+    const list = scanRecoverableLogs();
+    if (!list.length) return;
+    if (document.getElementById('__logRecoverBanner')) return;
+    const b = document.createElement('div');
+    b.id = '__logRecoverBanner';
+    b.style.cssText = 'background:#fff3cd;border:1px solid #f1c40f;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:14px;color:#7d6608;';
+    b.innerHTML = `⚠️ 이 기기에 <b>저장 안 된 운행기록 ${list.length}건</b>이 있어요.`
+      + ` <button onclick="recoverLocalLogs()" style="margin-left:8px;background:#e67e22;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;">🔧 복구하기</button>`;
+    const cont = document.querySelector('.container');
+    if (cont) cont.insertBefore(b, cont.firstChild);
+  } catch (e) {}
+}
+if (typeof onDataReady === 'function') onDataReady(() => setTimeout(maybeShowLogRecovery, 1500));
+
 function finishCourse() {
   if (!currentSession) return;
   const data = loadData();
