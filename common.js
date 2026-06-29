@@ -558,8 +558,25 @@ function initPushNotifications() {
       return perm;
     }).then(perm => {
       if (perm && perm.receive === 'granted') P.register();
+      else showNotifPermBanner();   // 🔔 알림 권한 꺼짐 → 켜라고 안내
     }).catch(e => console.warn('푸시 권한 오류', e));
   } catch (e) { console.warn('푸시 초기화 오류', e); }
+}
+// 🔔 알림 권한 꺼짐 안내 배너
+function showNotifPermBanner() {
+  try {
+    if (!document.body) { document.addEventListener('DOMContentLoaded', showNotifPermBanner); return; }
+    if (document.getElementById('__notifPermBanner')) return;
+    const b = document.createElement('div');
+    b.id = '__notifPermBanner';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483646;background:#e74c3c;color:#fff;padding:12px 14px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35);';
+    b.innerHTML = '🔔 알림이 꺼져 있어요! 받으려면 눌러서 켜기 <span id="__npbX" style="float:right;padding:0 4px;">✕</span>';
+    b.onclick = function (e) {
+      if (e.target && e.target.id === '__npbX') { b.remove(); return; }
+      alert('폰 설정 → 앱 → 방역(코스) → 알림 → "켜기"\n\n그 후 앱을 다시 켜면 알림이 옵니다.');
+    };
+    document.body.appendChild(b);
+  } catch (e) {}
 }
 // 🔔 앱 아이콘 배지/트레이 알림 제거 (알림 내역을 "봤을 때"만 호출)
 function clearPushBadge() {
