@@ -11,7 +11,11 @@
   <style>
     /* PC에서 모니터링 지도 세로로 크게 */
     #map.map-compact { height: 720px; }
-    @media (max-width: 600px) { #map.map-compact { height: 320px; } }
+    @media (max-width: 600px) {
+      #map.map-compact { height: 320px; }
+      /* 폰에서도 운행목록이 끝없이 내려가지 않게 — 영역 안에서 스크롤 */
+      #logList { max-height: 60vh; overflow-y: auto; }
+    }
     /* PC에서 운행 목록 세로로 길게 + 항목 크게 (많아져도 옆에서 스크롤로 보기) */
     @media (min-width: 601px) {
       #logList { max-height: 820px; overflow-y: auto; }
@@ -1715,19 +1719,22 @@ function render() {
     const driver = l.crew?.driver || '';
     const assist = l.crew?.assist || '';
     return `
-      <div class="anchor-row" style="cursor:pointer;${selectedLogIdx===i?'background:#fff9e6;':''}" onclick="selectLog(${i})">
-        <div class="num" style="background:${course?.color || '#999'}">${(driver||team?.name||'?').slice(0,1)}</div>
-        <div style="flex:1;min-width:0;">
-          <div class="name">${event?.name || '?'} · ${course?.name || '?'}${course?.detail ? ' <span style="font-weight:400;color:#666;font-size:11px;">(' + (course.detail) + ')</span>' : ''}</div>
-          <div class="sub">${l.date} · ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}</div>
-          ${driver || assist ? `<div class="sub">운전: ${driver || '-'}${assist ? ' · 보조: ' + assist : ''}</div>` : ''}
+      <div style="border-bottom:1px solid #e5e5e5;${selectedLogIdx===i?'background:#fff9e6;':''}">
+        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;" onclick="selectLog(${i})">
+          <div class="num" style="background:${course?.color || '#999'};width:34px;height:34px;font-size:14px;flex-shrink:0;">${(driver||team?.name||'?').slice(0,1)}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="name" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${event?.name || '?'} · ${course?.name || '?'}</div>
+            <div class="sub" style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.date} · ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}${driver ? ' · ' + driver : ''}</div>
+          </div>
+          ${getMyRole() === 'super' ? `<button class="small" style="background:#e67e22;font-size:11px;flex-shrink:0;padding:3px 7px;" onclick="event.stopPropagation();hideLog('${(l.key || '').replace(/'/g, "\\'")}')">👁</button><button class="small danger" style="font-size:11px;flex-shrink:0;padding:3px 7px;" onclick="event.stopPropagation();deleteLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑</button>` : getMyRole() === 'admin' ? `<button class="small danger" style="font-size:11px;flex-shrink:0;padding:3px 7px;" onclick="event.stopPropagation();hideLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑</button>` : ''}
         </div>
-        ${getMyRole() === 'super' ? `<button class="small" style="background:#e67e22;font-size:10px;" onclick="event.stopPropagation();hideLog('${(l.key || '').replace(/'/g, "\\'")}')">👁숨김</button><button class="small danger" style="font-size:10px;" onclick="event.stopPropagation();deleteLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑삭제</button>` : getMyRole() === 'admin' ? `<button class="small danger" style="font-size:10px;" onclick="event.stopPropagation();hideLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑삭제</button>` : ''}
+        <button onclick="playLogFromList(${i})" style="display:block;width:100%;padding:6px;background:#27ae60;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;">▶ 재생</button>
       </div>
     `;
   }).join('');
 
-  if (selectedLogIdx !== null && logs[selectedLogIdx]) drawLog(logs[selectedLogIdx]);
+  // 재생 중(__replayMarker 있음)엔 로그를 다시 그리지 않음 → drawLog→stopReplay로 재생 끊기던 버그 방지
+  if (selectedLogIdx !== null && logs[selectedLogIdx] && !__replayMarker) drawLog(logs[selectedLogIdx]);
 }
 
 function selectLog(idx) {
@@ -1735,6 +1742,20 @@ function selectLog(idx) {
   render();
   const log = getFilteredLogs()[idx];
   if (log) drawLog(log);
+}
+// 목록의 ▶재생 버튼 → 지도로 화면 이동 후 재생 시작
+function playLogFromList(idx) {
+  selectLog(idx);  // 선택 + 로그 그리기
+  const mapEl = document.getElementById('map');
+  if (mapEl && mapEl.scrollIntoView) {
+    try { mapEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { mapEl.scrollIntoView(); }
+  }
+  // 지도로 스크롤 이동이 끝난 뒤 재생 시작
+  setTimeout(() => {
+    const l = getFilteredLogs()[idx];
+    if (!l || !l.track || l.track.length < 2) { alert('이동 궤적이 없는 기록입니다'); return; }
+    startReplay(l.track);
+  }, 650);
 }
 
 function clearDirectionMarkers() {
