@@ -585,10 +585,14 @@ function renderNotifBell() {
   if (!bell) {
     bell = document.createElement('div');
     bell.id = '__notifBell';
-    bell.style.cssText = 'position:fixed;bottom:16px;right:14px;z-index:99990;width:46px;height:46px;border-radius:50%;background:#2980b9;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 3px 10px rgba(0,0,0,.35);cursor:pointer;';
+    bell.style.cssText = 'position:fixed;z-index:99990;width:46px;height:46px;border-radius:50%;background:#2980b9;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 3px 10px rgba(0,0,0,.35);cursor:pointer;touch-action:none;user-select:none;';
     bell.innerHTML = '🔔<span id="__notifBadge" style="position:absolute;top:-3px;right:-3px;background:#e74c3c;color:#fff;border-radius:11px;min-width:20px;height:20px;font-size:11px;font-weight:700;align-items:center;justify-content:center;padding:0 4px;box-sizing:border-box;display:none;"></span>';
-    bell.onclick = showNotifHistory;
     document.body.appendChild(bell);
+    // 저장된 위치 복원 (없으면 우측 중앙쯤 — 다른 버튼과 안 겹치게)
+    const saved = (() => { try { return JSON.parse(localStorage.getItem('__notifBellPos') || 'null'); } catch (e) { return null; } })();
+    if (saved && typeof saved.left === 'number') { bell.style.left = saved.left + 'px'; bell.style.top = saved.top + 'px'; }
+    else { bell.style.right = '12px'; bell.style.top = '50%'; }
+    makeBellDraggable(bell);
   }
   const n = notifUnreadCount();
   const badge = document.getElementById('__notifBadge');
@@ -596,6 +600,45 @@ function renderNotifBell() {
     if (n > 0) { badge.style.display = 'flex'; badge.textContent = n > 99 ? '99+' : n; }
     else { badge.style.display = 'none'; }
   }
+}
+// 벨 드래그(꾹 눌러서 이동) — 짧게 누르면 알림내역 열림
+function makeBellDraggable(bell) {
+  let dragging = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0, holdTimer = null;
+  const onDown = (e) => {
+    const pt = e.touches ? e.touches[0] : e;
+    sx = pt.clientX; sy = pt.clientY;
+    const r = bell.getBoundingClientRect();
+    ox = r.left; oy = r.top;
+    moved = false;
+    holdTimer = setTimeout(() => { dragging = true; bell.style.opacity = '0.7'; }, 300);  // 0.3초 꾹 = 이동 모드
+  };
+  const onMove = (e) => {
+    const pt = e.touches ? e.touches[0] : e;
+    const dx = pt.clientX - sx, dy = pt.clientY - sy;
+    if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
+    if (!dragging) return;
+    e.preventDefault();
+    let nx = ox + dx, ny = oy + dy;
+    nx = Math.max(4, Math.min(window.innerWidth - 50, nx));
+    ny = Math.max(4, Math.min(window.innerHeight - 50, ny));
+    bell.style.left = nx + 'px'; bell.style.top = ny + 'px';
+    bell.style.right = 'auto'; bell.style.bottom = 'auto';
+  };
+  const onUp = () => {
+    clearTimeout(holdTimer);
+    bell.style.opacity = '1';
+    if (dragging) {
+      const r = bell.getBoundingClientRect();
+      try { localStorage.setItem('__notifBellPos', JSON.stringify({ left: r.left, top: r.top })); } catch (e) {}
+      dragging = false;
+    } else if (!moved) {
+      showNotifHistory();  // 짧게 탭 = 열기
+    }
+  };
+  bell.addEventListener('touchstart', onDown, { passive: true });
+  bell.addEventListener('touchmove', onMove, { passive: false });
+  bell.addEventListener('touchend', onUp);
+  bell.addEventListener('mousedown', (e) => { onDown(e); const mm = (ev) => onMove(ev); const mu = () => { onUp(); document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); }; document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu); });
 }
 function showNotifHistory() {
   const list = getNotifLog().slice(0, 100);
