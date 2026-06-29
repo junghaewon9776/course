@@ -185,11 +185,70 @@
       <span>⭐ 대표 거점만</span>
     </label>
     <button class="success" onclick="window.print()">🖨 인쇄</button>
+    <button class="small" style="background:#c0392b;color:#fff;" onclick="saveAsPDF(this)">📄 PDF 저장</button>
+    <button class="small" style="background:#16a085;color:#fff;" onclick="saveAsPNG(this)">🖼 PNG 저장</button>
     <button class="small modeOptCourse" onclick="editNotice()">✎ 공지 편집</button>
     <span style="color:#888;font-size:12px;">PC: Ctrl+P / 폰: 메뉴 → 인쇄/PDF</span>
   </div>
 
   <div id="printContent" class="print-content"></div>
+
+  <script>
+  // 📄 PDF / 🖼 PNG 저장 (html2canvas + jsPDF, 필요할 때 CDN 로드)
+  function __loadScript(src) {
+    return new Promise((res, rej) => {
+      if ([...document.scripts].some(s => s.src === src)) return res();
+      const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('로드 실패')); document.head.appendChild(s);
+    });
+  }
+  async function __capture() {
+    await __loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+    document.body.classList.add('capturing');
+    try { return await html2canvas(document.getElementById('printContent'), { scale: 2, backgroundColor: '#ffffff', useCORS: true }); }
+    finally { document.body.classList.remove('capturing'); }
+  }
+  function __fname(ext) { const d = new Date(), p = n => String(n).padStart(2, '0'); return `방역코스_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}.${ext}`; }
+  async function __save(filename, dataUrl) {
+    // 앱(Capacitor): 파일 저장 후 공유, 웹: 다운로드
+    try {
+      const Cap = window.Capacitor, FS = Cap && Cap.Plugins && Cap.Plugins.Filesystem;
+      if (FS) {
+        const base64 = dataUrl.split(',')[1];
+        const r = await FS.writeFile({ path: filename, data: base64, directory: 'CACHE' });
+        const Share = Cap.Plugins && Cap.Plugins.Share;
+        if (Share) { try { await Share.share({ title: filename, url: r.uri, dialogTitle: '저장/공유' }); return; } catch (e) {} }
+        alert('저장됨:\n' + (r.uri || filename)); return;
+      }
+    } catch (e) { console.warn('앱 저장 실패, 웹 다운로드로', e); }
+    const a = document.createElement('a'); a.href = dataUrl; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+  }
+  async function saveAsPNG(btn) {
+    const t = btn && btn.textContent; if (btn) btn.textContent = '⏳';
+    try { const c = await __capture(); await __save(__fname('png'), c.toDataURL('image/png')); }
+    catch (e) { alert('PNG 저장 실패: ' + e.message); }
+    finally { if (btn) btn.textContent = t; }
+  }
+  async function saveAsPDF(btn) {
+    const t = btn && btn.textContent; if (btn) btn.textContent = '⏳';
+    try {
+      await __loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      const c = await __capture();
+      const img = c.toDataURL('image/jpeg', 0.92);
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight();
+      const ih = c.height * pw / c.width;
+      let left = ih, y = 0;
+      pdf.addImage(img, 'JPEG', 0, y, pw, ih);
+      left -= ph;
+      while (left > 0) { y -= ph; pdf.addPage(); pdf.addImage(img, 'JPEG', 0, y, pw, ih); left -= ph; }
+      const reader = new FileReader();
+      reader.onload = () => __save(__fname('pdf'), reader.result);
+      reader.readAsDataURL(pdf.output('blob'));
+    } catch (e) { alert('PDF 저장 실패: ' + e.message); }
+    finally { if (btn) btn.textContent = t; }
+  }
+  </script>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
