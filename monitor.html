@@ -197,6 +197,7 @@
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
+let __logsExpanded = false;         // 운행목록 3개만 → 펼치기
 let __groupSelKey = null;           // 선택된 그룹 키
 let __groupTracks = [];             // 묶음 보기용 궤적 폴리라인들
 const GROUP_COLORS = ['#e74c3c','#3498db','#27ae60','#e67e22','#9b59b6','#16a085','#f39c12','#2c3e50','#c0392b','#2980b9'];
@@ -1709,7 +1710,9 @@ function render() {
     return;
   }
 
-  el.innerHTML = logs.map((l, i) => {
+  const __logLimit = 3;
+  const __logsShown = __logsExpanded ? logs : logs.slice(0, __logLimit);
+  el.innerHTML = __logsShown.map((l, i) => {
     const event = getEvent(data, l.eventId);
     const course = getCourse(data, l.courseId);
     const team = getTeam(data, l.teamId);
@@ -1718,24 +1721,35 @@ function render() {
     const dist = (trackDistance(l.track || []) / 1000).toFixed(1);
     const driver = l.crew?.driver || '';
     const assist = l.crew?.assist || '';
+    const roleNow = getMyRole();
+    const mgmtBtns = roleNow === 'super'
+      ? `<button class="small" style="background:#e67e22;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();hideLog('${(l.key||'').replace(/'/g,"\\'")}')">👁 숨김</button><button class="small danger" style="font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();deleteLog('${(l.key||'').replace(/'/g,"\\'")}')">🗑 삭제</button>`
+      : roleNow === 'admin'
+        ? `<button class="small danger" style="font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();hideLog('${(l.key||'').replace(/'/g,"\\'")}')">🗑 삭제</button>`
+        : '';
     return `
-      <div style="border-bottom:1px solid #e5e5e5;${selectedLogIdx===i?'background:#fff9e6;':''}">
-        <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;" onclick="selectLog(${i})">
-          <div class="num" style="background:${course?.color || '#999'};width:34px;height:34px;font-size:14px;flex-shrink:0;">${(driver||team?.name||'?').slice(0,1)}</div>
-          <div style="flex:1;min-width:0;">
-            <div class="name" style="font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${event?.name || '?'} · ${course?.name || '?'}</div>
-            <div class="sub" style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.date} · ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}${driver ? ' · ' + driver : ''}</div>
-          </div>
-          ${getMyRole() === 'super' ? `<button class="small" style="background:#e67e22;font-size:11px;flex-shrink:0;padding:3px 7px;" onclick="event.stopPropagation();hideLog('${(l.key || '').replace(/'/g, "\\'")}')">👁</button><button class="small danger" style="font-size:11px;flex-shrink:0;padding:3px 7px;" onclick="event.stopPropagation();deleteLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑</button>` : getMyRole() === 'admin' ? `<button class="small danger" style="font-size:11px;flex-shrink:0;padding:3px 7px;" onclick="event.stopPropagation();hideLog('${(l.key || '').replace(/'/g, "\\'")}')">🗑</button>` : ''}
+      <div style="border-bottom:1px solid #e5e5e5;border-left:5px solid ${course?.color || '#999'};${selectedLogIdx===i?'background:#fff9e6;':''}padding:9px 12px;">
+        <div onclick="selectLog(${i})" style="cursor:pointer;">
+          <div style="font-size:14px;font-weight:700;color:#2c3e50;">${event?.name || '?'} · ${course?.name || '?'}</div>
+          <div style="font-size:12px;color:#666;margin-top:3px;">📅 ${l.date} · 거점 ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}</div>
+          <div style="font-size:12px;color:#666;margin-top:2px;">운전: ${driver || '-'}${assist ? ' · 보조: ' + assist : ''}</div>
         </div>
-        <button onclick="playLogFromList(${i})" style="display:block;width:100%;padding:6px;background:#27ae60;color:#fff;border:none;font-weight:700;font-size:13px;cursor:pointer;">▶ 재생</button>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
+          ${mgmtBtns}
+          <button class="small" style="background:#27ae60;font-size:12px;padding:6px 14px;font-weight:700;" onclick="event.stopPropagation();playLogFromList(${i})">▶ 재생</button>
+        </div>
       </div>
     `;
-  }).join('');
+  }).join('')
+    + (logs.length > __logLimit
+        ? '<div onclick="toggleLogsExpanded()" style="padding:11px;text-align:center;color:#2980b9;font-weight:700;font-size:13px;cursor:pointer;background:#f7f9fc;border-top:1px solid #e5e5e5;">'
+            + (__logsExpanded ? '▲ 접기' : '▼ 펼치기 (' + (logs.length - __logLimit) + '개 더)') + '</div>'
+        : '');
 
   // 재생 중(__replayMarker 있음)엔 로그를 다시 그리지 않음 → drawLog→stopReplay로 재생 끊기던 버그 방지
   if (selectedLogIdx !== null && logs[selectedLogIdx] && !__replayMarker) drawLog(logs[selectedLogIdx]);
 }
+function toggleLogsExpanded() { __logsExpanded = !__logsExpanded; render(); }
 
 function selectLog(idx) {
   selectedLogIdx = idx;
