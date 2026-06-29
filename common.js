@@ -631,8 +631,10 @@ function makeBellDraggable(bell) {
     }
   });
 }
-function showNotifHistory() {
-  const list = getNotifLog().slice(0, 100);
+function showNotifHistory(showAll) {
+  const prevSeen = parseInt(localStorage.getItem('__notifSeenAt') || '0', 10);
+  const all = getNotifLog();
+  const list = (showAll ? all : all.filter(n => (n.at || 0) > prevSeen)).slice(0, 200);
   let modal = document.getElementById('__notifModal');
   if (modal) modal.remove();
   modal = document.createElement('div');
@@ -646,17 +648,21 @@ function showNotifHistory() {
       + '<div style="font-weight:700;font-size:14px;color:#2c3e50;">' + String(n.title || '').replace(/</g, '&lt;') + '</div>'
       + '<div style="font-size:13px;color:#555;margin-top:2px;white-space:pre-wrap;">' + String(n.body || '').replace(/</g, '&lt;') + '</div>'
       + '<div style="font-size:11px;color:#aaa;margin-top:3px;">' + t + '</div></div>';
-  }).join('') : '<div style="padding:30px;text-align:center;color:#aaa;">알림 내역이 없습니다</div>';
+  }).join('') : '<div style="padding:30px;text-align:center;color:#aaa;">' + (showAll ? '알림 내역이 없습니다' : '새 알림이 없습니다') + '</div>';
+  const footer = showAll ? '' : '<div onclick="showNotifHistory(true)" style="padding:13px;text-align:center;color:#2980b9;font-weight:700;font-size:13px;cursor:pointer;border-top:1px solid #eee;background:#f7f9fc;">📜 이전 내역 전체보기</div>';
   modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);">'
     + '<div style="padding:14px 16px;background:#2980b9;color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center;">'
-    + '<span>🔔 알림 내역</span>'
+    + '<span>🔔 ' + (showAll ? '알림 내역 (전체)' : '새 알림') + '</span>'
     + '<span onclick="document.getElementById(\'__notifModal\').remove()" style="cursor:pointer;font-size:22px;line-height:1;">&times;</span></div>'
-    + '<div style="overflow-y:auto;">' + rows + '</div></div>';
+    + '<div style="overflow-y:auto;flex:1;">' + rows + '</div>'
+    + footer + '</div>';
   document.body.appendChild(modal);
-  // ✅ 봤으니 읽음 처리 + 아이콘 배지 제거
-  localStorage.setItem('__notifSeenAt', String(Date.now()));
-  try { clearPushBadge(); } catch (e) {}
-  renderNotifBell();
+  // ✅ 새 알림 화면을 열었을 때만 읽음 처리 + 배지 제거 (이전내역 전체보기는 제외)
+  if (!showAll) {
+    localStorage.setItem('__notifSeenAt', String(Date.now()));
+    try { clearPushBadge(); } catch (e) {}
+    renderNotifBell();
+  }
 }
 
 // 푸시 수신 비프음 (앱 켜둔 상태)
