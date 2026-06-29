@@ -2208,13 +2208,87 @@ function showMapSettings() {
         ${naviMode ? '🧭 내비모드 ON (끄기)' : '🧭 내비모드 OFF (켜기)'}
       </button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">진행방향으로 지도가 회전합니다</p>
-      <button onclick="testNspAlert()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:#e74c3c;color:#fff;">🔔 방역금지 알람 테스트</button>
-      <button onclick="testCmpAlert()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:#f39c12;color:#fff;">📞 민원지역 알람 테스트</button>
-      <p style="font-size:11px;color:#888;margin:0 0 12px;">진동·음성·경고 배너를 미리 확인</p>
+      <button onclick="toggleAlarmSound()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:${alarmSoundOn() ? '#27ae60' : '#ecf0f1'};color:${alarmSoundOn() ? '#fff' : '#2c3e50'};">
+        ${alarmSoundOn() ? '🔊 알림 소리 ON (끄기)' : '🔇 알림 소리 OFF (켜기)'}
+      </button>
+      <p style="font-size:11px;color:#888;margin:0 0 10px;">방역금지·민원 근접 시 음성 멘트</p>
+      <button onclick="showPastTracks()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#8e44ad;color:#fff;">🛤 이전 행적 보기</button>
+      <p style="font-size:11px;color:#888;margin:0 0 12px;">지난 운행 경로를 오늘 지도에 표시</p>
+      <div style="display:flex;gap:6px;margin-bottom:12px;">
+        <button onclick="testNspAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#e74c3c;color:#fff;">🔔 금지 테스트</button>
+        <button onclick="testCmpAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#f39c12;color:#fff;">📞 민원 테스트</button>
+      </div>
       <button onclick="this.closest('#mapSettingsOverlay').remove()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#34495e;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">닫기</button>
     </div>
   `;
   document.body.appendChild(overlay);
+}
+// ───────── 🛤 이전 행적(지난 운행 경로) 표시 ─────────
+let __pastTrackMap = {};  // logKey -> kakao Polyline
+window.__pastTrackFilter = window.__pastTrackFilter || 'all';
+function showPastTracks() {
+  const ms = document.getElementById('mapSettingsOverlay'); if (ms) ms.remove();
+  const data = loadData();
+  const curCourseId = currentSession && currentSession.courseId;
+  const filterKey = window.__pastTrackFilter || 'all';
+  let logs = (data.logs || []).filter(l => l && l.track && l.track.length >= 2 && !l.hidden);
+  if (filterKey === 'course' && curCourseId) logs = logs.filter(l => l.courseId === curCourseId);
+  logs.sort((a, b) => (b.finishedAt || b.startedAt || 0) - (a.finishedAt || a.startedAt || 0));
+  let ov = document.getElementById('pastTracksOverlay');
+  if (ov) ov.remove();
+  ov = document.createElement('div');
+  ov.id = 'pastTracksOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;overflow-y:auto;';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  const rows = logs.length ? logs.map(l => {
+    const ev = getEvent(data, l.eventId), co = getCourse(data, l.courseId);
+    const on = !!__pastTrackMap[l.key];
+    const t = l.startedAt ? new Date(l.startedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px;border-bottom:1px solid #eee;border-left:4px solid ${(co && co.color) || '#8e44ad'};">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:13px;">${(ev && ev.name) || '?'} · ${(co && co.name) || '?'}</div>
+        <div style="font-size:11px;color:#888;">${t} · ${(l.crew && l.crew.driver) || '-'}</div>
+      </div>
+      <button onclick="togglePastTrack('${(l.key || '').replace(/'/g, "\\'")}')" style="background:${on ? '#e74c3c' : '#8e44ad'};color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">${on ? '끄기' : '표시'}</button>
+    </div>`;
+  }).join('') : '<div style="padding:30px;text-align:center;color:#aaa;">표시할 행적이 없습니다</div>';
+  ov.innerHTML = `<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);">
+    <div style="background:#8e44ad;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-weight:700;">🛤 이전 행적</span>
+      <span onclick="document.getElementById('pastTracksOverlay').remove()" style="cursor:pointer;font-size:22px;line-height:1;">&times;</span>
+    </div>
+    <div style="display:flex;gap:6px;padding:10px 12px;border-bottom:1px solid #eee;">
+      <button onclick="setPastTrackFilter('all')" style="flex:1;padding:7px;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;background:${filterKey === 'all' ? '#8e44ad' : '#ecf0f1'};color:${filterKey === 'all' ? '#fff' : '#555'};">전체</button>
+      <button onclick="setPastTrackFilter('course')" style="flex:1;padding:7px;border:none;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;background:${filterKey === 'course' ? '#8e44ad' : '#ecf0f1'};color:${filterKey === 'course' ? '#fff' : '#555'};">현재 코스만</button>
+    </div>
+    <div style="overflow-y:auto;flex:1;">${rows}</div>
+    <div style="padding:10px 12px;border-top:1px solid #eee;">
+      <button onclick="clearAllPastTracks()" style="width:100%;padding:9px;background:#555;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">전체 끄기</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+}
+function setPastTrackFilter(f) { window.__pastTrackFilter = f; showPastTracks(); }
+function togglePastTrack(key) {
+  const data = loadData();
+  const l = (data.logs || []).find(x => x.key === key);
+  if (!l || !l.track || l.track.length < 2) { alert('경로 정보가 없습니다.'); return; }
+  if (__pastTrackMap[key]) {
+    try { __pastTrackMap[key].setMap(null); } catch (e) {}
+    delete __pastTrackMap[key];
+  } else {
+    const co = getCourse(data, l.courseId);
+    const path = l.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
+    const line = new kakao.maps.Polyline({ path, strokeWeight: 4, strokeColor: (co && co.color) || '#8e44ad', strokeOpacity: 0.55, strokeStyle: 'solid' });
+    line.setMap(map);
+    __pastTrackMap[key] = line;
+  }
+  showPastTracks();
+}
+function clearAllPastTracks() {
+  Object.values(__pastTrackMap).forEach(l => { try { l.setMap(null); } catch (e) {} });
+  __pastTrackMap = {};
+  const ov = document.getElementById('pastTracksOverlay'); if (ov) ov.remove();
 }
 function updateNaviBtn() {
   // 하위 호환 (내부 호출 시 무시)
@@ -2243,9 +2317,18 @@ function applyNaviRotation(heading) {
   if (map) setTimeout(() => map.relayout(), 600);
 }
 
+// 알림 소리(음성 멘트) ON/OFF — 기기별 저장
+function alarmSoundOn() { return localStorage.getItem('__alarmSoundOff') !== '1'; }
+function toggleAlarmSound() {
+  if (alarmSoundOn()) localStorage.setItem('__alarmSoundOff', '1');
+  else localStorage.removeItem('__alarmSoundOff');
+  const ov = document.getElementById('mapSettingsOverlay');
+  if (ov) { ov.remove(); showMapSettings(); }  // 모달 새로고침
+}
 // 한국어 음성 멘트 (네비처럼) — 음성 목록에서 한국어 보이스 선택
 function speakKo(text) {
   try {
+    if (!alarmSoundOn()) return;   // 🔇 소리 꺼짐
     if (!window.speechSynthesis || !text) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
