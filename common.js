@@ -561,6 +561,69 @@ function initPushNotifications() {
     }).catch(e => console.warn('푸시 권한 오류', e));
   } catch (e) { console.warn('푸시 초기화 오류', e); }
 }
+// 🔔 앱 아이콘 배지/트레이 알림 제거 (알림 내역을 "봤을 때"만 호출)
+function clearPushBadge() {
+  try {
+    const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+    if (P && P.removeAllDeliveredNotifications) P.removeAllDeliveredNotifications();
+  } catch (e) {}
+}
+// 알림 내역 (/pushLog 기반) ─────────
+function getNotifLog() {
+  const d = (typeof _cache !== 'undefined' && _cache && _cache.pushLog) || {};
+  const arr = Object.values(d).filter(x => x && x.at);
+  arr.sort((a, b) => (b.at || 0) - (a.at || 0));
+  return arr;
+}
+function notifUnreadCount() {
+  const seen = parseInt(localStorage.getItem('__notifSeenAt') || '0', 10);
+  return getNotifLog().filter(n => (n.at || 0) > seen).length;
+}
+function renderNotifBell() {
+  if (!document.body) return;
+  let bell = document.getElementById('__notifBell');
+  if (!bell) {
+    bell = document.createElement('div');
+    bell.id = '__notifBell';
+    bell.style.cssText = 'position:fixed;bottom:16px;right:14px;z-index:99990;width:46px;height:46px;border-radius:50%;background:#2980b9;color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 3px 10px rgba(0,0,0,.35);cursor:pointer;';
+    bell.innerHTML = '🔔<span id="__notifBadge" style="position:absolute;top:-3px;right:-3px;background:#e74c3c;color:#fff;border-radius:11px;min-width:20px;height:20px;font-size:11px;font-weight:700;align-items:center;justify-content:center;padding:0 4px;box-sizing:border-box;display:none;"></span>';
+    bell.onclick = showNotifHistory;
+    document.body.appendChild(bell);
+  }
+  const n = notifUnreadCount();
+  const badge = document.getElementById('__notifBadge');
+  if (badge) {
+    if (n > 0) { badge.style.display = 'flex'; badge.textContent = n > 99 ? '99+' : n; }
+    else { badge.style.display = 'none'; }
+  }
+}
+function showNotifHistory() {
+  const list = getNotifLog().slice(0, 100);
+  let modal = document.getElementById('__notifModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = '__notifModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:50px 12px;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  const rows = list.length ? list.map(n => {
+    const t = new Date(n.at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return '<div style="padding:10px 12px;border-bottom:1px solid #eee;">'
+      + '<div style="font-weight:700;font-size:14px;color:#2c3e50;">' + String(n.title || '').replace(/</g, '&lt;') + '</div>'
+      + '<div style="font-size:13px;color:#555;margin-top:2px;white-space:pre-wrap;">' + String(n.body || '').replace(/</g, '&lt;') + '</div>'
+      + '<div style="font-size:11px;color:#aaa;margin-top:3px;">' + t + '</div></div>';
+  }).join('') : '<div style="padding:30px;text-align:center;color:#aaa;">알림 내역이 없습니다</div>';
+  modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);">'
+    + '<div style="padding:14px 16px;background:#2980b9;color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center;">'
+    + '<span>🔔 알림 내역</span>'
+    + '<span onclick="document.getElementById(\'__notifModal\').remove()" style="cursor:pointer;font-size:22px;line-height:1;">&times;</span></div>'
+    + '<div style="overflow-y:auto;">' + rows + '</div></div>';
+  document.body.appendChild(modal);
+  // ✅ 봤으니 읽음 처리 + 아이콘 배지 제거
+  localStorage.setItem('__notifSeenAt', String(Date.now()));
+  try { clearPushBadge(); } catch (e) {}
+  renderNotifBell();
+}
+
 // 푸시 수신 비프음 (앱 켜둔 상태)
 function playPushBeep() {
   try {
@@ -684,6 +747,12 @@ function sendAppPush(title, body, target, category, targetUid) {
     const url = cfg.url || PUSH_WEBHOOK_DEFAULT;
     const secret = cfg.secret || 'bsp_push_2026';
     if (!url) return;
+    // 🔔 알림 내역 기록 (/pushLog)
+    try {
+      if (typeof fbDb !== 'undefined') {
+        fbDb.ref('/pushLog').push({ title: title || '알림', body: body || '', target: target || 'admin', uid: targetUid || '', at: Date.now() });
+      }
+    } catch (e) {}
     fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // CORS preflight 회피
@@ -754,11 +823,13 @@ function initFirebaseSync() {
       try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
       try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
       try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
+      try { renderNotifBell(); } catch (e) {}        // 🔔 알림 벨 표시(미확인 수)
       _readyCallbacks.forEach(cb => cb());
       _readyCallbacks.length = 0;
     }
     try { checkAccessGate(); } catch (e) {}
     try { maybeResavePushToken(); } catch (e) {}
+    try { renderNotifBell(); } catch (e) {}   // 🔔 알림 벨 미확인 수 갱신
     if (window.onDataChanged) window.onDataChanged();
   }, (err) => {
     // 로그아웃 중이면 무시 (signOut → signInAnonymously 사이에 발생)
