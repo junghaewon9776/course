@@ -275,10 +275,13 @@ function getVehiclesOnCourse(courseId) {
   const live = window.__liveCache || {};
   const GHOST_MS = 12 * 60 * 60 * 1000;  // 코스 종료(unpublish) 전까진 계속 표시. 시작 12시간 넘은 유령 세션만 정리
   const now = Date.now();
+  const __data = loadData();
+  const __loggedKeys = new Set((__data.logs || []).map(l => l && l.key).filter(Boolean));
   const result = [];
   for (const [key, sess] of Object.entries(live)) {
     if (!sess || sess.courseId !== courseId) continue;
     if (sess.startedAt && now - sess.startedAt > GHOST_MS) continue;
+    if (__loggedKeys.has(key)) continue;   // 완료된 운행 → 제외
     const hocha = deriveHochaName(sess) || sess.crew?.driver || '?';
     const driver = sess.crew?.driver || '';
     const driverPhone = sess.crew?.driverPhone || '';
@@ -1150,6 +1153,7 @@ function buildVehicleInfoHtml(sess) {
         if (total) return `<div style="font-size:12px;color:#27ae60;font-weight:800;margin-top:6px;">🎉 전 거점 완료</div>`;
         return '';
       })()}
+      ${sess.startedAt ? `<div style="font-size:11px;color:#2980b9;font-weight:700;margin-top:5px;">🕐 시작 ${new Date(sess.startedAt).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})} · ${Math.round((Date.now()-sess.startedAt)/60000)}분 경과</div>` : ''}
       <div style="font-size:10px;color:#888;margin-top:5px;margin-bottom:3px;">거점 ${done}/${total} <span style="color:#bbb;">(아래에서 스크롤)</span></div>
       <div style="line-height:1.5;font-size:10px;max-height:78px;overflow-y:auto;border:1px solid #eee;border-radius:6px;padding:4px;">${anchorChips || '<span style="color:#888;">거점 없음</span>'}</div>
     </div>
@@ -1181,9 +1185,12 @@ function renderLive(live) {
   const items = [];
   const activeKeys = new Set();
   const activePinIds = new Set();   // 📍 살아있는 핑 id
+  // 이미 완료(운행기록에 같은 key 로그 존재)한 세션은 라이브에서 숨김 — unpublish 실패해도 안전
+  const __loggedKeys = new Set((data.logs || []).map(l => l && l.key).filter(Boolean));
   for (const [key, sess] of Object.entries(live)) {
     if (!sess || typeof sess.lat !== 'number') continue;
     if (sess.startedAt && now - sess.startedAt > GHOST_MS) continue;
+    if (__loggedKeys.has(key)) continue;   // 완료된 운행 → 라이브에서 제외
     activeKeys.add(key);
     const course = getCourse(data, sess.courseId);
     const event = getEvent(data, sess.eventId);
@@ -1721,17 +1728,17 @@ function render() {
     const dist = (trackDistance(l.track || []) / 1000).toFixed(1);
     const driver = l.crew?.driver || '';
     const assist = l.crew?.assist || '';
+    const fmtT = (ts) => ts ? new Date(ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-';
     const roleNow = getMyRole();
-    const mgmtBtns = roleNow === 'super'
-      ? `<button class="small" style="background:#e67e22;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();hideLog('${(l.key||'').replace(/'/g,"\\'")}')">👁 숨김</button><button class="small danger" style="font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();deleteLog('${(l.key||'').replace(/'/g,"\\'")}')">🗑 삭제</button>`
-      : roleNow === 'admin'
-        ? `<button class="small danger" style="font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();hideLog('${(l.key||'').replace(/'/g,"\\'")}')">🗑 삭제</button>`
-        : '';
+    const mgmtBtns = (roleNow === 'super' || roleNow === 'admin')
+      ? `<button class="small danger" style="font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();hideLog('${(l.key||'').replace(/'/g,"\\'")}')">🗑 삭제</button>`
+      : '';
     return `
       <div style="border-bottom:1px solid #e5e5e5;border-left:5px solid ${course?.color || '#999'};${selectedLogIdx===i?'background:#fff9e6;':''}padding:9px 12px;">
         <div onclick="selectLog(${i})" style="cursor:pointer;">
           <div style="font-size:14px;font-weight:700;color:#2c3e50;">${event?.name || '?'} · ${course?.name || '?'}</div>
-          <div style="font-size:12px;color:#666;margin-top:3px;">📅 ${l.date} · 거점 ${l.completions?.length || 0}/${totalA} · ${dist}km · ${dur}</div>
+          <div style="font-size:12px;color:#666;margin-top:3px;">📅 ${l.date} · 거점 ${l.completions?.length || 0}/${totalA} · ${dist}km</div>
+          <div style="font-size:12px;color:#666;margin-top:2px;">🕐 ${fmtT(l.startedAt)} ~ ${fmtT(l.finishedAt)} · 운행 ${dur}</div>
           <div style="font-size:12px;color:#666;margin-top:2px;">운전: ${driver || '-'}${assist ? ' · 보조: ' + assist : ''}</div>
         </div>
         <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
@@ -1761,8 +1768,10 @@ function selectLog(idx) {
 function playLogFromList(idx) {
   selectLog(idx);  // 선택 + 로그 그리기
   const mapEl = document.getElementById('map');
-  if (mapEl && mapEl.scrollIntoView) {
-    try { mapEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { mapEl.scrollIntoView(); }
+  const card = mapEl ? (mapEl.closest('.card') || mapEl) : null;  // 지도 제목(h2)까지 포함한 카드 맨 위로
+  if (card) {
+    const y = card.getBoundingClientRect().top + window.pageYOffset - 6;
+    try { window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' }); } catch (e) { window.scrollTo(0, Math.max(0, y)); }
   }
   // 지도로 스크롤 이동이 끝난 뒤 재생 시작
   setTimeout(() => {
