@@ -601,46 +601,44 @@ function renderNotifBell() {
     else { badge.style.display = 'none'; }
   }
 }
-// 벨 드래그(꾹 눌러서 이동) — 짧게 누르면 알림내역 열림
+// 벨 드래그(끌어서 이동) + 탭(클릭)하면 알림내역 열림
+// 열기는 'click' 이벤트로 처리 → 탭 직후 잔여 클릭이 모달 배경을 닫던 문제 원천 제거
 function makeBellDraggable(bell) {
-  let dragging = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0, holdTimer = null;
-  const onDown = (e) => {
-    const pt = e.touches ? e.touches[0] : e;
-    sx = pt.clientX; sy = pt.clientY;
-    const r = bell.getBoundingClientRect();
-    ox = r.left; oy = r.top;
-    moved = false;
-    holdTimer = setTimeout(() => { dragging = true; bell.style.opacity = '0.7'; }, 300);  // 0.3초 꾹 = 이동 모드
+  let down = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0, suppressClick = false;
+  const start = (cx, cy) => {
+    down = true; moved = false; sx = cx; sy = cy;
+    const r = bell.getBoundingClientRect(); ox = r.left; oy = r.top;
   };
-  const onMove = (e) => {
-    const pt = e.touches ? e.touches[0] : e;
-    const dx = pt.clientX - sx, dy = pt.clientY - sy;
-    if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
-    if (!dragging) return;
-    e.preventDefault();
-    let nx = ox + dx, ny = oy + dy;
-    nx = Math.max(4, Math.min(window.innerWidth - 50, nx));
-    ny = Math.max(4, Math.min(window.innerHeight - 50, ny));
+  const move = (cx, cy, e) => {
+    if (!down) return;
+    const dx = cx - sx, dy = cy - sy;
+    if (Math.abs(dx) + Math.abs(dy) > 8) moved = true;
+    if (!moved) return;
+    if (e && e.cancelable) e.preventDefault();
+    const nx = Math.max(4, Math.min(window.innerWidth - 50, ox + dx));
+    const ny = Math.max(4, Math.min(window.innerHeight - 50, oy + dy));
     bell.style.left = nx + 'px'; bell.style.top = ny + 'px';
     bell.style.right = 'auto'; bell.style.bottom = 'auto';
   };
-  const onUp = () => {
-    clearTimeout(holdTimer);
-    bell.style.opacity = '1';
-    if (dragging && moved) {
-      // 실제로 끌어서 옮긴 경우만 위치 저장
+  const end = () => {
+    if (!down) return;
+    down = false;
+    if (moved) {
+      suppressClick = true;  // 드래그였으면 뒤따르는 click(열기)은 무시
       const r = bell.getBoundingClientRect();
       try { localStorage.setItem('__notifBellPos', JSON.stringify({ left: r.left, top: r.top })); } catch (e) {}
-    } else {
-      // 탭 또는 안 움직이고 꾹 → 알림내역 열기
-      showNotifHistory();
     }
-    dragging = false;
   };
-  bell.addEventListener('touchstart', onDown, { passive: true });
-  bell.addEventListener('touchmove', onMove, { passive: false });
-  bell.addEventListener('touchend', onUp);
-  bell.addEventListener('mousedown', (e) => { onDown(e); const mm = (ev) => onMove(ev); const mu = () => { onUp(); document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); }; document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu); });
+  bell.addEventListener('touchstart', e => { const t = e.touches[0]; start(t.clientX, t.clientY); }, { passive: true });
+  bell.addEventListener('touchmove', e => { const t = e.touches[0]; move(t.clientX, t.clientY, e); }, { passive: false });
+  bell.addEventListener('touchend', end);
+  bell.addEventListener('mousedown', e => start(e.clientX, e.clientY));
+  document.addEventListener('mousemove', e => move(e.clientX, e.clientY, e));
+  document.addEventListener('mouseup', end);
+  bell.addEventListener('click', () => {
+    if (suppressClick) { suppressClick = false; return; }
+    showNotifHistory();
+  });
 }
 function showNotifHistory() {
   const list = getNotifLog().slice(0, 100);
