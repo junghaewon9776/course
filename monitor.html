@@ -1150,6 +1150,9 @@ function buildVehicleInfoHtml(sess) {
     </div>
   `;
 }
+// 주기적 재렌더 — live 이벤트가 없어도 신호 끊긴 차를 흐리게/숨김 처리 갱신
+setInterval(() => { try { if (window.__liveCache) renderLive(window.__liveCache); } catch (e) {} }, 15000);
+
 function renderLive(live) {
   window.__liveCache = live;  // focusLiveMarker에서 참조
   // 운행기록 전용 모드(?logs=1), 또는 회원인데 실시간 권한 없으면 실시간 표시 안 함
@@ -1229,6 +1232,9 @@ function renderLive(live) {
       m.setImage(img);
       if (m.__iw && m.__iw.getMap && m.__iw.getMap()) m.__iw.setContent(buildVehicleInfoHtml(sess));
     }
+    // 신호 신선도: 마지막 갱신이 70초 넘으면(하트비트 끊김) 마커 흐리게 → "신호 끊김/멈춤" 표시
+    const __age = sess.lastUpdate ? (now - sess.lastUpdate) : 0;
+    try { m.setOpacity(__age < 70000 ? 1 : 0.4); } catch (e) {}
     // 라벨 (CustomOverlay) — 위:차번호, 아래:호차 (호차 없으면 운전자)
     const platePart = sess.crew?.vehicle || '';
     const hochaPart = deriveHochaName(sess) || driver || '?';

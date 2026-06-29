@@ -2116,6 +2116,14 @@ setInterval(() => {
   }
 }, 1000);
 
+// 🔴 라이브 하트비트: 정차 중(GPS 갱신 없음)에도 20초마다 위치 재전송
+//   → 모니터에서 "정차(살아있음)"과 "신호 끊김"을 구분할 수 있게 함
+setInterval(() => {
+  try {
+    if (currentSession && !currentSession.finishedAt && currentPos) publishCurrentLive(true);
+  } catch (e) {}
+}, 20000);
+
 function zoomIn() {
   if (!map) return;
   map.setLevel(Math.max(1, map.getLevel() - 1));
@@ -2504,11 +2512,19 @@ function finishCourse() {
   currentSession.finishedAt = Date.now();
   saveSession();
 
-  // 로그에 누적
+  // 로그에 누적 — ⚠️ 전체 트리(saveData) 대신 /logs에 개별 push (관리자 동시 편집과 충돌 방지)
+  const logEntry = { ...currentSession };
   const fresh = loadData();
-  if (!fresh.logs) fresh.logs = [];
-  fresh.logs.push({ ...currentSession });
-  saveData(fresh);
+  if (typeof fbDb !== 'undefined') {
+    try {
+      fbDb.ref('/logs').push(logEntry);          // 타깃 저장: 다른 데이터 안 건드림, 덮어쓰기 없음
+      if (_cache) { if (!Array.isArray(_cache.logs)) _cache.logs = _cache.logs ? Object.values(_cache.logs) : []; _cache.logs.push(logEntry); }
+    } catch (e) { console.warn('로그 저장 오류', e); fresh.logs = fresh.logs || []; fresh.logs.push(logEntry); saveData(fresh); }
+  } else {
+    if (!fresh.logs) fresh.logs = [];
+    fresh.logs.push(logEntry);
+    saveData(fresh);
+  }
 
   // 텔레그램: 코스 완료 알림 + 자동완료 거점 일괄 포함
   const event = getEvent(fresh, currentSession.eventId);
