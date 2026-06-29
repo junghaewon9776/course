@@ -1570,7 +1570,7 @@ function renderTeams() {
   `;
 
   document.getElementById('teamPanels').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:10px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:10px;">
       ${teamCards}
       ${reserveCard}
     </div>
