@@ -268,12 +268,12 @@ function initMonitorMap() {
 // 라이브 세션에서 courseId로 운영중인 호차 찾기
 function getVehiclesOnCourse(courseId) {
   const live = window.__liveCache || {};
-  const STALE_MS = 3 * 60 * 60 * 1000;  // 코스 종료(unpublish) 전까진 계속 표시. 유령 세션만 3시간 후 정리
+  const GHOST_MS = 12 * 60 * 60 * 1000;  // 코스 종료(unpublish) 전까진 계속 표시. 시작 12시간 넘은 유령 세션만 정리
   const now = Date.now();
   const result = [];
   for (const [key, sess] of Object.entries(live)) {
     if (!sess || sess.courseId !== courseId) continue;
-    if (!sess.lastUpdate || now - sess.lastUpdate > STALE_MS) continue;
+    if (sess.startedAt && now - sess.startedAt > GHOST_MS) continue;
     const hocha = deriveHochaName(sess) || sess.crew?.driver || '?';
     const driver = sess.crew?.driver || '';
     const driverPhone = sess.crew?.driverPhone || '';
@@ -1171,14 +1171,14 @@ function renderLive(live) {
     return;
   }
   const data = loadData();
-  const STALE_MS = 3 * 60 * 60 * 1000;  // 코스 종료(unpublish) 전까진 계속 표시. 유령 세션만 3시간 후 정리
+  const GHOST_MS = 12 * 60 * 60 * 1000;  // 코스 종료(unpublish) 전까진 계속 표시. 시작 12시간 넘은 유령 세션만 정리
   const now = Date.now();
   const items = [];
   const activeKeys = new Set();
   const activePinIds = new Set();   // 📍 살아있는 핑 id
   for (const [key, sess] of Object.entries(live)) {
     if (!sess || typeof sess.lat !== 'number') continue;
-    if (!sess.lastUpdate || now - sess.lastUpdate > STALE_MS) continue;
+    if (sess.startedAt && now - sess.startedAt > GHOST_MS) continue;
     activeKeys.add(key);
     const course = getCourse(data, sess.courseId);
     const event = getEvent(data, sess.eventId);
