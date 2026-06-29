@@ -627,13 +627,15 @@ function makeBellDraggable(bell) {
   const onUp = () => {
     clearTimeout(holdTimer);
     bell.style.opacity = '1';
-    if (dragging) {
+    if (dragging && moved) {
+      // 실제로 끌어서 옮긴 경우만 위치 저장
       const r = bell.getBoundingClientRect();
       try { localStorage.setItem('__notifBellPos', JSON.stringify({ left: r.left, top: r.top })); } catch (e) {}
-      dragging = false;
-    } else if (!moved) {
-      showNotifHistory();  // 짧게 탭 = 열기
+    } else {
+      // 탭 또는 안 움직이고 꾹 → 알림내역 열기
+      showNotifHistory();
     }
+    dragging = false;
   };
   bell.addEventListener('touchstart', onDown, { passive: true });
   bell.addEventListener('touchmove', onMove, { passive: false });
