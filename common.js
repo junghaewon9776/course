@@ -601,43 +601,34 @@ function renderNotifBell() {
     else { badge.style.display = 'none'; }
   }
 }
-// 벨 드래그(끌어서 이동) + 탭(클릭)하면 알림내역 열림
-// 열기는 'click' 이벤트로 처리 → 탭 직후 잔여 클릭이 모달 배경을 닫던 문제 원천 제거
+// 벨: 포인터 이벤트로 탭(열기)/드래그(이동) 처리 — 터치/마우스 공통, 안정적
 function makeBellDraggable(bell) {
-  let down = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0, suppressClick = false;
-  const start = (cx, cy) => {
-    down = true; moved = false; sx = cx; sy = cy;
+  let down = false, moved = false, sx = 0, sy = 0, ox = 0, oy = 0;
+  bell.addEventListener('pointerdown', e => {
+    down = true; moved = false; sx = e.clientX; sy = e.clientY;
     const r = bell.getBoundingClientRect(); ox = r.left; oy = r.top;
-  };
-  const move = (cx, cy, e) => {
+    try { bell.setPointerCapture(e.pointerId); } catch (er) {}
+  });
+  bell.addEventListener('pointermove', e => {
     if (!down) return;
-    const dx = cx - sx, dy = cy - sy;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
     if (Math.abs(dx) + Math.abs(dy) > 8) moved = true;
     if (!moved) return;
-    if (e && e.cancelable) e.preventDefault();
     const nx = Math.max(4, Math.min(window.innerWidth - 50, ox + dx));
     const ny = Math.max(4, Math.min(window.innerHeight - 50, oy + dy));
     bell.style.left = nx + 'px'; bell.style.top = ny + 'px';
     bell.style.right = 'auto'; bell.style.bottom = 'auto';
-  };
-  const end = () => {
+  });
+  bell.addEventListener('pointerup', e => {
     if (!down) return;
     down = false;
+    try { bell.releasePointerCapture(e.pointerId); } catch (er) {}
     if (moved) {
-      suppressClick = true;  // 드래그였으면 뒤따르는 click(열기)은 무시
       const r = bell.getBoundingClientRect();
-      try { localStorage.setItem('__notifBellPos', JSON.stringify({ left: r.left, top: r.top })); } catch (e) {}
+      try { localStorage.setItem('__notifBellPos', JSON.stringify({ left: r.left, top: r.top })); } catch (er) {}
+    } else {
+      showNotifHistory();  // 탭 = 열기
     }
-  };
-  bell.addEventListener('touchstart', e => { const t = e.touches[0]; start(t.clientX, t.clientY); }, { passive: true });
-  bell.addEventListener('touchmove', e => { const t = e.touches[0]; move(t.clientX, t.clientY, e); }, { passive: false });
-  bell.addEventListener('touchend', end);
-  bell.addEventListener('mousedown', e => start(e.clientX, e.clientY));
-  document.addEventListener('mousemove', e => move(e.clientX, e.clientY, e));
-  document.addEventListener('mouseup', end);
-  bell.addEventListener('click', () => {
-    if (suppressClick) { suppressClick = false; return; }
-    showNotifHistory();
   });
 }
 function showNotifHistory() {
@@ -647,7 +638,8 @@ function showNotifHistory() {
   modal = document.createElement('div');
   modal.id = '__notifModal';
   modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:50px 12px;';
-  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  const __openAt = Date.now();
+  modal.addEventListener('click', e => { if (e.target === modal && Date.now() - __openAt > 350) modal.remove(); });
   const rows = list.length ? list.map(n => {
     const t = new Date(n.at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
     return '<div style="padding:10px 12px;border-bottom:1px solid #eee;">'
