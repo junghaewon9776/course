@@ -1709,7 +1709,7 @@ function render() {
     const event = getEvent(data, l.eventId);
     const course = getCourse(data, l.courseId);
     const team = getTeam(data, l.teamId);
-    const totalA = data.anchors.filter(a => a.courseId === l.courseId).length;
+    const totalA = Array.isArray(l.anchorsSnapshot) ? l.anchorsSnapshot.length : data.anchors.filter(a => a.courseId === l.courseId).length;
     const dur = l.finishedAt ? formatDuration(l.finishedAt - l.startedAt) : '진행중';
     const dist = (trackDistance(l.track || []) / 1000).toFixed(1);
     const driver = l.crew?.driver || '';
@@ -1906,7 +1906,10 @@ function drawLog(log) {
   clearDirectionMarkers();
 
   const data = loadData();
-  const anchors = getCourseAnchors(data, log.courseId);
+  // 📸 거점 스냅샷 우선: 운행 당시 거점 그대로. 없으면(옛날 로그) 현재 거점으로 폴백
+  const anchors = (Array.isArray(log.anchorsSnapshot) && log.anchorsSnapshot.length)
+    ? log.anchorsSnapshot.slice().sort((a, b) => (a.order || 0) - (b.order || 0))
+    : getCourseAnchors(data, log.courseId);
   const done = new Set(log.completions || []);
   const bounds = new kakao.maps.LatLngBounds();
   const logColor = getCourse(data, log.courseId)?.color || '#3498db';
