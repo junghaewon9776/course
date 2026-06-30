@@ -2214,8 +2214,6 @@ function showMapSettings() {
       <p style="font-size:11px;color:#888;margin:0 0 10px;">방역금지·민원 근접 시 음성 멘트</p>
       <button onclick="showPastTracks()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#8e44ad;color:#fff;">🛤 이전 행적 보기</button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">지난 운행 경로를 오늘 지도에 표시</p>
-      ${getMyRole() === 'super' ? `<button onclick="startDrawRoute()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#6c3483;color:#fff;">✏️ 경로 직접 그리기</button>
-      <p style="font-size:11px;color:#888;margin:0 0 12px;">지도를 탭해 경로를 그려 기록으로 저장 (super)</p>` : ''}
       <div style="display:flex;gap:6px;margin-bottom:12px;">
         <button onclick="testNspAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#e74c3c;color:#fff;">🔔 금지 테스트</button>
         <button onclick="testCmpAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#f39c12;color:#fff;">📞 민원 테스트</button>
