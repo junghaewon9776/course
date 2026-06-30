@@ -2214,6 +2214,8 @@ function showMapSettings() {
       <p style="font-size:11px;color:#888;margin:0 0 10px;">방역금지·민원 근접 시 음성 멘트</p>
       <button onclick="showPastTracks()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#8e44ad;color:#fff;">🛤 이전 행적 보기</button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">지난 운행 경로를 오늘 지도에 표시</p>
+      ${getMyRole() === 'super' ? `<button onclick="startDrawRoute()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#6c3483;color:#fff;">✏️ 경로 직접 그리기</button>
+      <p style="font-size:11px;color:#888;margin:0 0 12px;">지도를 탭해 경로를 그려 기록으로 저장 (super)</p>` : ''}
       <div style="display:flex;gap:6px;margin-bottom:12px;">
         <button onclick="testNspAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#e74c3c;color:#fff;">🔔 금지 테스트</button>
         <button onclick="testCmpAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#f39c12;color:#fff;">📞 민원 테스트</button>
@@ -2289,6 +2291,77 @@ function clearAllPastTracks() {
   Object.values(__pastTrackMap).forEach(l => { try { l.setMap(null); } catch (e) {} });
   __pastTrackMap = {};
   const ov = document.getElementById('pastTracksOverlay'); if (ov) ov.remove();
+}
+// ───────── ✏️ 경로 직접 그리기 (super) — 지도 탭으로 경로 만들어 기록 저장 ─────────
+let __drawRoute = null;
+function startDrawRoute() {
+  if (getMyRole() !== 'super') { alert('super 권한만 가능합니다.'); return; }
+  const ms = document.getElementById('mapSettingsOverlay'); if (ms) ms.remove();
+  if (!map || !window.kakao) { alert('지도 준비 안됨'); return; }
+  if (__drawRoute) return;
+  __drawRoute = { points: [], line: null, markers: [], handler: null };
+  __drawRoute.handler = function (e) {
+    const ll = e.latLng;
+    __drawRoute.points.push([ll.getLat(), ll.getLng()]);
+    redrawDrawRoute();
+  };
+  kakao.maps.event.addListener(map, 'click', __drawRoute.handler);
+  showDrawRouteBar();
+  alert('지도를 탭해서 경로 점을 찍으세요.\n점들이 선으로 이어집니다.');
+}
+function redrawDrawRoute() {
+  if (!__drawRoute) return;
+  __drawRoute.markers.forEach(m => { try { m.setMap(null); } catch (e) {} });
+  __drawRoute.markers = __drawRoute.points.map(p => new kakao.maps.Marker({ position: new kakao.maps.LatLng(p[0], p[1]), map }));
+  if (__drawRoute.line) { try { __drawRoute.line.setMap(null); } catch (e) {} }
+  if (__drawRoute.points.length >= 2) {
+    __drawRoute.line = new kakao.maps.Polyline({ path: __drawRoute.points.map(p => new kakao.maps.LatLng(p[0], p[1])), strokeWeight: 5, strokeColor: '#6c3483', strokeOpacity: 0.85, map });
+  }
+  const c = document.getElementById('__drawRouteCount'); if (c) c.textContent = __drawRoute.points.length + '점';
+}
+function undoDrawRoute() { if (__drawRoute) { __drawRoute.points.pop(); redrawDrawRoute(); } }
+function cancelDrawRoute() { exitDrawRoute(); }
+function exitDrawRoute() {
+  if (!__drawRoute) return;
+  try { kakao.maps.event.removeListener(map, 'click', __drawRoute.handler); } catch (e) {}
+  __drawRoute.markers.forEach(m => { try { m.setMap(null); } catch (e) {} });
+  if (__drawRoute.line) { try { __drawRoute.line.setMap(null); } catch (e) {} }
+  __drawRoute = null;
+  const bar = document.getElementById('__drawRouteBar'); if (bar) bar.remove();
+}
+function saveDrawnRoute() {
+  if (!__drawRoute || __drawRoute.points.length < 2) { alert('점을 2개 이상 찍어주세요.'); return; }
+  const name = prompt('이 경로 이름 (예: 1코스 예정 경로):', '');
+  if (name == null) return;
+  const data = loadData();
+  const now = Date.now();
+  const cs = currentSession || {};
+  const log = {
+    key: 'draw_' + now + '_' + Math.floor(Math.random() * 100000),
+    eventId: cs.eventId || '', courseId: cs.courseId || '',
+    date: todayStr(), startedAt: now, finishedAt: now,
+    track: __drawRoute.points.slice(), completions: [], pins: [],
+    crew: { driver: (name && name.trim()) || '수동작성' },
+    manual: true, name: (name && name.trim()) || ''
+  };
+  try {
+    fbDb.ref('/logs').push(log);
+    if (_cache) { if (!Array.isArray(_cache.logs)) _cache.logs = _cache.logs ? Object.values(_cache.logs) : []; _cache.logs.push(log); }
+    alert('✅ 경로 저장됨!\n운행기록·이전 행적에서 볼 수 있어요.');
+  } catch (e) { alert('저장 실패: ' + e.message); }
+  exitDrawRoute();
+}
+function showDrawRouteBar() {
+  let bar = document.getElementById('__drawRouteBar');
+  if (bar) bar.remove();
+  bar = document.createElement('div');
+  bar.id = '__drawRouteBar';
+  bar.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:99998;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.35);padding:10px 12px;display:flex;gap:8px;align-items:center;';
+  bar.innerHTML = '<span style="font-size:12px;font-weight:700;color:#6c3483;">✏️ <span id="__drawRouteCount">0점</span></span>'
+    + '<button onclick="undoDrawRoute()" style="background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:7px 11px;font-weight:700;font-size:13px;cursor:pointer;">↩ 취소1</button>'
+    + '<button onclick="saveDrawnRoute()" style="background:#27ae60;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-weight:700;font-size:13px;cursor:pointer;">✓ 저장</button>'
+    + '<button onclick="cancelDrawRoute()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:7px 11px;font-weight:700;font-size:13px;cursor:pointer;">✕ 종료</button>';
+  document.body.appendChild(bar);
 }
 function updateNaviBtn() {
   // 하위 호환 (내부 호출 시 무시)
