@@ -325,7 +325,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260626n"></script>
+<script src="common.js?v=20260626o"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -573,40 +573,73 @@ function handleMapClick(lat, lng) {
   });
 }
 
-// ────── ✏️ 연속 거점 그리기 (탭할 때마다 자동 순번으로 거점 등록) ──────
-function toggleDrawAnchor() {
-  const courseId = document.getElementById('anchorCourseSel').value;
-  if (!window.__drawAnchorMode && !courseId) { alert('먼저 "거점" 패널에서 대상 코스를 선택하세요'); return; }
-  window.__drawAnchorMode = !window.__drawAnchorMode;
+// ────── ✏️ 연속 거점 그리기 (점 찍고 → 저장 눌러야 등록, 되돌리기/취소 가능) ──────
+let __drawAnchor = null;  // { courseId, points:[[lat,lng]], markers:[] }
+function setDrawAnchorBtn(on) {
   const btn = document.getElementById('drawAnchorBtn');
-  if (btn) {
-    btn.textContent = window.__drawAnchorMode ? '⏹ 연속 거점 종료' : '✏️ 연속 거점 그리기';
-    btn.style.background = window.__drawAnchorMode ? '#e74c3c' : '#8e44ad';
-  }
-  let bar = document.getElementById('__drawAnchorBar');
-  if (window.__drawAnchorMode) {
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = '__drawAnchorBar';
-      bar.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:99998;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.35);padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:13px;font-weight:700;';
-      bar.innerHTML = '✏️ 지도를 탭해 거점 추가 (<span id="__drawAnchorCount">0개</span>)'
-        + '<button onclick="toggleDrawAnchor()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:7px 12px;font-weight:700;cursor:pointer;">종료</button>';
-      document.body.appendChild(bar);
-    }
-    const cd = document.getElementById('anchorCourseSel');
-    alert('지도를 탭할 때마다 거점이 "거점 1, 2, 3..." 자동 순번으로 등록됩니다.\n이름은 나중에 거점 목록에서 수정하세요.');
-  } else if (bar) { bar.remove(); }
+  if (btn) { btn.textContent = on ? '⏹ 그리기 모드 ON' : '✏️ 연속 거점 그리기'; btn.style.background = on ? '#e74c3c' : '#8e44ad'; }
+}
+function toggleDrawAnchor() {
+  if (__drawAnchor) { cancelDrawAnchor(); return; }
+  const courseId = document.getElementById('anchorCourseSel').value;
+  if (!courseId) { alert('먼저 "거점" 패널에서 대상 코스를 선택하세요'); return; }
+  __drawAnchor = { courseId: courseId, points: [], markers: [] };
+  window.__drawAnchorMode = true;
+  setDrawAnchorBtn(true);
+  showDrawAnchorBar();
+  alert('지도를 탭해 거점 위치를 찍으세요.\n"저장"을 눌러야 등록됩니다. (되돌리기·취소 가능)');
 }
 function addAnchorContinuous(lat, lng) {
-  const courseId = document.getElementById('anchorCourseSel').value;
-  if (!courseId) { alert('대상 코스가 없습니다'); window.__drawAnchorMode = false; return; }
+  if (!__drawAnchor) return;
+  __drawAnchor.points.push([lat, lng]);
+  redrawDrawAnchorMarkers();
+}
+function redrawDrawAnchorMarkers() {
+  if (!__drawAnchor) return;
+  __drawAnchor.markers.forEach(m => { try { m.setMap(null); } catch (e) {} });
+  __drawAnchor.markers = __drawAnchor.points.map((p, i) => {
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26"><circle cx="13" cy="13" r="11" fill="#8e44ad" stroke="#fff" stroke-width="2"/><text x="13" y="17" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">' + (i + 1) + '</text></svg>';
+    const img = new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(26, 26), { offset: new kakao.maps.Point(13, 13) });
+    return new kakao.maps.Marker({ position: new kakao.maps.LatLng(p[0], p[1]), map: map, image: img });
+  });
+  const c = document.getElementById('__drawAnchorCount'); if (c) c.textContent = __drawAnchor.points.length + '개';
+}
+function undoDrawAnchor() { if (__drawAnchor && __drawAnchor.points.length) { __drawAnchor.points.pop(); redrawDrawAnchorMarkers(); } }
+function saveDrawAnchors() {
+  if (!__drawAnchor || !__drawAnchor.points.length) { alert('찍은 점이 없습니다.'); return; }
+  const courseId = __drawAnchor.courseId;
   const d = loadData();
   if (!d.anchors) d.anchors = [];
-  const order = d.anchors.filter(a => a.courseId === courseId).length + 1;
+  let order = d.anchors.filter(a => a.courseId === courseId).length;
   const eventId = getCourseEventId(d, courseId);
-  d.anchors.push({ id: uid(), name: '거점 ' + order, lat, lng, memo: '', eventId, courseId, order });
+  const n = __drawAnchor.points.length;
+  __drawAnchor.points.forEach(p => { order++; d.anchors.push({ id: uid(), name: '거점 ' + order, lat: p[0], lng: p[1], memo: '', eventId: eventId, courseId: courseId, order: order }); });
   saveData(d); refreshAll();
-  const c = document.getElementById('__drawAnchorCount'); if (c) c.textContent = order + '개';
+  cleanupDrawAnchor();
+  alert('✅ ' + n + '개 거점 등록 완료!\n이름은 거점 목록에서 수정하세요.');
+}
+function cancelDrawAnchor() {
+  if (__drawAnchor && __drawAnchor.points.length && !confirm('찍은 점을 모두 취소할까요? (저장 안 됨)')) return;
+  cleanupDrawAnchor();
+}
+function cleanupDrawAnchor() {
+  if (__drawAnchor) __drawAnchor.markers.forEach(m => { try { m.setMap(null); } catch (e) {} });
+  __drawAnchor = null;
+  window.__drawAnchorMode = false;
+  setDrawAnchorBtn(false);
+  const bar = document.getElementById('__drawAnchorBar'); if (bar) bar.remove();
+}
+function showDrawAnchorBar() {
+  let bar = document.getElementById('__drawAnchorBar');
+  if (bar) bar.remove();
+  bar = document.createElement('div');
+  bar.id = '__drawAnchorBar';
+  bar.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:99998;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.35);padding:10px 12px;display:flex;gap:8px;align-items:center;font-size:13px;font-weight:700;';
+  bar.innerHTML = '✏️ <span id="__drawAnchorCount">0개</span>'
+    + '<button onclick="undoDrawAnchor()" style="background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:7px 11px;font-weight:700;cursor:pointer;">↩ 되돌리기</button>'
+    + '<button onclick="saveDrawAnchors()" style="background:#27ae60;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-weight:700;cursor:pointer;">✓ 저장</button>'
+    + '<button onclick="cancelDrawAnchor()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:7px 11px;font-weight:700;cursor:pointer;">✕ 취소</button>';
+  document.body.appendChild(bar);
 }
 
 // ────── 주소/장소 검색 ──────

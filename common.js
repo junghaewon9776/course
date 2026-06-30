@@ -619,6 +619,7 @@ function deleteNotifItem(key) {
   let role = null; try { role = getMyRole(); } catch (e) {}
   if (role !== 'admin' && role !== 'super') { alert('관리자(admin) 이상만 가능합니다.'); return; }
   if (!key) return;
+  if (!confirm('이 알림을 삭제할까요?')) return;
   try { if (typeof fbDb !== 'undefined') fbDb.ref('/pushLog/' + key).remove(); if (typeof _cache !== 'undefined' && _cache && _cache.pushLog) delete _cache.pushLog[key]; } catch (e) {}
   try { renderNotifBell(); } catch (e) {}
   showNotifHistory(window.__notifShowAll);  // 목록 갱신
