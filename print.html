@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="style.css?v=20260611b">
   <style>
     body { background: #fff; }
+    /* 캡처(PDF/PNG)·인쇄 시엔 미리보기 축소(zoom) 무시하고 원본 크기로 */
+    body.capturing #printContent { zoom: 1 !important; }
+    @media print { #printContent { zoom: 1 !important; } }
     .print-wrap { max-width: 1100px; margin: 0 auto; padding: 16px; }
     .print-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
     .print-toolbar select, .print-toolbar button, .print-toolbar input { padding: 6px 10px; }
@@ -224,10 +227,42 @@
   }
   async function saveAsPNG(btn) {
     const t = btn && btn.textContent; if (btn) btn.textContent = '⏳';
-    try { const c = await __capture(); await __save(__fname('png'), c.toDataURL('image/png')); }
-    catch (e) { alert('PNG 저장 실패: ' + e.message); }
-    finally { if (btn) btn.textContent = t; }
+    const pc = document.getElementById('printContent');
+    const z = pc.style.zoom; pc.style.zoom = '';
+    document.body.classList.add('capturing');
+    try {
+      await __loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      const pages = document.querySelectorAll('.hocha-page');
+      let dataUrl;
+      if (pages.length) {
+        const cvs = [];
+        for (const p of pages) cvs.push(await html2canvas(p, { scale: 2, backgroundColor: '#ffffff', useCORS: true }));
+        const w = Math.max.apply(null, cvs.map(c => c.width));
+        const h = cvs.reduce((s, c) => s + c.height + 10, 0);
+        const out = document.createElement('canvas'); out.width = w; out.height = h;
+        const ctx = out.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+        let y = 0; for (const c of cvs) { ctx.drawImage(c, 0, y); y += c.height + 10; }
+        dataUrl = out.toDataURL('image/png');
+      } else {
+        dataUrl = (await html2canvas(pc, { scale: 2, backgroundColor: '#ffffff', useCORS: true })).toDataURL('image/png');
+      }
+      await __save(__fname('png'), dataUrl);
+    } catch (e) { alert('PNG 저장 실패: ' + e.message); }
+    finally { document.body.classList.remove('capturing'); pc.style.zoom = z; if (btn) btn.textContent = t; }
   }
+  // 화면이 인쇄폭보다 넓을 때 줄여서 미리보기 (인쇄/캡처엔 영향 없음)
+  function fitPreview() {
+    try {
+      const pc = document.getElementById('printContent'); if (!pc) return;
+      pc.style.zoom = '';
+      const natural = pc.scrollWidth;
+      const avail = document.documentElement.clientWidth - 16;
+      if (natural > avail) pc.style.zoom = (avail / natural).toString();
+    } catch (e) {}
+  }
+  window.addEventListener('resize', fitPreview);
+  window.addEventListener('load', () => setTimeout(fitPreview, 300));
+  document.addEventListener('click', () => setTimeout(fitPreview, 200));
   async function saveAsPDF(btn) {
     const t = btn && btn.textContent; if (btn) btn.textContent = '⏳';
     try {
