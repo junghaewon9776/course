@@ -611,9 +611,17 @@ function clearPushBadge() {
 // 알림 내역 (/pushLog 기반) ─────────
 function getNotifLog() {
   const d = (typeof _cache !== 'undefined' && _cache && _cache.pushLog) || {};
-  const arr = Object.values(d).filter(x => x && x.at);
+  const arr = Object.keys(d).map(k => Object.assign({ _key: k }, d[k])).filter(x => x && x.at);
   arr.sort((a, b) => (b.at || 0) - (a.at || 0));
   return arr;
+}
+function deleteNotifItem(key) {
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  if (role !== 'admin' && role !== 'super') { alert('관리자(admin) 이상만 가능합니다.'); return; }
+  if (!key) return;
+  try { if (typeof fbDb !== 'undefined') fbDb.ref('/pushLog/' + key).remove(); if (typeof _cache !== 'undefined' && _cache && _cache.pushLog) delete _cache.pushLog[key]; } catch (e) {}
+  try { renderNotifBell(); } catch (e) {}
+  showNotifHistory(window.__notifShowAll);  // 목록 갱신
 }
 function notifUnreadCount() {
   const seen = parseInt(localStorage.getItem('__notifSeenAt') || '0', 10);
@@ -692,12 +700,18 @@ function showNotifHistory(showAll) {
   modal.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:50px 12px;';
   const __openAt = Date.now();
   modal.addEventListener('click', e => { if (e.target === modal && Date.now() - __openAt > 350) modal.remove(); });
+  window.__notifShowAll = !!showAll;
+  let __delRole = null; try { __delRole = getMyRole(); } catch (e) {}
+  const __canDel = (__delRole === 'admin' || __delRole === 'super');
   const rows = list.length ? list.map(n => {
     const t = new Date(n.at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    return '<div style="padding:10px 12px;border-bottom:1px solid #eee;">'
+    return '<div style="padding:10px 12px;border-bottom:1px solid #eee;display:flex;gap:8px;align-items:flex-start;">'
+      + '<div style="flex:1;min-width:0;">'
       + '<div style="font-weight:700;font-size:14px;color:#2c3e50;">' + String(n.title || '').replace(/</g, '&lt;') + '</div>'
       + '<div style="font-size:13px;color:#555;margin-top:2px;white-space:pre-wrap;">' + String(n.body || '').replace(/</g, '&lt;') + '</div>'
-      + '<div style="font-size:11px;color:#aaa;margin-top:3px;">' + t + '</div></div>';
+      + '<div style="font-size:11px;color:#aaa;margin-top:3px;">' + t + '</div></div>'
+      + (__canDel ? '<span onclick="deleteNotifItem(\'' + (n._key || '') + '\')" style="cursor:pointer;color:#e74c3c;font-size:16px;padding:2px 4px;flex-shrink:0;">🗑</span>' : '')
+      + '</div>';
   }).join('') : '<div style="padding:30px;text-align:center;color:#aaa;">' + (showAll ? '알림 내역이 없습니다' : '새 알림이 없습니다') + '</div>';
   const footer = showAll ? '' : '<div onclick="showNotifHistory(true)" style="padding:13px;text-align:center;color:#2980b9;font-weight:700;font-size:13px;cursor:pointer;border-top:1px solid #eee;background:#f7f9fc;">📜 이전 내역 전체보기</div>';
   modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);">'
