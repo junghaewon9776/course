@@ -232,16 +232,29 @@
     const t = btn && btn.textContent; if (btn) btn.textContent = '⏳';
     try {
       await __loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
-      const c = await __capture();
-      const img = c.toDataURL('image/jpeg', 0.92);
+      await __loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      const land = document.body.classList.contains('orient-landscape');
       const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdf = new jsPDF(land ? 'l' : 'p', 'mm', 'a4');
       const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight();
-      const ih = c.height * pw / c.width;
-      let left = ih, y = 0;
-      pdf.addImage(img, 'JPEG', 0, y, pw, ih);
-      left -= ph;
-      while (left > 0) { y -= ph; pdf.addPage(); pdf.addImage(img, 'JPEG', 0, y, pw, ih); left -= ph; }
+      const pages = document.querySelectorAll('.hocha-page');
+      document.body.classList.add('capturing');
+      try {
+        if (pages.length) {
+          for (let i = 0; i < pages.length; i++) {
+            const cv = await html2canvas(pages[i], { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+            if (i > 0) pdf.addPage();
+            pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, ph);
+          }
+        } else {
+          const cv = await html2canvas(document.getElementById('printContent'), { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+          const img = cv.toDataURL('image/jpeg', 0.92);
+          const ih = cv.height * pw / cv.width;
+          let left = ih, y = 0;
+          pdf.addImage(img, 'JPEG', 0, y, pw, ih); left -= ph;
+          while (left > 0) { y -= ph; pdf.addPage(); pdf.addImage(img, 'JPEG', 0, y, pw, ih); left -= ph; }
+        }
+      } finally { document.body.classList.remove('capturing'); }
       const reader = new FileReader();
       reader.onload = () => __save(__fname('pdf'), reader.result);
       reader.readAsDataURL(pdf.output('blob'));
