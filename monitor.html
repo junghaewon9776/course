@@ -162,7 +162,7 @@
       <div class="card">
         <div class="flex-between">
           <h2>운행 목록</h2>
-          <span class="super-only" style="display:flex;gap:4px;flex-wrap:wrap;"><button class="small" style="background:#16a085;" onclick="exportLogsExcel()">📊 엑셀</button><button class="small danger" onclick="clearLogs()">🗑 전체삭제</button><button class="small" style="background:#e67e22;" onclick="restoreAllLogs()">↩ 되돌리기</button></span>
+          <span class="super-only" style="display:flex;gap:4px;flex-wrap:wrap;"><button class="small" style="background:#16a085;" onclick="exportLogsExcel()">📊 엑셀</button><button class="small" style="background:#2980b9;" onclick="exportLogCoords()">📍 좌표</button><button class="small danger" onclick="clearLogs()">🗑 전체삭제</button><button class="small" style="background:#e67e22;" onclick="restoreAllLogs()">↩ 되돌리기</button></span>
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:2px 0 8px;cursor:pointer;color:#2c3e50;">
           <input type="checkbox" id="groupByCourse" onchange="toggleGroupByCourse()"> 📁 코스로 묶어서 보기 <span style="color:#888;font-size:11px;">(인원별 운영 합쳐보기)</span>
@@ -1775,6 +1775,24 @@ function exportLogsExcel() {
   });
   const csv = '﻿' + [header.map(h => '"' + h + '"').join(',')].concat(rows).join('\r\n');
   saveFile('운행기록_' + new Date().toISOString().slice(0, 10) + '.csv', csv, 'text/csv;charset=utf-8');
+}
+// 📍 운행 좌표(경로 점) 전체 내보내기 — super 전용 (한 점당 한 줄)
+function exportLogCoords() {
+  if (getMyRole() !== 'super') { alert('super 권한만 가능합니다.'); return; }
+  const data = loadData();
+  const logs = (data.logs || []).filter(l => l && !l.hidden && l.track && l.track.length).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  if (!logs.length) { alert('좌표가 있는 운행기록이 없습니다.'); return; }
+  const esc = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+  const header = ['행사', '코스', '날짜', '운전자', '순번', '위도', '경도'];
+  const lines = [header.map(h => '"' + h + '"').join(',')];
+  logs.forEach(l => {
+    const ev = getEvent(data, l.eventId), co = getCourse(data, l.courseId);
+    (l.track || []).forEach((p, i) => {
+      lines.push([(ev && ev.name) || '', (co && co.name) || (l.name || ''), l.date || '', (l.crew && l.crew.driver) || '', i + 1, p[0], p[1]].map(esc).join(','));
+    });
+  });
+  const csv = '﻿' + lines.join('\r\n');
+  saveFile('운행좌표_' + new Date().toISOString().slice(0, 10) + '.csv', csv, 'text/csv;charset=utf-8');
 }
 
 function selectLog(idx) {
