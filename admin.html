@@ -144,6 +144,7 @@
         <label>대상 코스</label>
         <select id="anchorCourseSel" onchange="renderAnchors()"></select>
         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="small" id="drawAnchorBtn" style="background:#8e44ad;" onclick="toggleDrawAnchor()">✏️ 연속 거점 그리기</button>
           <button class="small" style="background:#9b59b6;" onclick="startReorderMode()">🔗 순서 다시 짜기</button>
           <button class="small danger" onclick="deleteCourseAnchors()">🗑 이 코스 거점 모두 삭제</button>
         </div>
@@ -538,6 +539,7 @@ function handleMapClick(lat, lng) {
     window.__openIw = null;
     return;
   }
+  if (window.__drawAnchorMode) { addAnchorContinuous(lat, lng); return; }
   if (pendingClickMode === 'complaint') {
     addComplaintAt(lat, lng);
     setMode('anchor');
@@ -569,6 +571,42 @@ function handleMapClick(lat, lng) {
     const crs = getCourse(d, courseId);
     sendTelegram(`📍 <b>거점 추가</b>\n코스: ${crs?.name || ''}\n거점: ${anchorName}`);
   });
+}
+
+// ────── ✏️ 연속 거점 그리기 (탭할 때마다 자동 순번으로 거점 등록) ──────
+function toggleDrawAnchor() {
+  const courseId = document.getElementById('anchorCourseSel').value;
+  if (!window.__drawAnchorMode && !courseId) { alert('먼저 "거점" 패널에서 대상 코스를 선택하세요'); return; }
+  window.__drawAnchorMode = !window.__drawAnchorMode;
+  const btn = document.getElementById('drawAnchorBtn');
+  if (btn) {
+    btn.textContent = window.__drawAnchorMode ? '⏹ 연속 거점 종료' : '✏️ 연속 거점 그리기';
+    btn.style.background = window.__drawAnchorMode ? '#e74c3c' : '#8e44ad';
+  }
+  let bar = document.getElementById('__drawAnchorBar');
+  if (window.__drawAnchorMode) {
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = '__drawAnchorBar';
+      bar.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:99998;background:#fff;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.35);padding:10px 14px;display:flex;gap:10px;align-items:center;font-size:13px;font-weight:700;';
+      bar.innerHTML = '✏️ 지도를 탭해 거점 추가 (<span id="__drawAnchorCount">0개</span>)'
+        + '<button onclick="toggleDrawAnchor()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:7px 12px;font-weight:700;cursor:pointer;">종료</button>';
+      document.body.appendChild(bar);
+    }
+    const cd = document.getElementById('anchorCourseSel');
+    alert('지도를 탭할 때마다 거점이 "거점 1, 2, 3..." 자동 순번으로 등록됩니다.\n이름은 나중에 거점 목록에서 수정하세요.');
+  } else if (bar) { bar.remove(); }
+}
+function addAnchorContinuous(lat, lng) {
+  const courseId = document.getElementById('anchorCourseSel').value;
+  if (!courseId) { alert('대상 코스가 없습니다'); window.__drawAnchorMode = false; return; }
+  const d = loadData();
+  if (!d.anchors) d.anchors = [];
+  const order = d.anchors.filter(a => a.courseId === courseId).length + 1;
+  const eventId = getCourseEventId(d, courseId);
+  d.anchors.push({ id: uid(), name: '거점 ' + order, lat, lng, memo: '', eventId, courseId, order });
+  saveData(d); refreshAll();
+  const c = document.getElementById('__drawAnchorCount'); if (c) c.textContent = order + '개';
 }
 
 // ────── 주소/장소 검색 ──────
