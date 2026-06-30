@@ -562,6 +562,29 @@ function initPushNotifications() {
     }).catch(e => console.warn('푸시 권한 오류', e));
   } catch (e) { console.warn('푸시 초기화 오류', e); }
 }
+// 📁 파일 저장 (공용) — 앱: Filesystem 저장 후 Share, 웹: 다운로드. content = dataURL 또는 텍스트
+async function saveFile(filename, content, mime) {
+  const isData = /^data:/.test(content);
+  try {
+    const Cap = window.Capacitor;
+    const FS = Cap && Cap.Plugins && Cap.Plugins.Filesystem;
+    const Share = Cap && Cap.Plugins && Cap.Plugins.Share;
+    if (FS) {
+      const base64 = isData ? content.split(',')[1] : btoa(unescape(encodeURIComponent(content)));
+      const r = await FS.writeFile({ path: filename, data: base64, directory: 'CACHE' });
+      if (Share) { try { await Share.share({ title: filename, url: r.uri, dialogTitle: '저장 / 공유' }); return true; } catch (e) {} }
+      alert('저장됨:\n' + (r.uri || filename));
+      return true;
+    }
+  } catch (e) { console.warn('앱 파일저장 실패, 웹 다운로드 시도', e); }
+  try {
+    let url = isData ? content : URL.createObjectURL(new Blob([content], { type: mime || 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    if (!isData) setTimeout(() => URL.revokeObjectURL(url), 2000);
+    return true;
+  } catch (e) { alert('저장 실패: ' + e.message); return false; }
+}
 // 🔔 알림 권한 꺼짐 안내 배너
 function showNotifPermBanner() {
   try {
