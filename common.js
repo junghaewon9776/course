@@ -671,6 +671,16 @@ function makeBellDraggable(bell) {
     }
   });
 }
+function clearNotifLog() {
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  if (role !== 'admin' && role !== 'super') { alert('관리자(admin) 이상만 삭제 가능합니다.'); return; }
+  if (!confirm('알림 내역을 전부 삭제할까요?')) return;
+  try { if (typeof fbDb !== 'undefined') fbDb.ref('/pushLog').remove(); if (typeof _cache !== 'undefined' && _cache) _cache.pushLog = {}; } catch (e) {}
+  const m = document.getElementById('__notifModal'); if (m) m.remove();
+  try { localStorage.setItem('__notifSeenAt', String(Date.now())); } catch (e) {}
+  try { renderNotifBell(); } catch (e) {}
+  alert('알림 내역을 삭제했어요.');
+}
 function showNotifHistory(showAll) {
   const prevSeen = parseInt(localStorage.getItem('__notifSeenAt') || '0', 10);
   const all = getNotifLog();
@@ -693,7 +703,10 @@ function showNotifHistory(showAll) {
   modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);">'
     + '<div style="padding:14px 16px;background:#2980b9;color:#fff;font-weight:700;display:flex;justify-content:space-between;align-items:center;">'
     + '<span>🔔 ' + (showAll ? '알림 내역 (전체)' : '새 알림') + '</span>'
-    + '<span onclick="document.getElementById(\'__notifModal\').remove()" style="cursor:pointer;font-size:22px;line-height:1;">&times;</span></div>'
+    + '<span style="display:flex;gap:14px;align-items:center;">'
+    + ((function(){ let r=null; try{r=getMyRole();}catch(e){} return (r==='admin'||r==='super')?'<span onclick="clearNotifLog()" style="cursor:pointer;font-size:13px;font-weight:700;">🗑 삭제</span>':''; })())
+    + '<span onclick="document.getElementById(\'__notifModal\').remove()" style="cursor:pointer;font-size:22px;line-height:1;">&times;</span>'
+    + '</span></div>'
     + '<div style="overflow-y:auto;flex:1;">' + rows + '</div>'
     + footer + '</div>';
   document.body.appendChild(modal);
