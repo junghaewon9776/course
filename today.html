@@ -105,6 +105,7 @@
         <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스완료</button>
         <button id="btnReqAnchor2" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
         <button class="gray" onclick="resetCourse()">진행 초기화</button>
+        <button class="small danger" onclick="cancelCourse()" style="font-size:11px;">✕ 코스취소</button>
       </div>
     </div>
   </div>
@@ -2783,6 +2784,33 @@ function finishCourse() {
   document.getElementById('opPanel').style.display = 'none';
   document.getElementById('assignmentCard').style.display = 'block';
   renderAssignments();
+}
+
+// ✕ 코스 취소 — 진행 중인 코스를 기록 저장 없이 종료 (테스트용)
+function cancelCourse() {
+  if (!currentSession) return;
+  if (!confirm('진행 중인 코스를 취소할까요?\n(운행기록 저장 안 됨)')) return;
+  if (watchId !== null) stopGPS();
+  releaseWakeLock();
+  try { unpublishLiveSession(currentSession.key); } catch (e) {}
+  clearLastActiveSession();
+  currentSession = null;
+  anchorMarkers.forEach(m => m.setMap(null));
+  anchorMarkers = [];
+  if (courseLine) { courseLine.setMap(null); courseLine = null; }
+  if (trackLine) { trackLine.setMap(null); trackLine = null; }
+  if (myMarker) { myMarker.setMap(null); myMarker = null; }
+  pinMarkers.forEach(m => { try { m.setMap(null); } catch (e) {} });
+  pinMarkers = [];
+  __pastPinMarkers.forEach(m => { try { m.setMap(null); } catch (e) {} });
+  __pastPinMarkers = [];
+  disarmMapPin();
+  unsubscribeLiveOthers();
+  assistList = [];
+  document.getElementById('opPanel').style.display = 'none';
+  document.getElementById('assignmentCard').style.display = 'block';
+  renderAssignments();
+  alert('코스를 취소했어요. (기록 저장 안 됨)');
 }
 
 /* ── 위치 선택 지도 핀 모달 ─────────────────────────── */
