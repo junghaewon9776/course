@@ -308,6 +308,14 @@ function render() {
         <h2>회원 × 코스 누적</h2>
         <div class="scroll-x"><table id="tb_${uid}"></table></div>
       </div>
+      <div class="card" id="rankCard_${uid}" style="border-left:4px solid #8e44ad;display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+          <h2 style="margin:0;">🎖 계급 (경험치) <span style="font-size:11px;color:#e74c3c;font-weight:400;">SUPER 전용</span></h2>
+          <button class="small" style="background:#8e44ad;" onclick="editRankTiers()">⚙ 계급 설정</button>
+        </div>
+        <p class="sub" style="margin:6px 0 10px;">경험치 = 방역 1회 10XP + 1·2·3코스 골고루 세트당 100XP 🔥</p>
+        <div id="rank_${uid}"></div>
+      </div>
     `;
     container.appendChild(section);
 
@@ -405,6 +413,7 @@ function render() {
     if (hasUnitPrice) tfoot += `<td style="white-space:nowrap;color:#c0392b;">${fmtWon(allTotal * unitPrice)}</td>`;
     tfoot += '</tr>';
     document.getElementById('tb_' + uid).innerHTML = thead + tbody + tfoot;
+    renderRankCard(uid, sortedAll, matrix, courses);
 
     // 회원별 누적 막대 — 8명 초과 시 가로 막대 + 스크롤
     const sortedNames = sortedAll.map(x => x[0]);
@@ -540,6 +549,92 @@ const hbarTotalsPlugin = {
     });
   }
 };
+
+// ── 🎖 계급 / 경험치 (SUPER 전용) ──
+const DEFAULT_RANK_TIERS = [
+  { name: '이등병', minXp: 0 }, { name: '일병', minXp: 100 }, { name: '상병', minXp: 300 },
+  { name: '병장', minXp: 600 }, { name: '하사', minXp: 1000 }, { name: '중사', minXp: 1500 },
+  { name: '상사', minXp: 2200 }, { name: '원사', minXp: 3000 }, { name: '소위', minXp: 4000 },
+  { name: '중위', minXp: 5500 }, { name: '대위', minXp: 7500 }, { name: '소령', minXp: 10000 }
+];
+function getRankTiers() {
+  const d = loadData();
+  if (Array.isArray(d.rankTiers) && d.rankTiers.length) return d.rankTiers.slice().sort((a, b) => (a.minXp || 0) - (b.minXp || 0));
+  return DEFAULT_RANK_TIERS;
+}
+function computeMemberXp(matrix, name, courses) {
+  const counts = courses.map(c => (matrix[name] && matrix[name][c.id]) || 0);
+  const total = counts.reduce((s, v) => s + v, 0);
+  const sets = counts.length ? Math.min.apply(null, counts) : 0;
+  return { xp: total * 10 + sets * 100, total: total, sets: sets };
+}
+function rankForXp(xp, tiers) { let r = tiers[0]; for (const t of tiers) { if (xp >= (t.minXp || 0)) r = t; } return r; }
+function renderRankCard(uid, sortedAll, matrix, courses) {
+  const card = document.getElementById('rankCard_' + uid);
+  const el = document.getElementById('rank_' + uid);
+  if (!card || !el) return;
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  if (role !== 'super') { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const tiers = getRankTiers();
+  const rows = sortedAll.map(x => Object.assign({ name: x[0] }, computeMemberXp(matrix, x[0], courses)))
+    .filter(x => x.total > 0).sort((a, b) => b.xp - a.xp);
+  if (!rows.length) { el.innerHTML = '<div class="empty">기록 없음</div>'; return; }
+  el.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+    + '<tr style="background:#f3eefa;"><th style="text-align:left;padding:6px;">#</th><th style="text-align:left;padding:6px;">이름</th><th style="text-align:left;padding:6px;">계급</th><th style="text-align:right;padding:6px;">XP</th><th style="text-align:center;padding:6px;">세트</th></tr>'
+    + rows.map((r, i) => {
+      const rk = rankForXp(r.xp, tiers);
+      return '<tr style="border-bottom:1px solid #eee;">'
+        + '<td style="padding:6px;">' + (i === 0 ? '⭐' : (i + 1)) + '</td>'
+        + '<td style="padding:6px;font-weight:700;">' + String(r.name).replace(/</g, '&lt;') + '</td>'
+        + '<td style="padding:6px;"><span style="background:#8e44ad;color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;">' + String(rk.name || '').replace(/</g, '&lt;') + '</span></td>'
+        + '<td style="padding:6px;text-align:right;font-weight:700;color:#6c3483;">' + r.xp + '</td>'
+        + '<td style="padding:6px;text-align:center;color:#888;">' + r.sets + '</td></tr>';
+    }).join('') + '</table>';
+}
+function __rtRowTpl(t) {
+  t = t || { name: '', minXp: 0 };
+  return '<div class="rtRow" style="display:flex;gap:6px;margin-bottom:6px;">'
+    + '<input class="rtName" value="' + String(t.name || '').replace(/"/g, '&quot;') + '" placeholder="계급명" style="flex:1;padding:7px;border:1px solid #ddd;border-radius:6px;">'
+    + '<input class="rtXp" type="number" value="' + (t.minXp || 0) + '" placeholder="최소XP" style="width:90px;padding:7px;border:1px solid #ddd;border-radius:6px;">'
+    + '<button onclick="this.parentNode.remove()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:0 10px;cursor:pointer;">✕</button></div>';
+}
+function editRankTiers() {
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  if (role !== 'super') { alert('SUPER만 가능합니다.'); return; }
+  const tiers = getRankTiers();
+  let modal = document.getElementById('rankTierModal');
+  if (modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'rankTierModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;overflow-y:auto;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,.3);">'
+    + '<h3 style="margin:0 0 4px;">⚙ 계급 설정</h3>'
+    + '<p class="sub" style="margin:0 0 12px;">계급명과 최소 XP (XP 낮은 순으로 자동 정렬됨).</p>'
+    + '<div id="rtList">' + tiers.map(t => __rtRowTpl(t)).join('') + '</div>'
+    + '<button onclick="document.getElementById(\'rtList\').insertAdjacentHTML(\'beforeend\', __rtRowTpl())" style="margin:4px 0 12px;background:#3498db;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">+ 계급 추가</button>'
+    + '<div style="display:flex;gap:8px;"><button onclick="saveRankTiers()" style="flex:1;background:#27ae60;color:#fff;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">저장</button>'
+    + '<button onclick="document.getElementById(\'rankTierModal\').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">취소</button></div></div>';
+  document.body.appendChild(modal);
+}
+function saveRankTiers() {
+  const rows = document.querySelectorAll('#rtList .rtRow');
+  const tiers = [];
+  rows.forEach(r => {
+    const name = (r.querySelector('.rtName').value || '').trim();
+    const xp = parseInt(r.querySelector('.rtXp').value) || 0;
+    if (name) tiers.push({ name: name, minXp: xp });
+  });
+  if (!tiers.length) { alert('계급을 하나 이상 입력하세요.'); return; }
+  tiers.sort((a, b) => a.minXp - b.minXp);
+  const d = loadData();
+  d.rankTiers = tiers;
+  saveData(d);
+  const m = document.getElementById('rankTierModal'); if (m) m.remove();
+  if (typeof render === 'function') render();
+  alert('계급 설정 저장됨!');
+}
 
 function exportStatsCSV() {
   let csv = '﻿';
