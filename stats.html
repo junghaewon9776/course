@@ -891,10 +891,11 @@ function __ensureRankDefs() {
   document.body.appendChild(div);
 }
 function __starSvg(cx, cy, r) {
-  return '<polygon points="' + __starPts(cx, cy, r) + '" fill="url(#gStar)" stroke="#6e4900" stroke-width="0.9" stroke-linejoin="round"/>'
-    + '<circle cx="' + (cx - r * 0.24).toFixed(1) + '" cy="' + (cy - r * 0.32).toFixed(1) + '" r="' + (r * 0.15).toFixed(1) + '" fill="rgba(255,255,255,.75)"/>';
+  return '<polygon points="' + __starPts(cx, cy, r * 1.2) + '" fill="rgba(255,214,80,.28)"/>'
+    + '<polygon points="' + __starPts(cx, cy, r) + '" fill="url(#gStar)" stroke="#5c3d00" stroke-width="0.9" stroke-linejoin="round"/>'
+    + '<circle cx="' + (cx - r * 0.24).toFixed(1) + '" cy="' + (cy - r * 0.32).toFixed(1) + '" r="' + (r * 0.16).toFixed(1) + '" fill="rgba(255,255,255,.85)"/>';
 }
-function __flowerSvg(cx, cy, r) { let s = ''; for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 5; const px = cx + (r * 0.55) * Math.cos(a); const py = cy + (r * 0.55) * Math.sin(a); s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (r * 0.52).toFixed(1) + '" fill="url(#gFlower)" stroke="#a03a72" stroke-width="0.4"/>'; } s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.42).toFixed(1) + '" fill="#b5232b"/>'; return s; }
+function __flowerSvg(cx, cy, r) { let s = ''; for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + i * 2 * Math.PI / 5; const px = cx + (r * 0.55) * Math.cos(a); const py = cy + (r * 0.55) * Math.sin(a); s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (r * 0.52).toFixed(1) + '" fill="url(#gStar)" stroke="#6e4900" stroke-width="0.5"/>'; } s += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (r * 0.4).toFixed(1) + '" fill="#8a1f16"/>'; return s; }
 function rankSvg(icon, h) {
   __ensureRankDefs();
   h = h || 15; icon = String(icon || '').trim(); if (!icon) return '';
@@ -917,7 +918,7 @@ function rankSvg(icon, h) {
 }
 function rankBadge(icon, h) {
   const svg = rankSvg(icon, h); if (!svg) return '';
-  return '<span style="display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(#20402e,#16311f);border:1px solid #3d6b4d;padding:1px 5px;border-radius:4px;margin-right:5px;vertical-align:middle;box-shadow:0 1px 2px rgba(0,0,0,.25);">' + svg + '</span>';
+  return '<span style="display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(#20304f,#0c1424);border:1px solid #caa955;padding:1px 5px;border-radius:5px;margin-right:5px;vertical-align:middle;box-shadow:0 1px 3px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.1);">' + svg + '</span>';
 }
 // 계급 아이콘: 이미지가 있으면 이미지, 없으면 계급장 SVG
 function tierSvg(tier, h) {
@@ -1020,7 +1021,8 @@ function rankSvgStandalone(icon, h) {
   const gold = '#e6c15a', goldD = '#9c6b00', star = '#f7c948', ch = icon[0];
   const n = icon.split('').filter(c => c === ch).length;
   function wrap(w, inner) { return '<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.round(w * h / 20) + '" height="' + h + '" viewBox="0 0 ' + w + ' 20">' + inner + '</svg>'; }
-  function starSolid(cx, cy, r) { let p = ''; for (let k = 0; k < 10; k++) { const rr = k % 2 ? r * 0.38 : r; const a = -Math.PI / 2 + k * Math.PI / 5; p += (cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1) + ' '; } return '<polygon points="' + p + '" fill="' + star + '" stroke="#6e4900" stroke-width="0.9" stroke-linejoin="round"/><circle cx="' + (cx - r * 0.24).toFixed(1) + '" cy="' + (cy - r * 0.32).toFixed(1) + '" r="' + (r * 0.15).toFixed(1) + '" fill="rgba(255,255,255,.75)"/>'; }
+  function starPts2(cx, cy, r) { let p = ''; for (let k = 0; k < 10; k++) { const rr = k % 2 ? r * 0.38 : r; const a = -Math.PI / 2 + k * Math.PI / 5; p += (cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1) + ' '; } return p; }
+  function starSolid(cx, cy, r) { return '<polygon points="' + starPts2(cx, cy, r * 1.2) + '" fill="rgba(255,214,80,.28)"/><polygon points="' + starPts2(cx, cy, r) + '" fill="' + star + '" stroke="#5c3d00" stroke-width="0.9" stroke-linejoin="round"/><circle cx="' + (cx - r * 0.24).toFixed(1) + '" cy="' + (cy - r * 0.32).toFixed(1) + '" r="' + (r * 0.16).toFixed(1) + '" fill="rgba(255,255,255,.85)"/>'; }
   if (icon.indexOf('∨') >= 0 && icon.indexOf('★') >= 0) {
     const nc = (icon.match(/∨/g) || []).length; let s = starSolid(10, 4.6, 4.6);
     for (let i = 0; i < nc; i++) { const y = 11 + i * 4; s += '<path d="M2 ' + y + ' L10 ' + (y + 4) + ' L18 ' + y + '" fill="none" stroke="' + gold + '" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>'; }
@@ -1029,7 +1031,7 @@ function rankSvgStandalone(icon, h) {
   if (ch === '▔') { let s = ''; const bw = 17, bh = 3, gap = 2.5; for (let i = 0; i < n; i++) s += '<rect x="1" y="' + (17 - i * (bh + gap)) + '" width="' + bw + '" height="' + bh + '" rx="1.5" fill="' + gold + '" stroke="' + goldD + '" stroke-width="0.5"/>'; return wrap(bw + 2, s); }
   if (ch === '∨') { let s = ''; for (let i = 0; i < n; i++) { const y = 13 - i * 5; s += '<path d="M2 ' + y + ' L10 ' + (y + 4) + ' L18 ' + y + '" fill="none" stroke="' + gold + '" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>'; } return wrap(20, s); }
   if (ch === '◆' || ch === '◈') { let s = ''; const dw = 12, gap = 2; for (let i = 0; i < n; i++) { const cx = 6 + i * (dw + gap); s += '<path d="M' + cx + ' 3 L' + (cx + 5) + ' 10 L' + cx + ' 17 L' + (cx - 5) + ' 10 Z" fill="' + (ch === '◈' ? 'none' : gold) + '" stroke="' + goldD + '" stroke-width="1.6"/>'; } return wrap(n * (dw + gap) + 2, s); }
-  if (ch === '❖') { let s = ''; const fw = 16; for (let i = 0; i < n; i++) { const cx = 8 + i * fw; for (let j = 0; j < 5; j++) { const a = -Math.PI / 2 + j * 2 * Math.PI / 5; const px = cx + (7 * 0.55) * Math.cos(a), py = 10 + (7 * 0.55) * Math.sin(a); s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (7 * 0.52).toFixed(1) + '" fill="#d16ba5"/>'; } s += '<circle cx="' + cx + '" cy="10" r="' + (7 * 0.42).toFixed(1) + '" fill="#b5232b"/>'; } return wrap(n * fw, s); }
+  if (ch === '❖') { let s = ''; const fw = 16; for (let i = 0; i < n; i++) { const cx = 8 + i * fw; for (let j = 0; j < 5; j++) { const a = -Math.PI / 2 + j * 2 * Math.PI / 5; const px = cx + (7 * 0.55) * Math.cos(a), py = 10 + (7 * 0.55) * Math.sin(a); s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (7 * 0.52).toFixed(1) + '" fill="' + star + '" stroke="#6e4900" stroke-width="0.5"/>'; } s += '<circle cx="' + cx + '" cy="10" r="' + (7 * 0.4).toFixed(1) + '" fill="#8a1f16"/>'; } return wrap(n * fw, s); }
   if (ch === '★') { let s = ''; const sw = 16; for (let i = 0; i < n; i++) s += starSolid(8.5 + i * sw, 10, 7.4); return wrap(n * sw + 2, s); }
   return '';
 }
