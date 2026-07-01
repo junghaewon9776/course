@@ -431,7 +431,7 @@ function render() {
       const isUnregistered = groupBy === 'member' && !members.find(m=>m.name===name);
       const isTop1 = sortedAll[0] && sortedAll[0][0] === name && sortedAll[0][1] > 0;
       const __rk = memberRank(matrix, name, courses);
-      let row = `<tr><td>${isTop1 ? '⭐ ' : ''}${__rk && __rk.icon ? rankBadge(__rk.icon) : ''}${name}${isUnregistered ? ' <span class="sub">(미등록)</span>' : ''}</td>`;
+      let row = `<tr><td>${isTop1 ? '⭐ ' : ''}${__rk ? tierBadge(__rk) : ''}${name}${isUnregistered ? ' <span class="sub">(미등록)</span>' : ''}</td>`;
       for (const c of courses) {
         const v = matrix[name]?.[c.id] || 0;
         row += `<td class="${v===0?'num-zero':v>=3?'num-high':''}">${v||''}</td>`;
@@ -770,9 +770,9 @@ function computeXpForName(name) {
     });
     return n;
   }
-  let xp = 0;
+  let xp = 0; const items = [];
   quests.forEach(qt => {
-    const per = Number(qt.xp) || 0; if (!per) return;
+    const per = Number(qt.xp) || 0;
     let cnt = 0;
     if (qt.trigger === 'vax') cnt = vaxTotal;
     else if (qt.trigger === 'set') cnt = setTotal;
@@ -783,10 +783,14 @@ function computeXpForName(name) {
     else if (qt.trigger === 'photoField') cnt = photoCount('field');
     else if (qt.trigger === 'photoReceipt') cnt = photoCount('receipt');
     else if (qt.trigger === 'photo') cnt = photoCount('');
-    if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }  // N회 이상 보너스(1회)
-    else xp += cnt * per;  // 횟수당
+    const th = Number(qt.threshold) || 0;
+    let gained = 0, done = false;
+    if (qt.mode === 'threshold') { done = (th > 0 && cnt >= th); if (done) gained = per; }  // N회 이상 보너스(1회)
+    else { gained = cnt * per; done = cnt > 0; }  // 횟수당
+    xp += gained;
+    items.push({ label: qt.label || questTriggerLabel(qt.trigger), trigger: qt.trigger, mode: qt.mode || 'each', threshold: th, count: cnt, gained: gained, done: done });
   });
-  return { xp: xp, total: vaxTotal };
+  return { xp: xp, total: vaxTotal, items: items };
 }
 // 🏆 명예의 전당 1위 (전체 공개, 맨 위) — 선택한 기간의 방역 횟수 1위
 function renderHallOfFameTop() {
@@ -815,7 +819,7 @@ function renderHallOfFameTop() {
   el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#4a2c7a,#8e44ad);color:#fff;border-radius:10px;padding:7px 12px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.2);">'
     + '<span style="font-size:18px;">🏆</span>'
     + '<span style="font-size:12px;opacity:.85;white-space:nowrap;">명예의 전당 1위</span>'
-    + (rk.icon ? rankBadge(rk.icon, 15) : '')
+    + tierBadge(rk, 15)
     + '<span style="font-weight:800;font-size:15px;">' + String(best.name).replace(/</g, '&lt;') + '</span>'
     + '<span style="font-size:12px;opacity:.9;">' + String(rk.name || '') + '</span>'
     + '<span style="margin-left:auto;font-weight:800;color:#ffd85e;white-space:nowrap;">' + best.total + '회</span></div>';
@@ -846,13 +850,25 @@ function renderMyRankCard() {
       + '<div style="height:9px;background:rgba(255,255,255,.18);border-radius:5px;overflow:hidden;">'
       + '<div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#ffd85e,#ffb400);"></div></div></div>';
   }
+  // 🏅 퀘스트 훈장
+  let medalsHtml = '';
+  const its = __r.items || [];
+  const chips = its.filter(it => it.mode === 'threshold' || it.count > 0).map(it => {
+    const lb = String(it.label).replace(/</g, '&lt;');
+    if (it.mode === 'threshold') {
+      if (it.done) return '<span style="display:inline-flex;align-items:center;gap:3px;background:linear-gradient(#ffe08a,#f0b429);color:#5c3d00;font-weight:800;font-size:11px;padding:3px 8px;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.25);">🏅 ' + lb + '</span>';
+      return '<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,255,255,.12);color:#e8dcff;font-size:11px;padding:3px 8px;border-radius:12px;">🔒 ' + lb + ' ' + it.count + '/' + it.threshold + '</span>';
+    }
+    return '<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(255,255,255,.16);color:#fff;font-size:11px;padding:3px 8px;border-radius:12px;">🎖 ' + lb + ' ×' + it.count + '</span>';
+  });
+  if (chips.length) medalsHtml = '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;border-top:1px solid rgba(255,255,255,.15);padding-top:8px;">' + chips.join('') + '</div>';
   el.innerHTML = '<div class="card" style="background:linear-gradient(135deg,#2c1a4d,#4a2c7a);color:#fff;border-left:4px solid #ffd85e;padding:8px 12px;margin-bottom:8px;">'
     + '<div style="display:flex;align-items:center;gap:10px;">'
-    + '<div style="flex:none;background:linear-gradient(#20402e,#16311f);border:1px solid #3d6b4d;border-radius:6px;padding:3px 7px;">' + (rk.icon ? rankSvg(rk.icon, 24) : '') + '</div>'
+    + '<div style="flex:none;background:linear-gradient(#20402e,#16311f);border:1px solid #3d6b4d;border-radius:6px;padding:3px 7px;">' + tierSvg(rk, 24) + '</div>'
     + '<div style="flex:none;"><div style="font-size:10px;opacity:.8;">🎖 내 계급 · ' + String(myName).replace(/</g, '&lt;') + '</div>'
     + '<div style="font-size:16px;font-weight:800;line-height:1.1;">' + String(rk.name || '') + '</div>'
     + '<div style="font-size:10px;opacity:.75;">누적 ' + total + '회 · ' + xp + ' XP</div></div>'
-    + gaugeHtml + '</div></div>';
+    + gaugeHtml + '</div>' + medalsHtml + '</div>';
 }
 /* ===== 군대식 계급장 SVG (병사=작대기, 부사관=갈매기, 위관=다이아, 영관=무궁화, 장성=별) ===== */
 function __starPts(cx, cy, r) { let p = ''; for (let i = 0; i < 10; i++) { const rr = i % 2 ? r * 0.42 : r; const a = -Math.PI / 2 + i * Math.PI / 5; p += (cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1) + ' '; } return p; }
@@ -875,7 +891,7 @@ function rankSvg(icon, h) {
   const n = icon.split('').filter(c => c === ch).length;
   function wrap(w, inner) { return '<svg viewBox="0 0 ' + w + ' 20" height="' + h + '" style="vertical-align:middle;display:inline-block;">' + inner + '</svg>'; }
   if (ch === '▔') { let s = ''; const bw = 17, bh = 3, gap = 2.5; for (let i = 0; i < n; i++) { s += '<rect x="1" y="' + (17 - i * (bh + gap)) + '" width="' + bw + '" height="' + bh + '" rx="1.5" fill="' + gold + '" stroke="' + goldD + '" stroke-width="0.5"/>'; } return wrap(bw + 2, s); }
-  if (ch === '∨') { let s = ''; for (let i = 0; i < n; i++) { const y = 4 + i * 5; s += '<path d="M2 ' + (y + 4) + ' L10 ' + y + ' L18 ' + (y + 4) + '" fill="none" stroke="' + gold + '" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>'; } return wrap(20, s); }
+  if (ch === '∨') { let s = ''; for (let i = 0; i < n; i++) { const y = 3 + i * 5; s += '<path d="M2 ' + y + ' L10 ' + (y + 4) + ' L18 ' + y + '" fill="none" stroke="' + gold + '" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>'; } return wrap(20, s); }
   if (ch === '◆' || ch === '◈') { let s = ''; const dw = 12, gap = 2; for (let i = 0; i < n; i++) { const cx = 6 + i * (dw + gap); s += '<path d="M' + cx + ' 3 L' + (cx + 5) + ' 10 L' + cx + ' 17 L' + (cx - 5) + ' 10 Z" fill="' + (ch === '◈' ? 'none' : gold) + '" stroke="' + goldD + '" stroke-width="1.6"/>'; } return wrap(n * (dw + gap) + 2, s); }
   if (ch === '❖') { let s = ''; const fw = 16; for (let i = 0; i < n; i++) s += __flowerSvg(8 + i * fw, 10, 7); return wrap(n * fw, s); }
   if (ch === '★') { let s = ''; const sw = 15; for (let i = 0; i < n; i++) s += __starSvg(8 + i * sw, 10, 6.8); return wrap(n * sw, s); }
@@ -884,6 +900,23 @@ function rankSvg(icon, h) {
 function rankBadge(icon, h) {
   const svg = rankSvg(icon, h); if (!svg) return '';
   return '<span style="display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(#20402e,#16311f);border:1px solid #3d6b4d;padding:1px 5px;border-radius:4px;margin-right:5px;vertical-align:middle;box-shadow:0 1px 2px rgba(0,0,0,.25);">' + svg + '</span>';
+}
+// 계급 아이콘: 이미지가 있으면 이미지, 없으면 계급장 SVG
+function tierSvg(tier, h) {
+  if (tier && tier.img) return '<img src="' + tier.img + '" style="height:' + (h || 28) + 'px;border-radius:5px;vertical-align:middle;object-fit:contain;">';
+  return rankSvg(tier ? tier.icon : '', h);
+}
+function tierBadge(tier, h) {
+  if (tier && tier.img) return '<span style="display:inline-flex;align-items:center;margin-right:5px;vertical-align:middle;"><img src="' + tier.img + '" style="height:' + (h || 16) + 'px;border-radius:4px;object-fit:contain;"></span>';
+  return rankBadge(tier ? tier.icon : '', h);
+}
+// 업로드 이미지를 아이콘 크기로 축소(최대 96px) → dataURL
+function __imgToIcon(file) {
+  return new Promise(function (res, rej) {
+    const r = new FileReader();
+    r.onload = function () { const img = new Image(); img.onload = function () { const max = 96; let w = img.width, h = img.height; const sc = Math.min(1, max / Math.max(w, h)); w = Math.round(w * sc); h = Math.round(h * sc); const cv = document.createElement('canvas'); cv.width = w; cv.height = h; cv.getContext('2d').drawImage(img, 0, 0, w, h); res(cv.toDataURL('image/png')); }; img.onerror = rej; img.src = r.result; };
+    r.onerror = rej; r.readAsDataURL(file);
+  });
 }
 function renderRankCard(uid, sortedAll, matrix, courses) {
   const card = document.getElementById('rankCard_' + uid);
@@ -904,7 +937,7 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
   const hall = '<div style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#2c1a4d,#4a2c7a);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:12px;box-shadow:0 3px 10px rgba(0,0,0,.25);">'
     + '<div style="font-size:26px;">🏆</div>'
     + '<div style="flex:1;min-width:0;"><div style="font-size:11px;opacity:.8;letter-spacing:1px;">명예의 전당 · 최고 계급</div>'
-    + '<div style="font-size:18px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + (topRk.icon ? rankBadge(topRk.icon, 20) : '') + '<span>' + String(top.name).replace(/</g, '&lt;') + '</span>'
+    + '<div style="font-size:18px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + tierBadge(topRk, 20) + '<span>' + String(top.name).replace(/</g, '&lt;') + '</span>'
     + '<span style="font-size:13px;font-weight:600;opacity:.9;">' + String(topRk.name || '') + '</span></div></div>'
     + '<div style="text-align:right;"><div style="font-size:20px;font-weight:800;color:#ffd85e;">' + top.xp + '</div><div style="font-size:10px;opacity:.7;">XP</div></div></div>';
   el.innerHTML = hall + '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
@@ -923,7 +956,7 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
         const need = (next.minXp || 0) - r.xp;
         gauge = '<div style="display:flex;align-items:center;gap:6px;">'
           + '<div style="flex:1;height:9px;background:#eee;border-radius:5px;overflow:hidden;min-width:70px;"><div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#8e44ad,#c39bd3);"></div></div>'
-          + '<span style="font-size:11px;color:#888;white-space:nowrap;">' + (next.icon ? rankBadge(next.icon, 13) : '') + String(next.name || '') + ' -' + need + '</span></div>';
+          + '<span style="font-size:11px;color:#888;white-space:nowrap;">' + tierBadge(next, 13) + String(next.name || '') + ' -' + need + '</span></div>';
       }
       const nmEsc = String(r.name).replace(/'/g, "\\'").replace(/"/g, '&quot;');
       const sel = canEdit ? ('<br><select onchange="saveRankOverride(\'' + nmEsc + '\', this.value)" style="font-size:11px;margin-top:3px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;">'
@@ -933,18 +966,39 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
       return '<tr style="border-bottom:1px solid #eee;' + (i === 0 ? 'background:#faf5ff;' : '') + '">'
         + '<td style="padding:6px;">' + (i === 0 ? '⭐' : (i + 1)) + '</td>'
         + '<td style="padding:6px;font-weight:700;">' + String(r.name).replace(/</g, '&lt;') + '</td>'
-        + '<td style="padding:6px;white-space:nowrap;">' + (rk.icon ? rankBadge(rk.icon, 16) : '') + '<span style="font-weight:700;color:#6c3483;">' + String(rk.name || '').replace(/</g, '&lt;') + '</span>' + (ovName ? ' <span style="font-size:10px;color:#e67e22;">(수동)</span>' : '') + sel + '</td>'
+        + '<td style="padding:6px;white-space:nowrap;">' + tierBadge(rk, 16) + '<span style="font-weight:700;color:#6c3483;">' + String(rk.name || '').replace(/</g, '&lt;') + '</span>' + (ovName ? ' <span style="font-size:10px;color:#e67e22;">(수동)</span>' : '') + sel + '</td>'
         + '<td style="padding:6px;text-align:right;font-weight:700;color:#6c3483;">' + r.xp + '</td>'
         + '<td style="padding:6px;">' + gauge + '</td></tr>';
     }).join('') + '</table>';
 }
 function __rtRowTpl(t) {
-  t = t || { name: '', minXp: 0, icon: '' };
-  return '<div class="rtRow" style="display:flex;gap:6px;margin-bottom:6px;">'
-    + '<input class="rtIcon" value="' + String(t.icon || '').replace(/"/g, '&quot;') + '" placeholder="모양" style="width:64px;padding:7px;border:1px solid #ddd;border-radius:6px;text-align:center;">'
-    + '<input class="rtName" value="' + String(t.name || '').replace(/"/g, '&quot;') + '" placeholder="계급명" style="flex:1;padding:7px;border:1px solid #ddd;border-radius:6px;">'
-    + '<input class="rtXp" type="number" value="' + (t.minXp || 0) + '" placeholder="최소XP" style="width:80px;padding:7px;border:1px solid #ddd;border-radius:6px;">'
+  t = t || { name: '', minXp: 0, icon: '', img: '' };
+  const prev = t.img ? '<img src="' + t.img + '" style="height:24px;border-radius:4px;object-fit:contain;">' : (t.icon ? rankSvg(t.icon, 22) : '<span style="font-size:10px;color:#bbb;">없음</span>');
+  return '<div class="rtRow" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">'
+    + '<input type="hidden" class="rtImg" value="' + String(t.img || '').replace(/"/g, '&quot;') + '">'
+    + '<span class="rtPrev" style="width:34px;text-align:center;">' + prev + '</span>'
+    + '<input class="rtIcon" value="' + String(t.icon || '').replace(/"/g, '&quot;') + '" placeholder="모양" title="이미지 없을 때 계급장 글자(★❖◆∨▔ 등)" style="width:54px;padding:7px;border:1px solid #ddd;border-radius:6px;text-align:center;">'
+    + '<input class="rtName" value="' + String(t.name || '').replace(/"/g, '&quot;') + '" placeholder="계급명" style="flex:1;min-width:70px;padding:7px;border:1px solid #ddd;border-radius:6px;">'
+    + '<input class="rtXp" type="number" value="' + (t.minXp || 0) + '" placeholder="최소XP" style="width:74px;padding:7px;border:1px solid #ddd;border-radius:6px;">'
+    + '<input type="file" class="rtFile" accept="image/*" style="display:none;" onchange="__rtSetImg(this)">'
+    + '<button onclick="this.parentNode.querySelector(\'.rtFile\').click()" title="이미지 업로드" style="background:#8e44ad;color:#fff;border:none;border-radius:6px;padding:6px 8px;cursor:pointer;">🖼</button>'
+    + '<button onclick="__rtClearImg(this)" title="이미지 제거" style="background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:6px 8px;cursor:pointer;">↺</button>'
     + '<button onclick="this.parentNode.remove()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:0 10px;cursor:pointer;">✕</button></div>';
+}
+function __rtSetImg(input) {
+  const f = input.files && input.files[0]; if (!f) return;
+  __imgToIcon(f).then(function (url) {
+    const row = input.closest('.rtRow');
+    row.querySelector('.rtImg').value = url;
+    row.querySelector('.rtPrev').innerHTML = '<img src="' + url + '" style="height:24px;border-radius:4px;object-fit:contain;">';
+  }).catch(function () { alert('이미지를 불러오지 못했습니다.'); });
+  input.value = '';
+}
+function __rtClearImg(btn) {
+  const row = btn.closest('.rtRow');
+  row.querySelector('.rtImg').value = '';
+  const ic = (row.querySelector('.rtIcon').value || '').trim();
+  row.querySelector('.rtPrev').innerHTML = ic ? rankSvg(ic, 22) : '<span style="font-size:10px;color:#bbb;">없음</span>';
 }
 // 🧩 퀘스트 편집 행
 function __questRowTpl(q) {
@@ -998,7 +1052,9 @@ function saveRankTiers() {
     const xp = parseInt(r.querySelector('.rtXp').value) || 0;
     const iconEl = r.querySelector('.rtIcon');
     const icon = iconEl ? (iconEl.value || '').trim() : '';
-    if (name) tiers.push({ name: name, minXp: xp, icon: icon });
+    const imgEl = r.querySelector('.rtImg');
+    const img = imgEl ? (imgEl.value || '') : '';
+    if (name) tiers.push({ name: name, minXp: xp, icon: icon, img: img });
   });
   if (!tiers.length) { alert('계급을 하나 이상 입력하세요.'); return; }
   tiers.sort((a, b) => a.minXp - b.minXp);
