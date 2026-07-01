@@ -386,7 +386,8 @@ function render() {
       if (total === 0) continue;
       allTotal += total;
       const isUnregistered = groupBy === 'member' && !members.find(m=>m.name===name);
-      let row = `<tr><td>${name}${isUnregistered ? ' <span class="sub">(미등록)</span>' : ''}</td>`;
+      const isTop1 = sortedAll[0] && sortedAll[0][0] === name && sortedAll[0][1] > 0;
+      let row = `<tr><td>${isTop1 ? '⭐ ' : ''}${name}${isUnregistered ? ' <span class="sub">(미등록)</span>' : ''}</td>`;
       for (const c of courses) {
         const v = matrix[name]?.[c.id] || 0;
         row += `<td class="${v===0?'num-zero':v>=3?'num-high':''}">${v||''}</td>`;
@@ -437,7 +438,7 @@ function render() {
         },
         layout: { padding: { top: useHorizontal ? 4 : 24, right: useHorizontal ? 32 : 0 } }
       },
-      plugins: useHorizontal ? [] : [stackTotalsPlugin]
+      plugins: useHorizontal ? [hbarTotalsPlugin] : [stackTotalsPlugin]
     });
     __charts.push(mc);
 
@@ -501,6 +502,40 @@ const stackTotalsPlugin = {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
       ctx.fillText(total, bar.x, bar.y - 4);
+      ctx.restore();
+    });
+  }
+};
+
+// 가로 막대: 세그먼트 안 숫자 + 막대 끝에 "N회"
+const hbarTotalsPlugin = {
+  id: 'hbarTotals',
+  afterDatasetsDraw(chart) {
+    const { ctx, data } = chart;
+    if (!data.datasets.length) return;
+    data.datasets.forEach((ds, dsIdx) => {
+      const meta = chart.getDatasetMeta(dsIdx);
+      meta.data.forEach((bar, i) => {
+        const v = ds.data[i] || 0;
+        if (v === 0) return;
+        const w = Math.abs(bar.x - bar.base);
+        if (w < 16) return;
+        ctx.save();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(v, (bar.x + bar.base) / 2, bar.y);
+        ctx.restore();
+      });
+    });
+    const lastMeta = chart.getDatasetMeta(data.datasets.length - 1);
+    lastMeta.data.forEach((bar, i) => {
+      let total = 0;
+      data.datasets.forEach(ds => { total += (ds.data[i] || 0); });
+      if (total === 0) return;
+      ctx.save();
+      ctx.fillStyle = '#222'; ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(total + '회', bar.x + 5, bar.y);
       ctx.restore();
     });
   }
