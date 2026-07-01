@@ -911,7 +911,18 @@ function rankSvg(icon, h) {
   }
   if (ch === '▔') { let s = ''; const bw = 17, bh = 3, gap = 2.5; for (let i = 0; i < n; i++) { s += '<rect x="1" y="' + (17 - i * (bh + gap)) + '" width="' + bw + '" height="' + bh + '" rx="1.5" fill="' + gold + '" stroke="' + goldD + '" stroke-width="0.5"/>'; } return wrap(bw + 2, s); }
   if (ch === '∨') { let s = ''; for (let i = 0; i < n; i++) { const y = 13 - i * 5; s += '<path d="M2 ' + y + ' L10 ' + (y + 4) + ' L18 ' + y + '" fill="none" stroke="' + gold + '" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>'; } return wrap(20, s); }
-  if (ch === '◆' || ch === '◈') { let s = ''; const dw = 12, gap = 2; for (let i = 0; i < n; i++) { const cx = 6 + i * (dw + gap); s += '<path d="M' + cx + ' 3 L' + (cx + 5) + ' 10 L' + cx + ' 17 L' + (cx - 5) + ' 10 Z" fill="' + (ch === '◈' ? 'none' : gold) + '" stroke="' + goldD + '" stroke-width="1.6"/>'; } return wrap(n * (dw + gap) + 2, s); }
+  if (ch === '◈') {
+    // 준위: 금테 다이아 + 안에 작은 금 다이아 (이중 다이아)
+    let s = '';
+    for (let i = 0; i < n; i++) {
+      const cx = 7 + i * 15;
+      s += '<path d="M' + cx + ' 2 L' + (cx + 6) + ' 10 L' + cx + ' 18 L' + (cx - 6) + ' 10 Z" fill="none" stroke="' + gold + '" stroke-width="1.8" stroke-linejoin="round"/>'
+        + '<path d="M' + cx + ' 6 L' + (cx + 3) + ' 10 L' + cx + ' 14 L' + (cx - 3) + ' 10 Z" fill="' + gold + '" stroke="' + goldD + '" stroke-width="0.6"/>'
+        + '<circle cx="' + (cx - 1.2) + '" cy="8.4" r="0.8" fill="rgba(255,255,255,.85)"/>';
+    }
+    return wrap(n * 15, s);
+  }
+  if (ch === '◆') { let s = ''; const dw = 12, gap = 2; for (let i = 0; i < n; i++) { const cx = 6 + i * (dw + gap); s += '<path d="M' + cx + ' 3 L' + (cx + 5) + ' 10 L' + cx + ' 17 L' + (cx - 5) + ' 10 Z" fill="' + gold + '" stroke="' + goldD + '" stroke-width="1.6"/><circle cx="' + (cx - 1.4) + '" cy="7.6" r="0.9" fill="rgba(255,255,255,.8)"/>'; } return wrap(n * (dw + gap) + 2, s); }
   if (ch === '❖') { let s = ''; const fw = 16; for (let i = 0; i < n; i++) s += __flowerSvg(8 + i * fw, 10, 7); return wrap(n * fw, s); }
   if (ch === '★') { let s = ''; const sw = 16; for (let i = 0; i < n; i++) s += __starSvg(8.5 + i * sw, 10, 7.4); return wrap(n * sw + 2, s); }
   return '<span style="color:#e6c15a;">' + icon.replace(/</g, '&lt;') + '</span>';
@@ -1030,7 +1041,8 @@ function rankSvgStandalone(icon, h) {
   }
   if (ch === '▔') { let s = ''; const bw = 17, bh = 3, gap = 2.5; for (let i = 0; i < n; i++) s += '<rect x="1" y="' + (17 - i * (bh + gap)) + '" width="' + bw + '" height="' + bh + '" rx="1.5" fill="' + gold + '" stroke="' + goldD + '" stroke-width="0.5"/>'; return wrap(bw + 2, s); }
   if (ch === '∨') { let s = ''; for (let i = 0; i < n; i++) { const y = 13 - i * 5; s += '<path d="M2 ' + y + ' L10 ' + (y + 4) + ' L18 ' + y + '" fill="none" stroke="' + gold + '" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>'; } return wrap(20, s); }
-  if (ch === '◆' || ch === '◈') { let s = ''; const dw = 12, gap = 2; for (let i = 0; i < n; i++) { const cx = 6 + i * (dw + gap); s += '<path d="M' + cx + ' 3 L' + (cx + 5) + ' 10 L' + cx + ' 17 L' + (cx - 5) + ' 10 Z" fill="' + (ch === '◈' ? 'none' : gold) + '" stroke="' + goldD + '" stroke-width="1.6"/>'; } return wrap(n * (dw + gap) + 2, s); }
+  if (ch === '◈') { let s = ''; for (let i = 0; i < n; i++) { const cx = 7 + i * 15; s += '<path d="M' + cx + ' 2 L' + (cx + 6) + ' 10 L' + cx + ' 18 L' + (cx - 6) + ' 10 Z" fill="none" stroke="' + gold + '" stroke-width="1.8" stroke-linejoin="round"/><path d="M' + cx + ' 6 L' + (cx + 3) + ' 10 L' + cx + ' 14 L' + (cx - 3) + ' 10 Z" fill="' + gold + '" stroke="' + goldD + '" stroke-width="0.6"/><circle cx="' + (cx - 1.2) + '" cy="8.4" r="0.8" fill="rgba(255,255,255,.85)"/>'; } return wrap(n * 15, s); }
+  if (ch === '◆') { let s = ''; const dw = 12, gap = 2; for (let i = 0; i < n; i++) { const cx = 6 + i * (dw + gap); s += '<path d="M' + cx + ' 3 L' + (cx + 5) + ' 10 L' + cx + ' 17 L' + (cx - 5) + ' 10 Z" fill="' + gold + '" stroke="' + goldD + '" stroke-width="1.6"/><circle cx="' + (cx - 1.4) + '" cy="7.6" r="0.9" fill="rgba(255,255,255,.8)"/>'; } return wrap(n * (dw + gap) + 2, s); }
   if (ch === '❖') { let s = ''; const fw = 16; for (let i = 0; i < n; i++) { const cx = 8 + i * fw; for (let j = 0; j < 5; j++) { const a = -Math.PI / 2 + j * 2 * Math.PI / 5; const px = cx + (7 * 0.55) * Math.cos(a), py = 10 + (7 * 0.55) * Math.sin(a); s += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + (7 * 0.52).toFixed(1) + '" fill="' + star + '" stroke="#6e4900" stroke-width="0.5"/>'; } s += '<circle cx="' + cx + '" cy="10" r="' + (7 * 0.4).toFixed(1) + '" fill="#8a1f16"/>'; } return wrap(n * fw, s); }
   if (ch === '★') { let s = ''; const sw = 16; for (let i = 0; i < n; i++) s += starSolid(8.5 + i * sw, 10, 7.4); return wrap(n * sw + 2, s); }
   return '';
