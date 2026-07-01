@@ -683,26 +683,26 @@ function computeXpForName(name) {
   });
   return { xp: xp, total: total };
 }
-// 🏆 명예의 전당 1위 (전체 공개, 맨 위 얇은 배너)
+// 🏆 명예의 전당 1위 (전체 공개, 맨 위) — 선택한 기간의 방역 횟수 1위
 function renderHallOfFameTop() {
   const el = document.getElementById('hofTop');
   if (!el) return;
   const data = loadData();
   const tiers = getRankTiers();
-  const names = new Set();
-  (data.logs || []).forEach(l => {
-    if (!l || !l.finishedAt) return;
-    if (l.crew && l.crew.driver) names.add(l.crew.driver.trim());
-    if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.add(n));
+  // 맨 위 명예의 전당은 기간 필터를 그대로 따라 횟수 집계
+  const logs = getFilteredLogs();
+  const counts = {};
+  logs.forEach(l => {
+    const keys = [];
+    if (l.crew && l.crew.driver) keys.push(l.crew.driver.trim());
+    if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
+    keys.forEach(n => { if (n) counts[n] = (counts[n] || 0) + 1; });
   });
   let best = null;
-  names.forEach(nm => {
-    if (!nm) return;
-    const r = computeXpForName(nm);
-    // 명예의 전당(맨 위)은 방역 횟수 기준(동점이면 XP)
-    if (r.total > 0 && (!best || r.total > best.total || (r.total === best.total && r.xp > best.xp))) best = { name: nm, xp: r.xp, total: r.total };
-  });
+  Object.keys(counts).forEach(nm => { if (counts[nm] > 0 && (!best || counts[nm] > best.total)) best = { name: nm, total: counts[nm] }; });
   if (!best) { el.innerHTML = ''; return; }
+  // 계급 뱃지는 년도 누적 기준
+  best.xp = computeXpForName(best.name).xp;
   let ri = 0; for (let i = 0; i < tiers.length; i++) { if (best.xp >= (tiers[i].minXp || 0)) ri = i; }
   const ov = (data.rankOverride || {})[best.name];
   if (ov != null) { const oi = tiers.findIndex(t => t.name === ov); if (oi >= 0) ri = oi; }
