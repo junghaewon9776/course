@@ -244,7 +244,12 @@
         let y = 0; for (const c of cvs) { ctx.drawImage(c, 0, y); y += c.height + 10; }
         dataUrl = out.toDataURL('image/png');
       } else {
-        dataUrl = (await html2canvas(pc, { scale: 2, backgroundColor: '#ffffff', useCORS: true })).toDataURL('image/png');
+        const wrap = document.querySelector('.print-wrap');
+        const capW = document.body.classList.contains('orient-landscape') ? 1123 : 794;
+        const savedW = wrap ? wrap.style.width : '';
+        if (wrap) wrap.style.width = capW + 'px';
+        dataUrl = (await html2canvas(pc, { scale: 3, backgroundColor: '#ffffff', useCORS: true, windowWidth: capW })).toDataURL('image/png');
+        if (wrap) wrap.style.width = savedW;
       }
       await __save(__fname('png'), dataUrl);
     } catch (e) { alert('PNG 저장 실패: ' + e.message); }
@@ -282,7 +287,12 @@
             pdf.addImage(cv.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, ph);
           }
         } else {
-          const cv = await html2canvas(document.getElementById('printContent'), { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+          const wrap = document.querySelector('.print-wrap');
+          const capW = land ? 1123 : 794;
+          const savedW = wrap ? wrap.style.width : '';
+          if (wrap) wrap.style.width = capW + 'px';
+          const cv = await html2canvas(document.getElementById('printContent'), { scale: 3, backgroundColor: '#ffffff', useCORS: true, windowWidth: capW });
+          if (wrap) wrap.style.width = savedW;
           const img = cv.toDataURL('image/jpeg', 0.92);
           const ih = cv.height * pw / cv.width;
           let left = ih, y = 0;
