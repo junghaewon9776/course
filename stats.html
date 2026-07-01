@@ -86,6 +86,7 @@
     <span style="font-size:11px;color:#888;margin-left:8px;">💰 단가는 행사별로 설정</span>
   </div>
 
+  <div id="hofTop"></div>
   <div id="myRankCard"></div>
   <div id="statsContainer"></div>
 </div>
@@ -261,6 +262,7 @@ const GROUP_LABELS = {
 function render() {
   renderEventFilterOptions();
   renderYearOptions();
+  try { renderHallOfFameTop(); } catch (e) {}
   try { renderMyRankCard(); } catch (e) {}
   const data = loadData();
   const allLogs = getFilteredLogs();
@@ -642,6 +644,38 @@ function saveRankOverride(name, val) {
   saveData(data);
   render();
 }
+// 🏆 명예의 전당 1위 (전체 공개, 맨 위 얇은 배너)
+function renderHallOfFameTop() {
+  const el = document.getElementById('hofTop');
+  if (!el) return;
+  const data = loadData();
+  const tiers = getRankTiers();
+  const names = new Set();
+  (data.logs || []).forEach(l => {
+    if (!l || !l.finishedAt) return;
+    if (l.crew && l.crew.driver) names.add(l.crew.driver.trim());
+    if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.add(n));
+  });
+  let best = null;
+  names.forEach(nm => {
+    if (!nm) return;
+    let xp = 0, total = 0;
+    (data.events || []).forEach(ev => { if (!isEventVisibleForViewer(ev.id, data)) return; const s = cmMemberEventStat(data, ev, nm); xp += s.xp; total += s.total; });
+    if (total > 0 && (!best || xp > best.xp)) best = { name: nm, xp: xp, total: total };
+  });
+  if (!best) { el.innerHTML = ''; return; }
+  let ri = 0; for (let i = 0; i < tiers.length; i++) { if (best.xp >= (tiers[i].minXp || 0)) ri = i; }
+  const ov = (data.rankOverride || {})[best.name];
+  if (ov != null) { const oi = tiers.findIndex(t => t.name === ov); if (oi >= 0) ri = oi; }
+  const rk = tiers[ri];
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#4a2c7a,#8e44ad);color:#fff;border-radius:10px;padding:7px 12px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.2);">'
+    + '<span style="font-size:18px;">🏆</span>'
+    + '<span style="font-size:12px;opacity:.85;white-space:nowrap;">명예의 전당 1위</span>'
+    + (rk.icon ? rankBadge(rk.icon, 15) : '')
+    + '<span style="font-weight:800;font-size:15px;">' + String(best.name).replace(/</g, '&lt;') + '</span>'
+    + '<span style="font-size:12px;opacity:.9;">' + String(rk.name || '') + '</span>'
+    + '<span style="margin-left:auto;font-weight:800;color:#ffd85e;white-space:nowrap;">' + best.xp + ' XP</span></div>';
+}
 // 🎖 내 계급 카드 (모든 사용자, 본인 것만) — 보이는 행사 전체 합산
 function renderMyRankCard() {
   const el = document.getElementById('myRankCard');
@@ -661,24 +695,24 @@ function renderMyRankCard() {
   const ov = (data.rankOverride || {})[myName];
   if (ov != null) { const oi = tiers.findIndex(t => t.name === ov); if (oi >= 0) ri = oi; }
   const rk = tiers[ri], next = tiers[ri + 1];
-  let gaugeHtml = '<div style="margin-top:8px;font-weight:700;color:#ffd85e;">👑 최고 계급 달성!</div>';
+  let gaugeHtml = '<span style="font-size:11px;font-weight:700;color:#ffd85e;white-space:nowrap;">👑 최고 계급</span>';
   if (next) {
     const base = rk.minXp || 0, span = (next.minXp || 0) - base;
     const cur = xp - base, need = (next.minXp || 0) - xp;
     const pct = span > 0 ? Math.max(4, Math.min(100, Math.round(cur / span * 100))) : 0;
-    gaugeHtml = '<div style="margin-top:10px;">'
-      + '<div style="display:flex;justify-content:space-between;font-size:12px;opacity:.9;margin-bottom:4px;">'
-      + '<span>현재 ' + cur + ' XP</span><span>다음 ' + (next.icon ? rankBadge(next.icon, 14) : '') + String(next.name || '') + '까지 <b>' + need + '</b> XP</span></div>'
-      + '<div style="height:14px;background:rgba(255,255,255,.18);border-radius:8px;overflow:hidden;">'
+    gaugeHtml = '<div style="flex:1;min-width:120px;">'
+      + '<div style="display:flex;justify-content:space-between;font-size:10px;opacity:.9;margin-bottom:2px;">'
+      + '<span>' + cur + ' XP</span><span>' + String(next.name || '') + '까지 <b>' + need + '</b></span></div>'
+      + '<div style="height:9px;background:rgba(255,255,255,.18);border-radius:5px;overflow:hidden;">'
       + '<div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#ffd85e,#ffb400);"></div></div></div>';
   }
-  el.innerHTML = '<div class="card" style="background:linear-gradient(135deg,#2c1a4d,#4a2c7a);color:#fff;border-left:4px solid #ffd85e;">'
-    + '<div style="display:flex;align-items:center;gap:14px;">'
-    + '<div style="flex:none;background:linear-gradient(#20402e,#16311f);border:1px solid #3d6b4d;border-radius:8px;padding:6px 10px;">' + (rk.icon ? rankSvg(rk.icon, 34) : '') + '</div>'
-    + '<div style="flex:1;min-width:0;"><div style="font-size:12px;opacity:.85;">🎖 내 계급 · ' + String(myName).replace(/</g, '&lt;') + '</div>'
-    + '<div style="font-size:22px;font-weight:800;">' + String(rk.name || '') + '</div>'
-    + '<div style="font-size:12px;opacity:.8;">누적 ' + total + '회 · 총 ' + xp + ' XP</div></div></div>'
-    + gaugeHtml + '</div>';
+  el.innerHTML = '<div class="card" style="background:linear-gradient(135deg,#2c1a4d,#4a2c7a);color:#fff;border-left:4px solid #ffd85e;padding:8px 12px;margin-bottom:8px;">'
+    + '<div style="display:flex;align-items:center;gap:10px;">'
+    + '<div style="flex:none;background:linear-gradient(#20402e,#16311f);border:1px solid #3d6b4d;border-radius:6px;padding:3px 7px;">' + (rk.icon ? rankSvg(rk.icon, 24) : '') + '</div>'
+    + '<div style="flex:none;"><div style="font-size:10px;opacity:.8;">🎖 내 계급 · ' + String(myName).replace(/</g, '&lt;') + '</div>'
+    + '<div style="font-size:16px;font-weight:800;line-height:1.1;">' + String(rk.name || '') + '</div>'
+    + '<div style="font-size:10px;opacity:.75;">누적 ' + total + '회 · ' + xp + ' XP</div></div>'
+    + gaugeHtml + '</div></div>';
 }
 /* ===== 군대식 계급장 SVG (병사=작대기, 부사관=갈매기, 위관=다이아, 영관=무궁화, 장성=별) ===== */
 function __starPts(cx, cy, r) { let p = ''; for (let i = 0; i < 10; i++) { const rr = i % 2 ? r * 0.42 : r; const a = -Math.PI / 2 + i * Math.PI / 5; p += (cx + rr * Math.cos(a)).toFixed(1) + ',' + (cy + rr * Math.sin(a)).toFixed(1) + ' '; } return p; }
