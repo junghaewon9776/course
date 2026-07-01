@@ -423,9 +423,10 @@ function render() {
       options: {
         indexAxis: useHorizontal ? 'y' : 'x',
         responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false, axis: useHorizontal ? 'y' : 'x' },
         plugins: {
           legend: { display: true, position: 'bottom', labels: { font: { size: 10 } } },
-          tooltip: { mode: 'index', intersect: false }
+          tooltip: { mode: 'index', intersect: false, axis: useHorizontal ? 'y' : 'x' }
         },
         scales: useHorizontal ? {
           x: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
