@@ -41,6 +41,8 @@
     <div class="flex-between" style="flex-wrap:wrap;gap:8px;">
       <h2>필터</h2>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+        <label style="display:inline;font-size:12px;">년도:</label>
+        <select id="yearFilter" onchange="render()" style="width:auto;display:inline-block;"></select>
         <label style="display:inline;font-size:12px;">행사:</label>
         <select id="eventFilter" onchange="render()" style="width:auto;display:inline-block;">
           <option value="">전체</option>
@@ -116,6 +118,19 @@ function renderEventFilterOptions() {
   sel.innerHTML = '<option value="">전체</option>' +
     visible.map(e => `<option value="${e.id}"${cur===e.id?' selected':''}>${e.name}</option>`).join('');
 }
+function renderYearOptions() {
+  const sel = document.getElementById('yearFilter');
+  if (!sel) return;
+  const data = loadData();
+  const years = new Set();
+  (data.logs || []).forEach(l => { if (l && l.startedAt) years.add(new Date(l.startedAt).getFullYear()); });
+  const curYear = new Date().getFullYear();
+  years.add(curYear);
+  const sorted = Array.from(years).sort((a, b) => b - a);
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">전체 년도</option>' + sorted.map(y => '<option value="' + y + '">' + y + '년</option>').join('');
+  sel.value = prev || String(curYear);
+}
 
 let __showDetail = false;
 function toggleDetail() {
@@ -187,12 +202,14 @@ function getFilteredLogs() {
     if (e) to = new Date(e + 'T23:59:59').getTime();
   }
   const eventFilter = document.getElementById('eventFilter')?.value || '';
+  const yearFilter = document.getElementById('yearFilter')?.value || '';
   return (data.logs || []).filter(l => {
     if (l.hidden) return false;
     const t = l.startedAt || 0;
     if (t < from || t > to) return false;
     if (!l.finishedAt) return false;
     if (eventFilter && l.eventId !== eventFilter) return false;
+    if (yearFilter && String(new Date(t).getFullYear()) !== yearFilter) return false;
     if (!isEventVisibleForViewer(l.eventId, data)) return false;
     return true;
   });
@@ -229,6 +246,7 @@ const GROUP_LABELS = {
 
 function render() {
   renderEventFilterOptions();
+  renderYearOptions();
   const data = loadData();
   const allLogs = getFilteredLogs();
   const members = data.members || [];
@@ -552,10 +570,13 @@ const hbarTotalsPlugin = {
 
 // ── 🎖 계급 / 경험치 (SUPER 전용) ──
 const DEFAULT_RANK_TIERS = [
-  { name: '이등병', minXp: 0 }, { name: '일병', minXp: 100 }, { name: '상병', minXp: 300 },
-  { name: '병장', minXp: 600 }, { name: '하사', minXp: 1000 }, { name: '중사', minXp: 1500 },
-  { name: '상사', minXp: 2200 }, { name: '원사', minXp: 3000 }, { name: '소위', minXp: 4000 },
-  { name: '중위', minXp: 5500 }, { name: '대위', minXp: 7500 }, { name: '소령', minXp: 10000 }
+  { name: '이등병', minXp: 0 }, { name: '일병', minXp: 100 }, { name: '상병', minXp: 250 },
+  { name: '병장', minXp: 450 }, { name: '하사', minXp: 700 }, { name: '중사', minXp: 1000 },
+  { name: '상사', minXp: 1400 }, { name: '원사', minXp: 1900 }, { name: '준위', minXp: 2500 },
+  { name: '소위', minXp: 3200 }, { name: '중위', minXp: 4000 }, { name: '대위', minXp: 5000 },
+  { name: '소령', minXp: 6200 }, { name: '중령', minXp: 7600 }, { name: '대령', minXp: 9200 },
+  { name: '준장 ★', minXp: 11000 }, { name: '소장 ★★', minXp: 13000 }, { name: '중장 ★★★', minXp: 15500 },
+  { name: '대장 ★★★★', minXp: 18500 }, { name: '부원수 ★★★★★', minXp: 22000 }, { name: '원수 ★★★★★★', minXp: 26000 }
 ];
 function getRankTiers() {
   const d = loadData();
