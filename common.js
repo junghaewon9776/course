@@ -935,7 +935,7 @@ function checkPromotionForLog(logEntry) {
           const rk = st.rank || {};
           const title = '🎖 진급을 축하합니다!';
           const body = name + '님이 ' + (rk.name || '') + ' 계급으로 진급했습니다! (' + st.xp + ' XP)';
-          if (uid) sendAppPush(title, body, 'member', null, uid);   // 본인에게
+          if (uid) sendAppPush(title, body, 'all', null, uid);   // 본인에게(uid로 좁힘)
           sendAppPush('🎖 진급 소식', name + '님 → ' + (rk.name || '') + ' 진급!', 'all', null, '');  // 전체 축하
         }
       }).catch(() => {});
