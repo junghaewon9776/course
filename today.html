@@ -115,7 +115,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260701e"></script>
+<script src="common.js?v=20260701f"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1168,14 +1168,16 @@ async function onPhotoSelected(e, type) {
       teamId: currentSession.teamId,
       lat: currentPos?.lat ?? null,
       lng: currentPos?.lng ?? null,
-      note: currentSession.crew?.driver || ''
+      note: currentSession.crew?.driver || '',
+      driver: currentSession.crew?.driver || '',
+      assist: currentSession.crew?.assist || ''   // 조원(보조)도 같이 점수
     };
     const result = await uploadFieldPhoto(file, meta);
     if (!currentSession.photos) currentSession.photos = [];
     currentSession.photos.push(result.photoId);
     saveSession();
     renderPhotoStrip();
-    try { if (typeof checkPromotionForName === 'function' && result.uploader) checkPromotionForName(result.uploader); } catch (e) {}
+    try { const __cn = (result.crewNames && result.crewNames.length) ? result.crewNames : (result.uploader ? [result.uploader] : []); if (typeof checkPromotionForNames === 'function' && __cn.length) checkPromotionForNames(__cn); } catch (e) {}
     document.getElementById('gpsStatus').textContent = `✅ ${typeLabel} 업로드 완료`;
     if (navigator.vibrate) navigator.vibrate(80);
   } catch (err) {

@@ -154,6 +154,10 @@ async function uploadFieldPhoto(file, meta) {
     __uploader = (__mem && __mem.name) || ((__d.users || {})[__u && __u.uid] || {}).name || '';
   } catch (e) {}
   if (!__uploader) __uploader = meta?.note || '';   // 코스 사진은 운전자명 fallback
+  // 조원(운전+보조) 이름 — 사진 점수는 조 두 명 모두에게
+  var __crewNames = [];
+  if (meta && meta.driver) __crewNames.push(String(meta.driver).trim());
+  if (meta && meta.assist) String(meta.assist).split(',').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (n) { __crewNames.push(n); });
   var payload = {
     type: meta?.type || 'field',
     takenAt: Date.now(),
@@ -165,7 +169,8 @@ async function uploadFieldPhoto(file, meta) {
     lng: meta?.lng ?? null,
     note: meta?.note || '',
     uploader: __uploader,
-    uploaderUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || ''
+    uploaderUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || '',
+    crewNames: __crewNames
   };
 
   // GAS 웹앱으로 전송 → Drive에 저장 (비공개) → fileId 반환
@@ -950,7 +955,7 @@ function cmTotalXp(data, name) {
   });
   function inqCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; if ((q.writer || '').trim() === name) n++; }); return n; }
   function cmtCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; (q.comments || []).forEach(c => { if (c && (c.writer || '').trim() === name) n++; }); }); return n; }
-  function photoCnt(pt) { let n = 0; const ph = data.photos || {}; Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; if ((p.uploader || '').trim() === name) n++; }); return n; }
+  function photoCnt(pt) { let n = 0; const ph = data.photos || {}; Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; const nm = (p.crewNames && p.crewNames.length) ? p.crewNames : [p.uploader]; if (nm.map(function (x) { return (x || '').trim(); }).indexOf(name) >= 0) n++; }); return n; }
   // 월별/년도 1등 계산 (방역 최다)
   function vaxBy(ls) { const m = {}; ls.forEach(l => { if (!l || !l.finishedAt) return; const ks = []; if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim()); if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => ks.push(n)); ks.forEach(n => { if (n) m[n] = (m[n] || 0) + 1; }); }); return m; }
   const allLogs = (data.logs || []).filter(l => l && l.finishedAt);
