@@ -644,10 +644,24 @@ function saveRankOverride(name, val) {
   saveData(data);
   render();
 }
-// 필터(년도/기간/행사)를 반영해 특정 이름의 총 XP·횟수 계산 — 통계표와 동일
+// 계급용 로그: 년도·행사·숨김만 반영(기간 필터는 무시 — 계급은 누적 성취)
+function rankLogs() {
+  const data = loadData();
+  const eventFilter = document.getElementById('eventFilter')?.value || '';
+  const yearFilter = document.getElementById('yearFilter')?.value || '';
+  return (data.logs || []).filter(l => {
+    if (!l || l.hidden || !l.finishedAt) return false;
+    if (eventFilter && l.eventId !== eventFilter) return false;
+    const t = l.startedAt || l.finishedAt || 0;
+    if (yearFilter && String(new Date(t).getFullYear()) !== yearFilter) return false;
+    if (!isEventVisibleForViewer(l.eventId, data)) return false;
+    return true;
+  });
+}
+// 특정 이름의 총 XP·횟수 계산 — 년도 누적(기간 필터 무시)
 function computeXpForName(name) {
   const data = loadData();
-  const logs = getFilteredLogs();
+  const logs = rankLogs();
   const cfg = getXpConfig();
   let xp = 0, total = 0;
   (data.events || []).forEach(ev => {
