@@ -912,20 +912,55 @@ function cmMemberEventStat(data, event, name) {
   return { total: total, sets: sets, xp: xp, rankIndex: ri, rank: tiers[ri] };
 }
 function cmRankKey(s) { return String(s || '').replace(/[.#$/\[\]]/g, '_'); }
-// 로그 저장 직후 호출 → 참여자들 진급 여부 확인하고 푸시
-function checkPromotionForLog(logEntry) {
+// 퀘스트 목록 (stats.html과 동일 규칙, 없으면 방역/세트 기본)
+function cmGetQuests(data) {
+  if (Array.isArray(data.quests) && data.quests.length) return data.quests;
+  const c = cmXpCfg(data);
+  return [{ trigger: 'vax', category: '', xp: c.perVax }, { trigger: 'set', category: '', xp: c.setBonus }];
+}
+// 특정 사람의 총 XP(퀘스트 합산, 전체 누적) → 계급 인덱스
+function cmTotalXp(data, name) {
+  let vaxTotal = 0, setTotal = 0;
+  (data.events || []).forEach(ev => {
+    const courses = ev.courses || [];
+    const idx = {}; courses.forEach((c, i) => idx[c.id] = i);
+    const counts = courses.map(() => 0);
+    (data.logs || []).forEach(l => {
+      if (!l || l.eventId !== ev.id || !l.finishedAt) return;
+      const keys = [];
+      if (l.crew && l.crew.driver) keys.push(l.crew.driver.trim());
+      if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
+      if (keys.indexOf(name) < 0) return;
+      if (idx[l.courseId] != null) counts[idx[l.courseId]]++;
+    });
+    vaxTotal += counts.reduce((s, v) => s + v, 0);
+    setTotal += counts.length ? Math.min.apply(null, counts) : 0;
+  });
+  function inqCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; if ((q.writer || '').trim() === name) n++; }); return n; }
+  function cmtCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; (q.comments || []).forEach(c => { if (c && (c.writer || '').trim() === name) n++; }); }); return n; }
+  let xp = 0;
+  cmGetQuests(data).forEach(qt => {
+    const per = Number(qt.xp) || 0; if (!per) return;
+    let cnt = 0;
+    if (qt.trigger === 'vax') cnt = vaxTotal;
+    else if (qt.trigger === 'set') cnt = setTotal;
+    else if (qt.trigger === 'inquiry') cnt = inqCount(qt.category || '');
+    else if (qt.trigger === 'comment') cnt = cmtCount(qt.category || '');
+    xp += cnt * per;
+  });
+  const tiers = cmRankTiers(data);
+  let ri = 0; for (let i = 0; i < tiers.length; i++) { if (xp >= (tiers[i].minXp || 0)) ri = i; }
+  return { xp: xp, rankIndex: ri, rank: tiers[ri] };
+}
+// 로그/민원 저장 직후 호출 → 참여자 진급 여부 확인하고 푸시 (이름 배열)
+function checkPromotionForNames(names) {
   try {
-    if (typeof fbDb === 'undefined' || !logEntry || !logEntry.eventId) return;
+    if (typeof fbDb === 'undefined' || !names || !names.length) return;
     const data = loadData();
-    const event = getEvent(data, logEntry.eventId);
-    if (!event) return;
-    const names = [];
-    if (logEntry.crew && logEntry.crew.driver) names.push(logEntry.crew.driver.trim());
-    if (logEntry.crew && logEntry.crew.assist) logEntry.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.push(n));
     const users = data.users || {};
     names.filter((n, i) => n && names.indexOf(n) === i).forEach(name => {
-      const st = cmMemberEventStat(data, event, name);
-      const path = '/rankState/' + cmRankKey(event.id) + '/' + cmRankKey(name);
+      const st = cmTotalXp(data, name);
+      const path = '/rankState/' + cmRankKey(name);
       fbDb.ref(path).once('value').then(snap => {
         const prev = snap.val();
         if (prev == null) { fbDb.ref(path).set(st.rankIndex); return; }   // 최초 기록은 기준만 저장(푸시 X)
@@ -942,6 +977,16 @@ function checkPromotionForLog(logEntry) {
     });
   } catch (e) { console.warn('진급 확인 오류', e); }
 }
+// 코스완료 로그 → 참여자 진급 확인
+function checkPromotionForLog(logEntry) {
+  if (!logEntry) return;
+  const names = [];
+  if (logEntry.crew && logEntry.crew.driver) names.push(logEntry.crew.driver.trim());
+  if (logEntry.crew && logEntry.crew.assist) logEntry.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.push(n));
+  checkPromotionForNames(names);
+}
+// 민원/댓글 작성자 → 진급 확인 (이름 하나)
+function checkPromotionForName(name) { if (name) checkPromotionForNames([String(name).trim()]); }
 
 // ───────── 🔄 인앱 업데이트 (앱 켤 때 새 버전 있으면 물어봄) ─────────
 function checkInAppUpdate() {

@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260701b"></script>
+<script src="common.js?v=20260701c"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -605,6 +605,34 @@ function getXpConfig() {
   const c = d.xpConfig || {};
   return { perVax: (c.perVax != null ? c.perVax : 10), setBonus: (c.setBonus != null ? c.setBonus : 100) };
 }
+// 🧩 퀘스트: SUPER가 설정에서 만드는 XP 획득 규칙. 없으면 기존 방역/세트 XP로 기본 생성
+function getQuests() {
+  const d = loadData();
+  if (Array.isArray(d.quests) && d.quests.length) return d.quests;
+  const xpc = getXpConfig();
+  return [
+    { id: 'q_vax', label: '방역 완료', trigger: 'vax', category: '', xp: xpc.perVax },
+    { id: 'q_set', label: '골고루 세트', trigger: 'set', category: '', xp: xpc.setBonus }
+  ];
+}
+// 민원게시판 분류 목록 (퀘스트 대상 선택용)
+function getInquiryCategories() {
+  const d = loadData();
+  const cats = (Array.isArray(d.inquiryCategories) && d.inquiryCategories.length) ? d.inquiryCategories : [
+    { id: 'resident', name: '주민민원' }, { id: 'anchorReq', name: '거점추가요청' }, { id: 'noSprayReq', name: '방역금지요청' }
+  ];
+  return cats.map(c => ({ id: c.id, name: c.name || c.id }));
+}
+const QUEST_TRIGGERS = [
+  { v: 'vax', t: '방역 완료(1회)' },
+  { v: 'set', t: '골고루 세트' },
+  { v: 'inquiry', t: '민원/요청 글 작성' },
+  { v: 'comment', t: '민원/요청 댓글' }
+];
+function questTriggerLabel(v) { const f = QUEST_TRIGGERS.find(x => x.v === v); return f ? f.t : v; }
+// 현재 년도 필터 값('' = 전체)
+function __yearSel() { return document.getElementById('yearFilter')?.value || ''; }
+function __inYear(ts) { const y = __yearSel(); if (!y) return true; return String(new Date(ts || 0).getFullYear()) === y; }
 function computeMemberXp(matrix, name, courses) {
   const cfg = getXpConfig();
   const counts = courses.map(c => (matrix[name] && matrix[name][c.id]) || 0);
@@ -614,9 +642,8 @@ function computeMemberXp(matrix, name, courses) {
 }
 function rankForXp(xp, tiers) { let r = tiers[0]; for (const t of tiers) { if (xp >= (t.minXp || 0)) r = t; } return r; }
 function memberRank(matrix, name, courses) {
-  const info = computeMemberXp(matrix, name, courses);
   const tiers = getRankTiers();
-  let rk = rankForXp(info.xp, tiers);
+  let rk = rankForXp(computeXpForName(name).xp, tiers);   // 퀘스트 XP 기준
   const ov = (loadData().rankOverride || {})[name];
   if (ov != null) { const t = tiers.find(t => t.name === ov); if (t) rk = t; }
   return rk;
@@ -657,12 +684,13 @@ function rankLogs() {
     return true;
   });
 }
-// 특정 이름의 총 XP·횟수 계산 — 년도 누적(기간 필터 무시)
+// 특정 이름의 총 XP·방역횟수 계산 — 퀘스트 규칙 합산(년도 누적, 기간 필터 무시)
 function computeXpForName(name) {
   const data = loadData();
   const logs = rankLogs();
-  const cfg = getXpConfig();
-  let xp = 0, total = 0;
+  const quests = getQuests();
+  // 방역/세트 카운트를 행사별로 미리 계산
+  let vaxTotal = 0, setTotal = 0;
   (data.events || []).forEach(ev => {
     if (!isEventVisibleForViewer(ev.id, data)) return;
     const courses = ev.courses || [];
@@ -676,11 +704,38 @@ function computeXpForName(name) {
       if (keys.indexOf(name) < 0) return;
       if (idx[l.courseId] != null) counts[idx[l.courseId]]++;
     });
-    const t = counts.reduce((s, v) => s + v, 0);
-    const sets = counts.length ? Math.min.apply(null, counts) : 0;
-    xp += t * cfg.perVax + sets * cfg.setBonus; total += t;
+    vaxTotal += counts.reduce((s, v) => s + v, 0);
+    setTotal += counts.length ? Math.min.apply(null, counts) : 0;
   });
-  return { xp: xp, total: total };
+  // 민원/댓글 카운트 (작성자 이름 매칭, 년도 필터)
+  function inquiryCount(catId) {
+    let n = 0;
+    (data.inquiries || []).forEach(q => {
+      if (!q) return;
+      if (catId && q.category !== catId) return;
+      if ((q.writer || '').trim() === name && __inYear(q.createdAt)) n++;
+    });
+    return n;
+  }
+  function commentCount(catId) {
+    let n = 0;
+    (data.inquiries || []).forEach(q => {
+      if (!q || (catId && q.category !== catId)) return;
+      (q.comments || []).forEach(c => { if (c && (c.writer || '').trim() === name && __inYear(c.at || c.createdAt || q.createdAt)) n++; });
+    });
+    return n;
+  }
+  let xp = 0;
+  quests.forEach(qt => {
+    const per = Number(qt.xp) || 0; if (!per) return;
+    let cnt = 0;
+    if (qt.trigger === 'vax') cnt = vaxTotal;
+    else if (qt.trigger === 'set') cnt = setTotal;
+    else if (qt.trigger === 'inquiry') cnt = inquiryCount(qt.category || '');
+    else if (qt.trigger === 'comment') cnt = commentCount(qt.category || '');
+    xp += cnt * per;
+  });
+  return { xp: xp, total: vaxTotal };
 }
 // 🏆 명예의 전당 1위 (전체 공개, 맨 위) — 선택한 기간의 방역 횟수 1위
 function renderHallOfFameTop() {
@@ -789,8 +844,8 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
   const editBtn = document.getElementById('rankEditBtn_' + uid);
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';   // 편집 버튼은 super만
   const tiers = getRankTiers();
-  const rows = sortedAll.map(x => Object.assign({ name: x[0] }, computeMemberXp(matrix, x[0], courses)))
-    .filter(x => x.total > 0).sort((a, b) => b.xp - a.xp);
+  const rows = sortedAll.map(x => { const r = computeXpForName(x[0]); return { name: x[0], xp: r.xp, total: r.total }; })
+    .filter(x => x.total > 0 || x.xp > 0).sort((a, b) => b.xp - a.xp);
   if (!rows.length) { el.innerHTML = '<div class="empty">기록 없음</div>'; return; }
   // 🏆 명예의 전당 — 최고 XP 1명
   const top = rows[0];
@@ -840,6 +895,20 @@ function __rtRowTpl(t) {
     + '<input class="rtXp" type="number" value="' + (t.minXp || 0) + '" placeholder="최소XP" style="width:80px;padding:7px;border:1px solid #ddd;border-radius:6px;">'
     + '<button onclick="this.parentNode.remove()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:0 10px;cursor:pointer;">✕</button></div>';
 }
+// 🧩 퀘스트 편집 행
+function __questRowTpl(q) {
+  q = q || { label: '', trigger: 'inquiry', category: '', xp: 0 };
+  const trigOpts = QUEST_TRIGGERS.map(o => '<option value="' + o.v + '"' + (q.trigger === o.v ? ' selected' : '') + '>' + o.t + '</option>').join('');
+  const catOpts = '<option value="">전체분류</option>' + getInquiryCategories().map(c => '<option value="' + c.id + '"' + (q.category === c.id ? ' selected' : '') + '>' + String(c.name).replace(/</g, '&lt;') + '</option>').join('');
+  return '<div class="qRow" style="display:flex;gap:5px;margin-bottom:6px;flex-wrap:wrap;align-items:center;background:#faf7ff;padding:6px;border-radius:8px;">'
+    + '<input class="qLabel" value="' + String(q.label || '').replace(/"/g, '&quot;') + '" placeholder="퀘스트 이름" style="flex:1;min-width:100px;padding:6px;border:1px solid #ddd;border-radius:6px;">'
+    + '<select class="qTrig" onchange="__qToggleCat(this)" style="padding:6px;border:1px solid #ddd;border-radius:6px;">' + trigOpts + '</select>'
+    + '<select class="qCat" style="padding:6px;border:1px solid #ddd;border-radius:6px;">' + catOpts + '</select>'
+    + '<input class="qXp" type="number" value="' + (Number(q.xp) || 0) + '" placeholder="XP" style="width:60px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">XP</span>'
+    + '<button onclick="this.parentNode.remove()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:0 10px;cursor:pointer;">✕</button></div>';
+}
+function __qToggleCat(sel) { const row = sel.closest('.qRow'); if (!row) return; const cat = row.querySelector('.qCat'); const isInq = (sel.value === 'inquiry' || sel.value === 'comment'); cat.style.display = isInq ? '' : 'none'; }
+function __qInitCats() { document.querySelectorAll('#qList .qRow .qTrig').forEach(s => __qToggleCat(s)); }
 function editRankTiers() {
   let role = null; try { role = getMyRole(); } catch (e) {}
   if (role !== 'super') { alert('SUPER만 가능합니다.'); return; }
@@ -852,17 +921,18 @@ function editRankTiers() {
   modal.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;overflow-y:auto;';
   modal.onclick = e => { if (e.target === modal) modal.remove(); };
   modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,.3);">'
-    + '<h3 style="margin:0 0 4px;">⚙ 계급 설정</h3>'
-    + '<p class="sub" style="margin:0 0 10px;">경험치 수치 · 계급(모양/이름/최소XP)</p>'
-    + '<div style="display:flex;gap:8px;margin-bottom:12px;background:#f3eefa;padding:10px;border-radius:8px;">'
-    + '<label style="flex:1;font-size:12px;font-weight:700;">방역 1회 XP<br><input id="xpPerVax" type="number" value="' + xpc.perVax + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;margin-top:3px;"></label>'
-    + '<label style="flex:1;font-size:12px;font-weight:700;">골고루 세트 보너스<br><input id="xpSetBonus" type="number" value="' + xpc.setBonus + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;margin-top:3px;"></label>'
-    + '</div>'
+    + '<h3 style="margin:0 0 4px;">⚙ 계급 · 퀘스트 설정</h3>'
+    + '<p class="sub" style="margin:0 0 10px;">퀘스트(XP 획득 규칙) · 계급(모양/이름/최소XP)</p>'
+    + '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">🧩 퀘스트 (XP 획득 규칙)</div>'
+    + '<div id="qList">' + getQuests().map(q => __questRowTpl(q)).join('') + '</div>'
+    + '<button onclick="document.getElementById(\'qList\').insertAdjacentHTML(\'beforeend\', __questRowTpl()); __qInitCats();" style="margin:2px 0 14px;background:#8e44ad;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">+ 퀘스트 추가</button>'
+    + '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">🎖 계급 (모양 · 이름 · 최소 XP)</div>'
     + '<div id="rtList">' + tiers.map(t => __rtRowTpl(t)).join('') + '</div>'
     + '<button onclick="document.getElementById(\'rtList\').insertAdjacentHTML(\'beforeend\', __rtRowTpl())" style="margin:4px 0 12px;background:#3498db;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">+ 계급 추가</button>'
     + '<div style="display:flex;gap:8px;"><button onclick="saveRankTiers()" style="flex:1;background:#27ae60;color:#fff;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">저장</button>'
     + '<button onclick="document.getElementById(\'rankTierModal\').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">취소</button></div></div>';
   document.body.appendChild(modal);
+  __qInitCats();
 }
 function saveRankTiers() {
   const rows = document.querySelectorAll('#rtList .rtRow');
@@ -876,15 +946,25 @@ function saveRankTiers() {
   });
   if (!tiers.length) { alert('계급을 하나 이상 입력하세요.'); return; }
   tiers.sort((a, b) => a.minXp - b.minXp);
+  // 🧩 퀘스트 수집
+  const quests = [];
+  document.querySelectorAll('#qList .qRow').forEach((r, i) => {
+    const label = (r.querySelector('.qLabel').value || '').trim();
+    const trigger = r.querySelector('.qTrig').value;
+    const category = r.querySelector('.qCat').value || '';
+    const xp = parseInt(r.querySelector('.qXp').value) || 0;
+    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment') ? category : '', xp: xp });
+  });
   const d = loadData();
   d.rankTiers = tiers;
-  const pvEl = document.getElementById('xpPerVax'), sbEl = document.getElementById('xpSetBonus');
-  const pv = pvEl ? parseInt(pvEl.value) : NaN, sb = sbEl ? parseInt(sbEl.value) : NaN;
-  d.xpConfig = { perVax: isNaN(pv) ? 10 : pv, setBonus: isNaN(sb) ? 100 : sb };
+  d.quests = quests;
+  // common.js 진급엔진 호환: 방역/세트 XP 동기화
+  const vq = quests.find(q => q.trigger === 'vax'), sq = quests.find(q => q.trigger === 'set');
+  d.xpConfig = { perVax: vq ? (Number(vq.xp) || 0) : 0, setBonus: sq ? (Number(sq.xp) || 0) : 0 };
   saveData(d);
   const m = document.getElementById('rankTierModal'); if (m) m.remove();
   if (typeof render === 'function') render();
-  alert('계급 설정 저장됨!');
+  alert('계급·퀘스트 설정 저장됨!');
 }
 
 function exportStatsCSV() {
