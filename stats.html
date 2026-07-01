@@ -584,11 +584,17 @@ function getRankTiers() {
   if (Array.isArray(d.rankTiers) && d.rankTiers.length) return d.rankTiers.slice().sort((a, b) => (a.minXp || 0) - (b.minXp || 0));
   return DEFAULT_RANK_TIERS;
 }
+function getXpConfig() {
+  const d = loadData();
+  const c = d.xpConfig || {};
+  return { perVax: (c.perVax != null ? c.perVax : 10), setBonus: (c.setBonus != null ? c.setBonus : 100) };
+}
 function computeMemberXp(matrix, name, courses) {
+  const cfg = getXpConfig();
   const counts = courses.map(c => (matrix[name] && matrix[name][c.id]) || 0);
   const total = counts.reduce((s, v) => s + v, 0);
   const sets = counts.length ? Math.min.apply(null, counts) : 0;
-  return { xp: total * 10 + sets * 100, total: total, sets: sets };
+  return { xp: total * cfg.perVax + sets * cfg.setBonus, total: total, sets: sets };
 }
 function rankForXp(xp, tiers) { let r = tiers[0]; for (const t of tiers) { if (xp >= (t.minXp || 0)) r = t; } return r; }
 function memberRank(matrix, name, courses) {
@@ -630,6 +636,7 @@ function editRankTiers() {
   let role = null; try { role = getMyRole(); } catch (e) {}
   if (role !== 'super') { alert('SUPER만 가능합니다.'); return; }
   const tiers = getRankTiers();
+  const xpc = getXpConfig();
   let modal = document.getElementById('rankTierModal');
   if (modal) modal.remove();
   modal = document.createElement('div');
@@ -638,7 +645,11 @@ function editRankTiers() {
   modal.onclick = e => { if (e.target === modal) modal.remove(); };
   modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,.3);">'
     + '<h3 style="margin:0 0 4px;">⚙ 계급 설정</h3>'
-    + '<p class="sub" style="margin:0 0 12px;">계급명과 최소 XP (XP 낮은 순으로 자동 정렬됨).</p>'
+    + '<p class="sub" style="margin:0 0 10px;">경험치 수치 · 계급(모양/이름/최소XP)</p>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px;background:#f3eefa;padding:10px;border-radius:8px;">'
+    + '<label style="flex:1;font-size:12px;font-weight:700;">방역 1회 XP<br><input id="xpPerVax" type="number" value="' + xpc.perVax + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;margin-top:3px;"></label>'
+    + '<label style="flex:1;font-size:12px;font-weight:700;">골고루 세트 보너스<br><input id="xpSetBonus" type="number" value="' + xpc.setBonus + '" style="width:100%;padding:6px;border:1px solid #ddd;border-radius:6px;margin-top:3px;"></label>'
+    + '</div>'
     + '<div id="rtList">' + tiers.map(t => __rtRowTpl(t)).join('') + '</div>'
     + '<button onclick="document.getElementById(\'rtList\').insertAdjacentHTML(\'beforeend\', __rtRowTpl())" style="margin:4px 0 12px;background:#3498db;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">+ 계급 추가</button>'
     + '<div style="display:flex;gap:8px;"><button onclick="saveRankTiers()" style="flex:1;background:#27ae60;color:#fff;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">저장</button>'
@@ -659,6 +670,9 @@ function saveRankTiers() {
   tiers.sort((a, b) => a.minXp - b.minXp);
   const d = loadData();
   d.rankTiers = tiers;
+  const pvEl = document.getElementById('xpPerVax'), sbEl = document.getElementById('xpSetBonus');
+  const pv = pvEl ? parseInt(pvEl.value) : NaN, sb = sbEl ? parseInt(sbEl.value) : NaN;
+  d.xpConfig = { perVax: isNaN(pv) ? 10 : pv, setBonus: isNaN(sb) ? 100 : sb };
   saveData(d);
   const m = document.getElementById('rankTierModal'); if (m) m.remove();
   if (typeof render === 'function') render();
