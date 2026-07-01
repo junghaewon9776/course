@@ -654,7 +654,7 @@ function renderMyRankCard() {
     const s = cmMemberEventStat(data, ev, myName);
     xp += s.xp; total += s.total;
   });
-  if (total <= 0) { el.innerHTML = ''; return; }   // 방역 기록 없으면 숨김
+  // 기록이 0이어도 본인 경험치·남은 경험치는 항상 표시(이등병 0 XP부터)
   let ri = 0; for (let i = 0; i < tiers.length; i++) { if (xp >= (tiers[i].minXp || 0)) ri = i; }
   const ov = (data.rankOverride || {})[myName];
   if (ov != null) { const oi = tiers.findIndex(t => t.name === ov); if (oi >= 0) ri = oi; }
