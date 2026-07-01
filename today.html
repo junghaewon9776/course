@@ -2279,7 +2279,7 @@ function togglePastTrack(key) {
   } else {
     const co = getCourse(data, l.courseId);
     const path = l.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
-    const line = new kakao.maps.Polyline({ path, strokeWeight: 4, strokeColor: (co && co.color) || '#8e44ad', strokeOpacity: 0.55, strokeStyle: 'solid' });
+    const line = new kakao.maps.Polyline({ path, strokeWeight: 4, strokeColor: '#95a5a6', strokeOpacity: 0.6, strokeStyle: 'shortdash' });
     line.setMap(map);
     __pastTrackMap[key] = line;
   }
