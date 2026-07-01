@@ -699,7 +699,8 @@ function renderHallOfFameTop() {
   names.forEach(nm => {
     if (!nm) return;
     const r = computeXpForName(nm);
-    if (r.total > 0 && (!best || r.xp > best.xp)) best = { name: nm, xp: r.xp, total: r.total };
+    // 명예의 전당(맨 위)은 방역 횟수 기준(동점이면 XP)
+    if (r.total > 0 && (!best || r.total > best.total || (r.total === best.total && r.xp > best.xp))) best = { name: nm, xp: r.xp, total: r.total };
   });
   if (!best) { el.innerHTML = ''; return; }
   let ri = 0; for (let i = 0; i < tiers.length; i++) { if (best.xp >= (tiers[i].minXp || 0)) ri = i; }
@@ -712,7 +713,7 @@ function renderHallOfFameTop() {
     + (rk.icon ? rankBadge(rk.icon, 15) : '')
     + '<span style="font-weight:800;font-size:15px;">' + String(best.name).replace(/</g, '&lt;') + '</span>'
     + '<span style="font-size:12px;opacity:.9;">' + String(rk.name || '') + '</span>'
-    + '<span style="margin-left:auto;font-weight:800;color:#ffd85e;white-space:nowrap;">' + best.xp + ' XP</span></div>';
+    + '<span style="margin-left:auto;font-weight:800;color:#ffd85e;white-space:nowrap;">' + best.total + '회</span></div>';
 }
 // 🎖 내 계급 카드 (모든 사용자, 본인 것만) — 보이는 행사 전체 합산
 function renderMyRankCard() {
