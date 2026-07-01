@@ -99,7 +99,20 @@
 let __charts = []; // 동적 차트 인스턴스 추적
 
 window.onAuthSuccess = () => onDataReady(render);
-window.onDataChanged = () => render();
+let __statsSig = null, __statsTimer = null;
+function __statsSignature() {
+  const d = loadData() || {};
+  const skip = { live: 1, pushLog: 1, deviceNames: 1, pushTokens: 1, photos: 1, mapDefault: 1 };
+  const o = {}; for (const k in d) if (!skip[k]) o[k] = d[k];
+  try { return JSON.stringify(o); } catch (e) { return String(Date.now()); }
+}
+window.onDataChanged = () => {
+  const sig = __statsSignature();
+  if (sig === __statsSig) return;            // /live 등 통계와 무관한 변경은 무시(깜빡임 방지)
+  __statsSig = sig;
+  clearTimeout(__statsTimer);
+  __statsTimer = setTimeout(render, 250);    // 연속 변경은 묶어서 한 번만 그림
+};
 checkAdminAuth().then(ok => { if (ok) onDataReady(render); });
 
 // 관리자 👁 토글로 숨긴 행사는 통계에서도 제외
@@ -451,7 +464,7 @@ function render() {
       },
       options: {
         indexAxis: useHorizontal ? 'y' : 'x',
-        responsive: true, maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: 'index', intersect: false, axis: useHorizontal ? 'y' : 'x' },
         plugins: {
           legend: { display: true, position: 'bottom', labels: { font: { size: 10 } } },
@@ -478,7 +491,7 @@ function render() {
         datasets: [{ label: '방역 횟수', data: courses.map(c => courseTotals[c.id] || 0), backgroundColor: courses.map(c => c.color) }]
       },
       options: {
-        responsive: true, maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false, animation: false,
         plugins: { legend: { display: false } },
         scales: { x: { ticks: { precision: 0 } }, y: { beginAtZero: true, ticks: { precision: 0 } } }
       }
