@@ -870,6 +870,79 @@ function sendAppPush(title, body, target, category, targetUid) {
   } catch (e) { console.warn('푸시 발송 오류', e); }
 }
 
+// ───────── 🎖 계급/진급 엔진 (stats.html과 동일 규칙) ─────────
+var CM_DEFAULT_RANK_TIERS = [
+  { name: '이등병', minXp: 0, icon: '▔' }, { name: '일병', minXp: 100, icon: '▔▔' }, { name: '상병', minXp: 250, icon: '▔▔▔' },
+  { name: '병장', minXp: 450, icon: '▔▔▔▔' }, { name: '하사', minXp: 700, icon: '∨' }, { name: '중사', minXp: 1000, icon: '∨∨' },
+  { name: '상사', minXp: 1400, icon: '∨∨∨' }, { name: '원사', minXp: 1900, icon: '∨∨∨∨' }, { name: '준위', minXp: 2500, icon: '◈' },
+  { name: '소위', minXp: 3200, icon: '◆' }, { name: '중위', minXp: 4000, icon: '◆◆' }, { name: '대위', minXp: 5000, icon: '◆◆◆' },
+  { name: '소령', minXp: 6200, icon: '❖' }, { name: '중령', minXp: 7600, icon: '❖❖' }, { name: '대령', minXp: 9200, icon: '❖❖❖' },
+  { name: '준장', minXp: 11000, icon: '★' }, { name: '소장', minXp: 13000, icon: '★★' }, { name: '중장', minXp: 15500, icon: '★★★' },
+  { name: '대장', minXp: 18500, icon: '★★★★' }, { name: '부원수', minXp: 22000, icon: '★★★★★' }, { name: '원수', minXp: 26000, icon: '★★★★★★' }
+];
+function cmRankTiers(data) {
+  const d = data || (typeof _cache !== 'undefined' && _cache) || {};
+  if (Array.isArray(d.rankTiers) && d.rankTiers.length) return d.rankTiers.slice().sort((a, b) => (a.minXp || 0) - (b.minXp || 0));
+  return CM_DEFAULT_RANK_TIERS;
+}
+function cmXpCfg(data) {
+  const d = data || (typeof _cache !== 'undefined' && _cache) || {};
+  const c = d.xpConfig || {};
+  return { perVax: (c.perVax != null ? c.perVax : 10), setBonus: (c.setBonus != null ? c.setBonus : 100) };
+}
+// 특정 행사·특정 사람의 코스별 횟수 → xp/계급 인덱스
+function cmMemberEventStat(data, event, name) {
+  const courses = (event.courses || []);
+  const counts = courses.map(() => 0);
+  const idx = {}; courses.forEach((c, i) => idx[c.id] = i);
+  (data.logs || []).forEach(l => {
+    if (!l || l.eventId !== event.id || !l.finishedAt) return;
+    const keys = [];
+    if (l.crew && l.crew.driver) keys.push(l.crew.driver.trim());
+    if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
+    if (keys.indexOf(name) < 0) return;
+    if (idx[l.courseId] != null) counts[idx[l.courseId]]++;
+  });
+  const total = counts.reduce((s, v) => s + v, 0);
+  const sets = counts.length ? Math.min.apply(null, counts) : 0;
+  const cfg = cmXpCfg(data);
+  const xp = total * cfg.perVax + sets * cfg.setBonus;
+  const tiers = cmRankTiers(data);
+  let ri = 0; for (let i = 0; i < tiers.length; i++) { if (xp >= (tiers[i].minXp || 0)) ri = i; }
+  return { total: total, sets: sets, xp: xp, rankIndex: ri, rank: tiers[ri] };
+}
+function cmRankKey(s) { return String(s || '').replace(/[.#$/\[\]]/g, '_'); }
+// 로그 저장 직후 호출 → 참여자들 진급 여부 확인하고 푸시
+function checkPromotionForLog(logEntry) {
+  try {
+    if (typeof fbDb === 'undefined' || !logEntry || !logEntry.eventId) return;
+    const data = loadData();
+    const event = getEvent(data, logEntry.eventId);
+    if (!event) return;
+    const names = [];
+    if (logEntry.crew && logEntry.crew.driver) names.push(logEntry.crew.driver.trim());
+    if (logEntry.crew && logEntry.crew.assist) logEntry.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.push(n));
+    const users = data.users || {};
+    names.filter((n, i) => n && names.indexOf(n) === i).forEach(name => {
+      const st = cmMemberEventStat(data, event, name);
+      const path = '/rankState/' + cmRankKey(event.id) + '/' + cmRankKey(name);
+      fbDb.ref(path).once('value').then(snap => {
+        const prev = snap.val();
+        if (prev == null) { fbDb.ref(path).set(st.rankIndex); return; }   // 최초 기록은 기준만 저장(푸시 X)
+        if (st.rankIndex > prev) {
+          fbDb.ref(path).set(st.rankIndex);
+          let uid = ''; for (const k in users) { if (users[k] && (users[k].name || '').trim() === name) { uid = k; break; } }
+          const rk = st.rank || {};
+          const title = '🎖 진급을 축하합니다!';
+          const body = name + '님이 ' + (rk.name || '') + ' 계급으로 진급했습니다! (' + st.xp + ' XP)';
+          if (uid) sendAppPush(title, body, 'member', null, uid);   // 본인에게
+          sendAppPush('🎖 진급 소식', name + '님 → ' + (rk.name || '') + ' 진급!', 'all', null, '');  // 전체 축하
+        }
+      }).catch(() => {});
+    });
+  } catch (e) { console.warn('진급 확인 오류', e); }
+}
+
 // ───────── 🔄 인앱 업데이트 (앱 켤 때 새 버전 있으면 물어봄) ─────────
 function checkInAppUpdate() {
   try {
