@@ -413,7 +413,7 @@ function render() {
     const mc = new Chart(document.getElementById('mc_' + uid), {
       type: 'bar',
       data: {
-        labels: sortedNames,
+        labels: sortedNames.map((n, i) => i === 0 ? '⭐ ' + n : n),
         datasets: courses.map(c => ({
           label: c.label + detailSuffix(c),
           data: sortedNames.map(n => matrix[n]?.[c.id] || 0),
