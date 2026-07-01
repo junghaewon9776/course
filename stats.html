@@ -623,13 +623,15 @@ function memberRank(matrix, name, courses) {
 // 로그인한 본인 이름
 function myRegisteredName() {
   try {
-    const uid = fbAuth.currentUser && fbAuth.currentUser.uid;
-    if (!uid) return '';
+    const u = fbAuth.currentUser;
+    if (!u || !u.uid) return '';
     const data = loadData();
-    const u = (data.users || {})[uid] || {};
-    if (u.name) return String(u.name).trim();
-    const m = (data.members || []).find(m => m.uid === uid);
-    return m ? String(m.name).trim() : '';
+    // 회원(폰번호 로그인): memberAuth[uid] → 회원 이름
+    try { const m = getMemberByUid(data, u.uid); if (m && m.name) return String(m.name).trim(); } catch (e) {}
+    // 관리자/간부: users[uid].name
+    const uu = (data.users || {})[u.uid] || {};
+    if (uu.name) return String(uu.name).trim();
+    return '';
   } catch (e) { return ''; }
 }
 // SUPER: 계급 수동 변경 저장
