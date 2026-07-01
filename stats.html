@@ -644,6 +644,31 @@ function saveRankOverride(name, val) {
   saveData(data);
   render();
 }
+// 필터(년도/기간/행사)를 반영해 특정 이름의 총 XP·횟수 계산 — 통계표와 동일
+function computeXpForName(name) {
+  const data = loadData();
+  const logs = getFilteredLogs();
+  const cfg = getXpConfig();
+  let xp = 0, total = 0;
+  (data.events || []).forEach(ev => {
+    if (!isEventVisibleForViewer(ev.id, data)) return;
+    const courses = ev.courses || [];
+    const idx = {}; courses.forEach((c, i) => idx[c.id] = i);
+    const counts = courses.map(() => 0);
+    logs.forEach(l => {
+      if (!l || l.eventId !== ev.id) return;
+      const keys = [];
+      if (l.crew && l.crew.driver) keys.push(l.crew.driver.trim());
+      if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
+      if (keys.indexOf(name) < 0) return;
+      if (idx[l.courseId] != null) counts[idx[l.courseId]]++;
+    });
+    const t = counts.reduce((s, v) => s + v, 0);
+    const sets = counts.length ? Math.min.apply(null, counts) : 0;
+    xp += t * cfg.perVax + sets * cfg.setBonus; total += t;
+  });
+  return { xp: xp, total: total };
+}
 // 🏆 명예의 전당 1위 (전체 공개, 맨 위 얇은 배너)
 function renderHallOfFameTop() {
   const el = document.getElementById('hofTop');
@@ -659,9 +684,8 @@ function renderHallOfFameTop() {
   let best = null;
   names.forEach(nm => {
     if (!nm) return;
-    let xp = 0, total = 0;
-    (data.events || []).forEach(ev => { if (!isEventVisibleForViewer(ev.id, data)) return; const s = cmMemberEventStat(data, ev, nm); xp += s.xp; total += s.total; });
-    if (total > 0 && (!best || xp > best.xp)) best = { name: nm, xp: xp, total: total };
+    const r = computeXpForName(nm);
+    if (r.total > 0 && (!best || r.xp > best.xp)) best = { name: nm, xp: r.xp, total: r.total };
   });
   if (!best) { el.innerHTML = ''; return; }
   let ri = 0; for (let i = 0; i < tiers.length; i++) { if (best.xp >= (tiers[i].minXp || 0)) ri = i; }
@@ -684,12 +708,8 @@ function renderMyRankCard() {
   if (!myName) { el.innerHTML = ''; return; }
   const data = loadData();
   const tiers = getRankTiers();
-  let xp = 0, total = 0;
-  (data.events || []).forEach(ev => {
-    if (!isEventVisibleForViewer(ev.id, data)) return;
-    const s = cmMemberEventStat(data, ev, myName);
-    xp += s.xp; total += s.total;
-  });
+  const __r = computeXpForName(myName);
+  let xp = __r.xp, total = __r.total;
   // 기록이 0이어도 본인 경험치·남은 경험치는 항상 표시(이등병 0 XP부터)
   let ri = 0; for (let i = 0; i < tiers.length; i++) { if (xp >= (tiers[i].minXp || 0)) ri = i; }
   const ov = (data.rankOverride || {})[myName];
