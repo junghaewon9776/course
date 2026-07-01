@@ -345,8 +345,8 @@ function render() {
       </div>
       <div class="card" id="rankCard_${uid}" style="border-left:4px solid #8e44ad;display:none;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-          <h2 style="margin:0;">🎖 계급 (경험치) <span style="font-size:11px;color:#e74c3c;font-weight:400;">SUPER 전용</span></h2>
-          <button class="small" style="background:#8e44ad;" onclick="editRankTiers()">⚙ 계급 설정</button>
+          <h2 style="margin:0;">🎖 계급 (경험치)</h2>
+          <button class="small" id="rankEditBtn_${uid}" style="background:#8e44ad;display:none;" onclick="editRankTiers()">⚙ 계급 설정</button>
         </div>
         <p class="sub" style="margin:6px 0 10px;">경험치 = 방역 1회 10XP + 1·2·3코스 골고루 세트당 100XP 🔥</p>
         <div id="rank_${uid}"></div>
@@ -784,8 +784,10 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
   const el = document.getElementById('rank_' + uid);
   if (!card || !el) return;
   let role = null; try { role = getMyRole(); } catch (e) {}
-  if (role !== 'super') { card.style.display = 'none'; return; }
-  card.style.display = 'block';
+  const canEdit = (role === 'super');
+  card.style.display = 'block';   // 계급표는 모두에게 공개
+  const editBtn = document.getElementById('rankEditBtn_' + uid);
+  if (editBtn) editBtn.style.display = canEdit ? '' : 'none';   // 편집 버튼은 super만
   const tiers = getRankTiers();
   const rows = sortedAll.map(x => Object.assign({ name: x[0] }, computeMemberXp(matrix, x[0], courses)))
     .filter(x => x.total > 0).sort((a, b) => b.xp - a.xp);
@@ -818,14 +820,14 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
           + '<span style="font-size:11px;color:#888;white-space:nowrap;">' + (next.icon ? rankBadge(next.icon, 13) : '') + String(next.name || '') + ' -' + need + '</span></div>';
       }
       const nmEsc = String(r.name).replace(/'/g, "\\'").replace(/"/g, '&quot;');
-      const sel = '<select onchange="saveRankOverride(\'' + nmEsc + '\', this.value)" style="font-size:11px;margin-top:3px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;">'
+      const sel = canEdit ? ('<br><select onchange="saveRankOverride(\'' + nmEsc + '\', this.value)" style="font-size:11px;margin-top:3px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;">'
         + '<option value=""' + (ovName === '' ? ' selected' : '') + '>자동(XP)</option>'
         + tiers.map(t => '<option value="' + String(t.name).replace(/"/g, '&quot;') + '"' + (ovName === t.name ? ' selected' : '') + '>' + String(t.name).replace(/</g, '&lt;') + '</option>').join('')
-        + '</select>';
+        + '</select>') : '';
       return '<tr style="border-bottom:1px solid #eee;' + (i === 0 ? 'background:#faf5ff;' : '') + '">'
         + '<td style="padding:6px;">' + (i === 0 ? '⭐' : (i + 1)) + '</td>'
         + '<td style="padding:6px;font-weight:700;">' + String(r.name).replace(/</g, '&lt;') + '</td>'
-        + '<td style="padding:6px;white-space:nowrap;">' + (rk.icon ? rankBadge(rk.icon, 16) : '') + '<span style="font-weight:700;color:#6c3483;">' + String(rk.name || '').replace(/</g, '&lt;') + '</span>' + (ovName ? ' <span style="font-size:10px;color:#e67e22;">(수동)</span>' : '') + '<br>' + sel + '</td>'
+        + '<td style="padding:6px;white-space:nowrap;">' + (rk.icon ? rankBadge(rk.icon, 16) : '') + '<span style="font-weight:700;color:#6c3483;">' + String(rk.name || '').replace(/</g, '&lt;') + '</span>' + (ovName ? ' <span style="font-size:10px;color:#e67e22;">(수동)</span>' : '') + sel + '</td>'
         + '<td style="padding:6px;text-align:right;font-weight:700;color:#6c3483;">' + r.xp + '</td>'
         + '<td style="padding:6px;">' + gauge + '</td></tr>';
     }).join('') + '</table>';
