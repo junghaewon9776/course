@@ -946,7 +946,8 @@ function cmTotalXp(data, name) {
     else if (qt.trigger === 'set') cnt = setTotal;
     else if (qt.trigger === 'inquiry') cnt = inqCount(qt.category || '');
     else if (qt.trigger === 'comment') cnt = cmtCount(qt.category || '');
-    xp += cnt * per;
+    if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }
+    else xp += cnt * per;
   });
   const tiers = cmRankTiers(data);
   let ri = 0; for (let i = 0; i < tiers.length; i++) { if (xp >= (tiers[i].minXp || 0)) ri = i; }

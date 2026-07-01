@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260701c"></script>
+<script src="common.js?v=20260701d"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -733,7 +733,8 @@ function computeXpForName(name) {
     else if (qt.trigger === 'set') cnt = setTotal;
     else if (qt.trigger === 'inquiry') cnt = inquiryCount(qt.category || '');
     else if (qt.trigger === 'comment') cnt = commentCount(qt.category || '');
-    xp += cnt * per;
+    if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }  // N회 이상 보너스(1회)
+    else xp += cnt * per;  // 횟수당
   });
   return { xp: xp, total: vaxTotal };
 }
@@ -897,18 +898,23 @@ function __rtRowTpl(t) {
 }
 // 🧩 퀘스트 편집 행
 function __questRowTpl(q) {
-  q = q || { label: '', trigger: 'inquiry', category: '', xp: 0 };
+  q = q || { label: '', trigger: 'inquiry', category: '', mode: 'each', threshold: 0, xp: 0 };
   const trigOpts = QUEST_TRIGGERS.map(o => '<option value="' + o.v + '"' + (q.trigger === o.v ? ' selected' : '') + '>' + o.t + '</option>').join('');
   const catOpts = '<option value="">전체분류</option>' + getInquiryCategories().map(c => '<option value="' + c.id + '"' + (q.category === c.id ? ' selected' : '') + '>' + String(c.name).replace(/</g, '&lt;') + '</option>').join('');
+  const mode = q.mode || 'each';
+  const modeOpts = '<option value="each"' + (mode === 'each' ? ' selected' : '') + '>횟수당</option><option value="threshold"' + (mode === 'threshold' ? ' selected' : '') + '>N회 이상 보너스</option>';
   return '<div class="qRow" style="display:flex;gap:5px;margin-bottom:6px;flex-wrap:wrap;align-items:center;background:#faf7ff;padding:6px;border-radius:8px;">'
     + '<input class="qLabel" value="' + String(q.label || '').replace(/"/g, '&quot;') + '" placeholder="퀘스트 이름" style="flex:1;min-width:100px;padding:6px;border:1px solid #ddd;border-radius:6px;">'
     + '<select class="qTrig" onchange="__qToggleCat(this)" style="padding:6px;border:1px solid #ddd;border-radius:6px;">' + trigOpts + '</select>'
     + '<select class="qCat" style="padding:6px;border:1px solid #ddd;border-radius:6px;">' + catOpts + '</select>'
+    + '<select class="qMode" onchange="__qToggleMode(this)" style="padding:6px;border:1px solid #ddd;border-radius:6px;">' + modeOpts + '</select>'
+    + '<input class="qTh" type="number" value="' + (Number(q.threshold) || 0) + '" placeholder="기준횟수" title="이 횟수 이상이면 보너스" style="width:66px;padding:6px;border:1px solid #ddd;border-radius:6px;">'
     + '<input class="qXp" type="number" value="' + (Number(q.xp) || 0) + '" placeholder="XP" style="width:60px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">XP</span>'
     + '<button onclick="this.parentNode.remove()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:0 10px;cursor:pointer;">✕</button></div>';
 }
 function __qToggleCat(sel) { const row = sel.closest('.qRow'); if (!row) return; const cat = row.querySelector('.qCat'); const isInq = (sel.value === 'inquiry' || sel.value === 'comment'); cat.style.display = isInq ? '' : 'none'; }
-function __qInitCats() { document.querySelectorAll('#qList .qRow .qTrig').forEach(s => __qToggleCat(s)); }
+function __qToggleMode(sel) { const row = sel.closest('.qRow'); if (!row) return; const th = row.querySelector('.qTh'); th.style.display = (sel.value === 'threshold') ? '' : 'none'; }
+function __qInitCats() { document.querySelectorAll('#qList .qRow').forEach(r => { const t = r.querySelector('.qTrig'); if (t) __qToggleCat(t); const m = r.querySelector('.qMode'); if (m) __qToggleMode(m); }); }
 function editRankTiers() {
   let role = null; try { role = getMyRole(); } catch (e) {}
   if (role !== 'super') { alert('SUPER만 가능합니다.'); return; }
@@ -952,8 +958,10 @@ function saveRankTiers() {
     const label = (r.querySelector('.qLabel').value || '').trim();
     const trigger = r.querySelector('.qTrig').value;
     const category = r.querySelector('.qCat').value || '';
+    const mode = r.querySelector('.qMode') ? r.querySelector('.qMode').value : 'each';
+    const threshold = parseInt(r.querySelector('.qTh') ? r.querySelector('.qTh').value : '0') || 0;
     const xp = parseInt(r.querySelector('.qXp').value) || 0;
-    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment') ? category : '', xp: xp });
+    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment') ? category : '', mode: mode, threshold: threshold, xp: xp });
   });
   const d = loadData();
   d.rankTiers = tiers;
