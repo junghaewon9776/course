@@ -144,6 +144,16 @@ async function uploadFieldPhoto(file, meta) {
 
   var dataUrl = await compressImage(file);
   var photoId = uid();
+  // 업로더(작성자) 이름 — 퀘스트 XP 매칭용
+  var __uploader = '';
+  try {
+    var __u = (typeof fbAuth !== 'undefined' && fbAuth.currentUser) || null;
+    var __d = (typeof _cache !== 'undefined' && _cache) || {};
+    var __mid = __u ? (__d.memberAuth || {})[__u.uid] : null;
+    var __mem = __mid ? (__d.members || []).find(function (m) { return m.id === __mid; }) : null;
+    __uploader = (__mem && __mem.name) || ((__d.users || {})[__u && __u.uid] || {}).name || '';
+  } catch (e) {}
+  if (!__uploader) __uploader = meta?.note || '';   // 코스 사진은 운전자명 fallback
   var payload = {
     type: meta?.type || 'field',
     takenAt: Date.now(),
@@ -153,7 +163,9 @@ async function uploadFieldPhoto(file, meta) {
     teamId: meta?.teamId || '',
     lat: meta?.lat ?? null,
     lng: meta?.lng ?? null,
-    note: meta?.note || ''
+    note: meta?.note || '',
+    uploader: __uploader,
+    uploaderUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || ''
   };
 
   // GAS 웹앱으로 전송 → Drive에 저장 (비공개) → fileId 반환
@@ -938,6 +950,14 @@ function cmTotalXp(data, name) {
   });
   function inqCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; if ((q.writer || '').trim() === name) n++; }); return n; }
   function cmtCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; (q.comments || []).forEach(c => { if (c && (c.writer || '').trim() === name) n++; }); }); return n; }
+  function photoCnt(pt) { let n = 0; const ph = data.photos || {}; Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; if ((p.uploader || '').trim() === name) n++; }); return n; }
+  // 월별/년도 1등 계산 (방역 최다)
+  function vaxBy(ls) { const m = {}; ls.forEach(l => { if (!l || !l.finishedAt) return; const ks = []; if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim()); if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => ks.push(n)); ks.forEach(n => { if (n) m[n] = (m[n] || 0) + 1; }); }); return m; }
+  const allLogs = (data.logs || []).filter(l => l && l.finishedAt);
+  const byMonth = {}; allLogs.forEach(l => { const t = l.startedAt || l.finishedAt || 0; const k = new Date(t).getFullYear() + '-' + new Date(t).getMonth(); (byMonth[k] = byMonth[k] || []).push(l); });
+  let monthWins = 0; Object.keys(byMonth).forEach(k => { const cc = vaxBy(byMonth[k]); let b = null, bn = 0; Object.keys(cc).forEach(n => { if (cc[n] > bn) { bn = cc[n]; b = n; } }); if (b === name) monthWins++; });
+  const cy = vaxBy(allLogs); let yb = null, yn = 0; Object.keys(cy).forEach(n => { if (cy[n] > yn) { yn = cy[n]; yb = n; } });
+  const isYearTop = (yb === name) ? 1 : 0;
   let xp = 0;
   cmGetQuests(data).forEach(qt => {
     const per = Number(qt.xp) || 0; if (!per) return;
@@ -946,6 +966,11 @@ function cmTotalXp(data, name) {
     else if (qt.trigger === 'set') cnt = setTotal;
     else if (qt.trigger === 'inquiry') cnt = inqCount(qt.category || '');
     else if (qt.trigger === 'comment') cnt = cmtCount(qt.category || '');
+    else if (qt.trigger === 'monthTop') cnt = monthWins;
+    else if (qt.trigger === 'yearTop') cnt = isYearTop;
+    else if (qt.trigger === 'photoField') cnt = photoCnt('field');
+    else if (qt.trigger === 'photoReceipt') cnt = photoCnt('receipt');
+    else if (qt.trigger === 'photo') cnt = photoCnt('');
     if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }
     else xp += cnt * per;
   });

@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260701d"></script>
+<script src="common.js?v=20260701e"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -260,6 +260,7 @@ const GROUP_LABELS = {
 };
 
 function render() {
+  __qWinCache = null;   // 필터 바뀔 수 있으니 월별/년도 1등 캐시 초기화
   renderEventFilterOptions();
   renderYearOptions();
   try { renderHallOfFameTop(); } catch (e) {}
@@ -627,12 +628,47 @@ const QUEST_TRIGGERS = [
   { v: 'vax', t: '방역 완료(1회)' },
   { v: 'set', t: '골고루 세트' },
   { v: 'inquiry', t: '민원/요청 글 작성' },
-  { v: 'comment', t: '민원/요청 댓글' }
+  { v: 'comment', t: '민원/요청 댓글' },
+  { v: 'monthTop', t: '월별 1등 (방역 최다)' },
+  { v: 'yearTop', t: '년도 1등 (방역 최다)' },
+  { v: 'photoField', t: '현장사진 등록 (코스)' },
+  { v: 'photoReceipt', t: '영수증 등록' },
+  { v: 'photo', t: '사진 전체 등록' }
 ];
 function questTriggerLabel(v) { const f = QUEST_TRIGGERS.find(x => x.v === v); return f ? f.t : v; }
 // 현재 년도 필터 값('' = 전체)
 function __yearSel() { return document.getElementById('yearFilter')?.value || ''; }
 function __inYear(ts) { const y = __yearSel(); if (!y) return true; return String(new Date(ts || 0).getFullYear()) === y; }
+// 방역 횟수 집계(이름별) — 월별/년도 1등 계산용
+function __vaxByName(logsSubset) {
+  const m = {};
+  logsSubset.forEach(l => {
+    if (!l) return;
+    const keys = [];
+    if (l.crew && l.crew.driver) keys.push(l.crew.driver.trim());
+    if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
+    keys.forEach(n => { if (n) m[n] = (m[n] || 0) + 1; });
+  });
+  return m;
+}
+// 월별 1등(이름→우승 월 수), 년도 1등(이름) — rankLogs(년도 필터) 기준. render마다 캐시 초기화
+let __qWinCache = null;
+function questWinners() {
+  if (__qWinCache) return __qWinCache;
+  const logs = rankLogs();
+  const byMonth = {};
+  logs.forEach(l => { const t = l.startedAt || l.finishedAt || 0; const k = new Date(t).getFullYear() + '-' + new Date(t).getMonth(); (byMonth[k] = byMonth[k] || []).push(l); });
+  const monthTop = {};
+  Object.keys(byMonth).forEach(k => {
+    const cc = __vaxByName(byMonth[k]); let best = null, bestN = 0;
+    Object.keys(cc).forEach(n => { if (cc[n] > bestN) { bestN = cc[n]; best = n; } });
+    if (best) monthTop[best] = (monthTop[best] || 0) + 1;
+  });
+  const cy = __vaxByName(logs); let yBest = null, yN = 0;
+  Object.keys(cy).forEach(n => { if (cy[n] > yN) { yN = cy[n]; yBest = n; } });
+  __qWinCache = { monthTop: monthTop, yearTop: yBest };
+  return __qWinCache;
+}
 function computeMemberXp(matrix, name, courses) {
   const cfg = getXpConfig();
   const counts = courses.map(c => (matrix[name] && matrix[name][c.id]) || 0);
@@ -725,6 +761,11 @@ function computeXpForName(name) {
     });
     return n;
   }
+  function photoCount(ptype) {
+    let n = 0; const ph = data.photos || {};
+    Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (ptype && p.type !== ptype) return; if ((p.uploader || '').trim() === name && __inYear(p.takenAt)) n++; });
+    return n;
+  }
   let xp = 0;
   quests.forEach(qt => {
     const per = Number(qt.xp) || 0; if (!per) return;
@@ -733,6 +774,11 @@ function computeXpForName(name) {
     else if (qt.trigger === 'set') cnt = setTotal;
     else if (qt.trigger === 'inquiry') cnt = inquiryCount(qt.category || '');
     else if (qt.trigger === 'comment') cnt = commentCount(qt.category || '');
+    else if (qt.trigger === 'monthTop') cnt = questWinners().monthTop[name] || 0;   // 1등한 월 수
+    else if (qt.trigger === 'yearTop') cnt = (questWinners().yearTop === name) ? 1 : 0;
+    else if (qt.trigger === 'photoField') cnt = photoCount('field');
+    else if (qt.trigger === 'photoReceipt') cnt = photoCount('receipt');
+    else if (qt.trigger === 'photo') cnt = photoCount('');
     if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }  // N회 이상 보너스(1회)
     else xp += cnt * per;  // 횟수당
   });
