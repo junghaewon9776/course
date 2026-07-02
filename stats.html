@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702h"></script>
+<script src="common.js?v=20260702i"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -646,8 +646,8 @@ const QUEST_TRIGGERS = [
   { v: 'doubleDay', t: '하루 2코스 이상 (일수)' },
   { v: 'inqResolved', t: '민원 해결됨 (내 글 완료처리)' },
   { v: 'partners', t: '같이 다닌 짝꿍 수' },
-  { v: 'early', t: '얼리버드 (8시 전 시작한 날)' },
-  { v: 'late', t: '올빼미 (저녁 8시 후 시작한 날)' },
+  { v: 'early', t: '얼리버드 (설정시각 전 시작한 날)' },
+  { v: 'late', t: '올빼미 (설정시각 후 시작한 날)' },
   { v: 'debut', t: '첫 방역 완주 (1회성)' }
 ];
 // 1등류 트리거 — 실시간/기간확정 선택 가능
@@ -807,7 +807,7 @@ function computeXpForName(name) {
   // 🚗 운행거리(km)·운행시간(분) 누적 — 조 두 명(운전+보조) 모두 인정
   let kmTotal = 0, minTotal = 0;
   const tripLogs = [];   // 코스별 {km, min} — 정상운행(둘 다 충족) 판정용
-  const __days = {}, __earlyDays = new Set(), __lateDays = new Set(), __partners = new Set(), __weekIdxs = new Set();
+  const __days = {}, __starts = [], __partners = new Set(), __weekIdxs = new Set();
   let perfectCnt = 0;
   logs.forEach(l => {
     if (!l || !isEventVisibleForViewer(l.eventId, data)) return;
@@ -826,8 +826,7 @@ function computeXpForName(name) {
     // 하루 2탕 / 얼리버드 / 짝꿍 / 연속 주 / 거점 100% 집계
     const ds = l.date || new Date(l.startedAt || 0).toLocaleDateString('ko-KR');
     __days[ds] = (__days[ds] || 0) + 1;
-    if (l.startedAt && new Date(l.startedAt).getHours() < 8) __earlyDays.add(ds);
-    if (l.startedAt && new Date(l.startedAt).getHours() >= 20) __lateDays.add(ds);   // 저녁 8시 이후 시작
+    if (l.startedAt) __starts.push({ ds: ds, hh: new Date(l.startedAt).getHours() });   // 얼리버드/올빼미 판정용(시각은 퀘스트 설정)
     keys.forEach(k2 => { if (k2 && k2 !== name) __partners.add(k2); });
     if (l.startedAt) { const dd = new Date(l.startedAt); const dow = (dd.getDay() + 6) % 7; const mon = new Date(dd.getFullYear(), dd.getMonth(), dd.getDate() - dow); __weekIdxs.add(Math.round(mon.getTime() / 604800000)); }
     // 거점 100%: GPS 자동체크(autoCompleted)만 인정 — 수동/일괄 체크 제외
@@ -871,8 +870,14 @@ function computeXpForName(name) {
     else if (qt.trigger === 'doubleDay') cnt = doubleDayCnt;           // 하루 2코스 이상 일수
     else if (qt.trigger === 'inqResolved') cnt = inqResolvedCount(qt.category || '');
     else if (qt.trigger === 'partners') cnt = __partners.size;         // 같이 다닌 짝꿍 수
-    else if (qt.trigger === 'early') cnt = __earlyDays.size;           // 8시 전 시작한 날 수
-    else if (qt.trigger === 'late') cnt = __lateDays.size;             // 저녁 8시 후 시작한 날 수
+    else if (qt.trigger === 'early') {                                 // 설정 시각 전에 시작한 날 수
+      const hr = (qt.hour != null && qt.hour !== '') ? Number(qt.hour) : 8;
+      cnt = new Set(__starts.filter(x => x.hh < hr).map(x => x.ds)).size;
+    }
+    else if (qt.trigger === 'late') {                                  // 설정 시각 이후 시작한 날 수
+      const hr = (qt.hour != null && qt.hour !== '') ? Number(qt.hour) : 20;
+      cnt = new Set(__starts.filter(x => x.hh >= hr).map(x => x.ds)).size;
+    }
     else if (qt.trigger === 'debut') cnt = vaxTotal > 0 ? 1 : 0;       // 첫 방역 완주
     const th = Number(qt.threshold) || 0;
     let gained = 0, done = false;
@@ -1252,6 +1257,9 @@ function __questRowTpl(q) {
     + '<input class="qKm" type="number" value="' + (Number(q.minKm) || 0) + '" placeholder="km" title="이 거리 이상" style="width:52px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">km↑</span>'
     + '<input class="qMin" type="number" value="' + (Number(q.minMin) || 0) + '" placeholder="분" title="이 시간(분) 이상" style="width:52px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">분↑</span>'
     + '</span>'
+    + '<span class="qHourWrap" style="display:none;align-items:center;gap:3px;">'
+    + '<input class="qHour" type="number" min="0" max="23" value="' + (q.hour != null && q.hour !== '' ? Number(q.hour) : '') + '" placeholder="시" title="기준 시각(0~23시)" style="width:46px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">시 기준</span>'
+    + '</span>'
     + '<select class="qLive" style="display:none;padding:6px;border:1px solid #ddd;border-radius:6px;" title="1등 인정 시점">'
     + '<option value=""' + (!q.liveTop ? ' selected' : '') + '>기간 끝나고 확정</option>'
     + '<option value="1"' + (q.liveTop ? ' selected' : '') + '>실시간 1등</option>'
@@ -1268,6 +1276,13 @@ function __qToggleCat(sel) {
   if (tw) tw.style.display = (sel.value === 'trip') ? 'inline-flex' : 'none';
   const lv = row.querySelector('.qLive');
   if (lv) lv.style.display = (TOP_TRIGGERS.indexOf(sel.value) >= 0) ? '' : 'none';
+  const hw = row.querySelector('.qHourWrap');
+  if (hw) {
+    const isHour = (sel.value === 'early' || sel.value === 'late');
+    hw.style.display = isHour ? 'inline-flex' : 'none';
+    const hi = row.querySelector('.qHour');
+    if (isHour && hi && hi.value === '') hi.value = (sel.value === 'early') ? 8 : 20;   // 기본값 채움
+  }
 }
 function __qToggleMode(sel) { const row = sel.closest('.qRow'); if (!row) return; const th = row.querySelector('.qTh'); th.style.display = (sel.value === 'threshold') ? '' : 'none'; }
 function __qInitCats() { document.querySelectorAll('#qList .qRow').forEach(r => { const t = r.querySelector('.qTrig'); if (t) __qToggleCat(t); const m = r.querySelector('.qMode'); if (m) __qToggleMode(m); }); }
@@ -1325,7 +1340,9 @@ function saveRankTiers() {
     const minKm = parseFloat(r.querySelector('.qKm') ? r.querySelector('.qKm').value : '0') || 0;
     const minMin = parseInt(r.querySelector('.qMin') ? r.querySelector('.qMin').value : '0') || 0;
     const liveTop = !!(r.querySelector('.qLive') && r.querySelector('.qLive').value);
-    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment' || trigger === 'inqResolved') ? category : '', mode: mode, threshold: threshold, xp: xp, minKm: minKm, minMin: minMin, liveTop: liveTop });
+    const hourEl = r.querySelector('.qHour');
+    const hour = (hourEl && hourEl.value !== '') ? Math.max(0, Math.min(23, parseInt(hourEl.value) || 0)) : null;
+    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment' || trigger === 'inqResolved') ? category : '', mode: mode, threshold: threshold, xp: xp, minKm: minKm, minMin: minMin, liveTop: liveTop, hour: hour });
   });
   const d = loadData();
   d.rankTiers = tiers;
