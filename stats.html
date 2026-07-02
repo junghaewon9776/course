@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702e"></script>
+<script src="common.js?v=20260702f"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -667,15 +667,17 @@ function questWinners() {
   function bucket(keyFn) { const b = {}; logs.forEach(l => { const t = l.startedAt || l.finishedAt || 0; const k = keyFn(l, t); (b[k] = b[k] || []).push(l); }); return b; }
   function weekKey(t) { const d = new Date(t); const day = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day); return mon.getFullYear() + '-' + (mon.getMonth() + 1) + '-' + mon.getDate(); }   // 월요일 시작 주
   function monthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + d.getMonth(); }
-  function tops(b) { const w = {}; Object.keys(b).forEach(k => { const cc = __vaxByName(b[k]); let best = null, bn = 0; Object.keys(cc).forEach(n => { if (cc[n] > bn) { bn = cc[n]; best = n; } }); if (best) w[best] = (w[best] || 0) + 1; }); return w; }
-  const monthTop = tops(bucket((l, t) => monthKey(t)));
-  const weekTop = tops(bucket((l, t) => weekKey(t)));
-  const courseWeekTop = tops(bucket((l, t) => weekKey(t) + '|' + l.courseId));
-  const courseMonthTop = tops(bucket((l, t) => monthKey(t) + '|' + l.courseId));
-  const courseYearTop = tops(bucket((l, t) => new Date(t).getFullYear() + '|' + l.courseId));
-  const cy = __vaxByName(logs); let yBest = null, yN = 0;
-  Object.keys(cy).forEach(n => { if (cy[n] > yN) { yN = cy[n]; yBest = n; } });
-  __qWinCache = { monthTop: monthTop, yearTop: yBest, weekTop: weekTop, courseWeekTop: courseWeekTop, courseMonthTop: courseMonthTop, courseYearTop: courseYearTop };
+  // ⏳ 끝난 기간만 인정 — 진행 중인 주/월/년은 1등 미확정이라 점수 안 줌 (기간이 끝나야 확정 지급)
+  const __now = Date.now();
+  const curW = weekKey(__now), curM = monthKey(__now), curY = String(new Date(__now).getFullYear());
+  function tops(b, skip) { const w = {}; Object.keys(b).forEach(k => { if (skip && skip(k)) return; const cc = __vaxByName(b[k]); let best = null, bn = 0; Object.keys(cc).forEach(n => { if (cc[n] > bn) { bn = cc[n]; best = n; } }); if (best) w[best] = (w[best] || 0) + 1; }); return w; }
+  const monthTop = tops(bucket((l, t) => monthKey(t)), k => k === curM);
+  const weekTop = tops(bucket((l, t) => weekKey(t)), k => k === curW);
+  const yearTop = tops(bucket((l, t) => String(new Date(t).getFullYear())), k => k === curY);
+  const courseWeekTop = tops(bucket((l, t) => weekKey(t) + '|' + l.courseId), k => k.split('|')[0] === curW);
+  const courseMonthTop = tops(bucket((l, t) => monthKey(t) + '|' + l.courseId), k => k.split('|')[0] === curM);
+  const courseYearTop = tops(bucket((l, t) => new Date(t).getFullYear() + '|' + l.courseId), k => k.split('|')[0] === curY);
+  __qWinCache = { monthTop: monthTop, yearTop: yearTop, weekTop: weekTop, courseWeekTop: courseWeekTop, courseMonthTop: courseMonthTop, courseYearTop: courseYearTop };
   return __qWinCache;
 }
 function computeMemberXp(matrix, name, courses) {
@@ -816,8 +818,8 @@ function computeXpForName(name) {
     else if (qt.trigger === 'set') cnt = setTotal;
     else if (qt.trigger === 'inquiry') cnt = inquiryCount(qt.category || '');
     else if (qt.trigger === 'comment') cnt = commentCount(qt.category || '');
-    else if (qt.trigger === 'monthTop') cnt = questWinners().monthTop[name] || 0;   // 1등한 월 수
-    else if (qt.trigger === 'yearTop') cnt = (questWinners().yearTop === name) ? 1 : 0;
+    else if (qt.trigger === 'monthTop') cnt = questWinners().monthTop[name] || 0;   // 1등한 월 수(끝난 월만)
+    else if (qt.trigger === 'yearTop') cnt = questWinners().yearTop[name] || 0;     // 1등한 년 수(끝난 년만)
     else if (qt.trigger === 'weekTop') cnt = questWinners().weekTop[name] || 0;             // 1등한 주 수
     else if (qt.trigger === 'courseWeekTop') cnt = questWinners().courseWeekTop[name] || 0; // 코스별 주 우승 수
     else if (qt.trigger === 'courseMonthTop') cnt = questWinners().courseMonthTop[name] || 0;

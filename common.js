@@ -971,14 +971,17 @@ function cmTotalXp(data, name) {
   function cmBucket(keyFn) { const b = {}; allLogs.forEach(function (l) { const t = l.startedAt || l.finishedAt || 0; const k = keyFn(l, t); (b[k] = b[k] || []).push(l); }); return b; }
   function cmWeekKey(t) { const d = new Date(t); const day = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day); return mon.getFullYear() + '-' + (mon.getMonth() + 1) + '-' + mon.getDate(); }
   function cmMonthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + d.getMonth(); }
-  function cmWins(b) { let w = 0; Object.keys(b).forEach(function (k) { const cc = vaxBy(b[k]); let best = null, bn = 0; Object.keys(cc).forEach(function (n) { if (cc[n] > bn) { bn = cc[n]; best = n; } }); if (best === name) w++; }); return w; }
-  const monthWins = cmWins(cmBucket(function (l, t) { return cmMonthKey(t); }));
-  const weekWins = cmWins(cmBucket(function (l, t) { return cmWeekKey(t); }));
-  const courseWeekWins = cmWins(cmBucket(function (l, t) { return cmWeekKey(t) + '|' + l.courseId; }));
-  const courseMonthWins = cmWins(cmBucket(function (l, t) { return cmMonthKey(t) + '|' + l.courseId; }));
-  const courseYearWins = cmWins(cmBucket(function (l, t) { return new Date(t).getFullYear() + '|' + l.courseId; }));
-  const cy = vaxBy(allLogs); let yb = null, yn = 0; Object.keys(cy).forEach(n => { if (cy[n] > yn) { yn = cy[n]; yb = n; } });
-  const isYearTop = (yb === name) ? 1 : 0;
+  // ⏳ 끝난 기간만 인정 (stats.html과 동일)
+  const __cmNow = Date.now();
+  const cmCurW = cmWeekKey(__cmNow), cmCurM = cmMonthKey(__cmNow), cmCurY = String(new Date(__cmNow).getFullYear());
+  function cmWins(b, skip) { let w = 0; Object.keys(b).forEach(function (k) { if (skip && skip(k)) return; const cc = vaxBy(b[k]); let best = null, bn = 0; Object.keys(cc).forEach(function (n) { if (cc[n] > bn) { bn = cc[n]; best = n; } }); if (best === name) w++; }); return w; }
+  const monthWins = cmWins(cmBucket(function (l, t) { return cmMonthKey(t); }), function (k) { return k === cmCurM; });
+  const weekWins = cmWins(cmBucket(function (l, t) { return cmWeekKey(t); }), function (k) { return k === cmCurW; });
+  const yearWins = cmWins(cmBucket(function (l, t) { return String(new Date(t).getFullYear()); }), function (k) { return k === cmCurY; });
+  const courseWeekWins = cmWins(cmBucket(function (l, t) { return cmWeekKey(t) + '|' + l.courseId; }), function (k) { return k.split('|')[0] === cmCurW; });
+  const courseMonthWins = cmWins(cmBucket(function (l, t) { return cmMonthKey(t) + '|' + l.courseId; }), function (k) { return k.split('|')[0] === cmCurM; });
+  const courseYearWins = cmWins(cmBucket(function (l, t) { return new Date(t).getFullYear() + '|' + l.courseId; }), function (k) { return k.split('|')[0] === cmCurY; });
+  const isYearTop = yearWins;
   // 🚗 운행거리·시간 누적 (조 두 명 모두)
   let kmTotal = 0, minTotal = 0;
   const tripLogs = [];
