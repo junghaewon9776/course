@@ -964,7 +964,13 @@ function cmTotalXp(data, name) {
     if (l.crew.assist) l.crew.assist.split(',').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (x) { ns.push(x); });
     if (ns.length) __sessCrew[l.key] = ns;
   });
-  function photoCnt(pt) { let n = 0; const ph = data.photos || {}; Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; let nm = (p.crewNames && p.crewNames.length) ? p.crewNames : null; if (!nm && p.sessionKey && __sessCrew[p.sessionKey]) nm = __sessCrew[p.sessionKey]; if (!nm) nm = [p.uploader || p.note]; if (nm.map(function (x) { return (x || '').trim(); }).indexOf(name) >= 0) n++; }); return n; }
+  function photoCnt(pt, capPerCourse) {
+    const perSess = {}; const ph = data.photos || {};
+    Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; let nm = (p.crewNames && p.crewNames.length) ? p.crewNames : null; if (!nm && p.sessionKey && __sessCrew[p.sessionKey]) nm = __sessCrew[p.sessionKey]; if (!nm) nm = [p.uploader || p.note]; if (nm.map(function (x) { return (x || '').trim(); }).indexOf(name) < 0) return; const sk = p.sessionKey || 'nokey'; perSess[sk] = (perSess[sk] || 0) + 1; });
+    const cap = Number(capPerCourse) || 0;
+    let n = 0; Object.keys(perSess).forEach(function (sk) { n += cap > 0 ? Math.min(perSess[sk], cap) : perSess[sk]; });
+    return n;
+  }
   // 월별/년도 1등 계산 (방역 최다)
   function vaxBy(ls) { const m = {}; ls.forEach(l => { if (!l || !l.finishedAt) return; const ks = []; if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim()); if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => ks.push(n)); ks.forEach(n => { if (n) m[n] = (m[n] || 0) + 1; }); }); return m; }
   const allLogs = (data.logs || []).filter(l => l && l.finishedAt);
@@ -1026,9 +1032,9 @@ function cmTotalXp(data, name) {
     else if (qt.trigger === 'inquiry') cnt = inqCount(qt.category || '');
     else if (qt.trigger === 'comment') cnt = cmtCount(qt.category || '');
     else if (CM_TOP_TRIGGERS.indexOf(qt.trigger) >= 0) cnt = cmWinsFor(qt.trigger, !!qt.liveTop);
-    else if (qt.trigger === 'photoField') cnt = photoCnt('field');
-    else if (qt.trigger === 'photoReceipt') cnt = photoCnt('receipt');
-    else if (qt.trigger === 'photo') cnt = photoCnt('');
+    else if (qt.trigger === 'photoField') cnt = photoCnt('field', qt.cap);
+    else if (qt.trigger === 'photoReceipt') cnt = photoCnt('receipt', qt.cap);
+    else if (qt.trigger === 'photo') cnt = photoCnt('', qt.cap);
     else if (qt.trigger === 'km') cnt = Math.floor(kmTotal);
     else if (qt.trigger === 'time10') cnt = Math.floor(minTotal / 10);
     else if (qt.trigger === 'trip') { const mk = Number(qt.minKm) || 0, mm = Number(qt.minMin) || 0; cnt = tripLogs.filter(function (x) { return x.km >= mk && x.min >= mm; }).length; }

@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702i"></script>
+<script src="common.js?v=20260702j"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -793,15 +793,21 @@ function computeXpForName(name) {
     if (l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(x => ns.push(x));
     if (ns.length) __sessCrew[l.key] = ns;
   });
-  function photoCount(ptype) {
-    let n = 0; const ph = data.photos || {};
+  function photoCount(ptype, capPerCourse) {
+    const perSess = {}; const ph = data.photos || {};
     Object.keys(ph).forEach(k => {
       const p = ph[k]; if (!p) return; if (ptype && p.type !== ptype) return; if (!__inYear(p.takenAt)) return;
       let names = (p.crewNames && p.crewNames.length) ? p.crewNames : null;
       if (!names && p.sessionKey && __sessCrew[p.sessionKey]) names = __sessCrew[p.sessionKey];  // 소급: 그때 조 두 명
       if (!names) names = [p.uploader || p.note];   // 최후: 업로더/운전자명
-      if (names.map(x => (x || '').trim()).indexOf(name) >= 0) n++;
+      if (names.map(x => (x || '').trim()).indexOf(name) < 0) return;
+      const sk = p.sessionKey || 'nokey';
+      perSess[sk] = (perSess[sk] || 0) + 1;
     });
+    // 코스(세션)당 인정 장수 상한 — 도배 방지
+    const cap = Number(capPerCourse) || 0;
+    let n = 0;
+    Object.keys(perSess).forEach(sk => { n += cap > 0 ? Math.min(perSess[sk], cap) : perSess[sk]; });
     return n;
   }
   // 🚗 운행거리(km)·운행시간(분) 누적 — 조 두 명(운전+보조) 모두 인정
@@ -856,9 +862,9 @@ function computeXpForName(name) {
       const w = questWinners(!!qt.liveTop);
       cnt = (w[qt.trigger] && w[qt.trigger][name]) || 0;
     }
-    else if (qt.trigger === 'photoField') cnt = photoCount('field');
-    else if (qt.trigger === 'photoReceipt') cnt = photoCount('receipt');
-    else if (qt.trigger === 'photo') cnt = photoCount('');
+    else if (qt.trigger === 'photoField') cnt = photoCount('field', qt.cap);
+    else if (qt.trigger === 'photoReceipt') cnt = photoCount('receipt', qt.cap);
+    else if (qt.trigger === 'photo') cnt = photoCount('', qt.cap);
     else if (qt.trigger === 'km') cnt = Math.floor(kmTotal);          // 1km당
     else if (qt.trigger === 'time10') cnt = Math.floor(minTotal / 10); // 10분당
     else if (qt.trigger === 'trip') {                                  // 정상 운행: 거리·시간 둘 다 충족한 코스만
@@ -1260,6 +1266,9 @@ function __questRowTpl(q) {
     + '<span class="qHourWrap" style="display:none;align-items:center;gap:3px;">'
     + '<input class="qHour" type="number" min="0" max="23" value="' + (q.hour != null && q.hour !== '' ? Number(q.hour) : '') + '" placeholder="시" title="기준 시각(0~23시)" style="width:46px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">시 기준</span>'
     + '</span>'
+    + '<span class="qCapWrap" style="display:none;align-items:center;gap:3px;">'
+    + '<input class="qCap" type="number" min="0" value="' + (q.cap != null && q.cap !== '' ? Number(q.cap) : '') + '" placeholder="장" title="코스당 인정 최대 장수 (0/빈칸=무제한)" style="width:46px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">장/코스</span>'
+    + '</span>'
     + '<select class="qLive" style="display:none;padding:6px;border:1px solid #ddd;border-radius:6px;" title="1등 인정 시점">'
     + '<option value=""' + (!q.liveTop ? ' selected' : '') + '>기간 끝나고 확정</option>'
     + '<option value="1"' + (q.liveTop ? ' selected' : '') + '>실시간 1등</option>'
@@ -1282,6 +1291,13 @@ function __qToggleCat(sel) {
     hw.style.display = isHour ? 'inline-flex' : 'none';
     const hi = row.querySelector('.qHour');
     if (isHour && hi && hi.value === '') hi.value = (sel.value === 'early') ? 8 : 20;   // 기본값 채움
+  }
+  const cw = row.querySelector('.qCapWrap');
+  if (cw) {
+    const isPhoto = (sel.value === 'photoField' || sel.value === 'photoReceipt' || sel.value === 'photo');
+    cw.style.display = isPhoto ? 'inline-flex' : 'none';
+    const ci = row.querySelector('.qCap');
+    if (isPhoto && ci && ci.value === '') ci.value = 5;   // 기본 코스당 5장
   }
 }
 function __qToggleMode(sel) { const row = sel.closest('.qRow'); if (!row) return; const th = row.querySelector('.qTh'); th.style.display = (sel.value === 'threshold') ? '' : 'none'; }
@@ -1342,7 +1358,9 @@ function saveRankTiers() {
     const liveTop = !!(r.querySelector('.qLive') && r.querySelector('.qLive').value);
     const hourEl = r.querySelector('.qHour');
     const hour = (hourEl && hourEl.value !== '') ? Math.max(0, Math.min(23, parseInt(hourEl.value) || 0)) : null;
-    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment' || trigger === 'inqResolved') ? category : '', mode: mode, threshold: threshold, xp: xp, minKm: minKm, minMin: minMin, liveTop: liveTop, hour: hour });
+    const capEl = r.querySelector('.qCap');
+    const cap = (capEl && capEl.value !== '') ? Math.max(0, parseInt(capEl.value) || 0) : 0;
+    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment' || trigger === 'inqResolved') ? category : '', mode: mode, threshold: threshold, xp: xp, minKm: minKm, minMin: minMin, liveTop: liveTop, hour: hour, cap: cap });
   });
   const d = loadData();
   d.rankTiers = tiers;
