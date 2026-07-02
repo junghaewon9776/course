@@ -975,16 +975,22 @@ function cmTotalXp(data, name) {
   const __cmNow = Date.now();
   const cmCurW = cmWeekKey(__cmNow), cmCurM = cmMonthKey(__cmNow), cmCurY = String(new Date(__cmNow).getFullYear());
   function cmWins(b, skip) { let w = 0; Object.keys(b).forEach(function (k) { if (skip && skip(k)) return; const cc = vaxBy(b[k]); let best = null, bn = 0; Object.keys(cc).forEach(function (n) { if (cc[n] > bn) { bn = cc[n]; best = n; } }); if (best === name) w++; }); return w; }
-  const monthWins = cmWins(cmBucket(function (l, t) { return cmMonthKey(t); }), function (k) { return k === cmCurM; });
-  const weekWins = cmWins(cmBucket(function (l, t) { return cmWeekKey(t); }), function (k) { return k === cmCurW; });
-  const yearWins = cmWins(cmBucket(function (l, t) { return String(new Date(t).getFullYear()); }), function (k) { return k === cmCurY; });
-  const courseWeekWins = cmWins(cmBucket(function (l, t) { return cmWeekKey(t) + '|' + l.courseId; }), function (k) { return k.split('|')[0] === cmCurW; });
-  const courseMonthWins = cmWins(cmBucket(function (l, t) { return cmMonthKey(t) + '|' + l.courseId; }), function (k) { return k.split('|')[0] === cmCurM; });
-  const courseYearWins = cmWins(cmBucket(function (l, t) { return new Date(t).getFullYear() + '|' + l.courseId; }), function (k) { return k.split('|')[0] === cmCurY; });
-  const isYearTop = yearWins;
-  // 🚗 운행거리·시간 누적 (조 두 명 모두)
-  let kmTotal = 0, minTotal = 0;
+  // liveTop 퀘스트용: skip 없이(진행 중 기간 포함) 계산한 버전도 준비
+  function cmTopWins(keyFn, skip, live) { return cmWins(cmBucket(keyFn), live ? null : skip); }
+  function cmWinsFor(trigger, live) {
+    if (trigger === 'monthTop') return cmTopWins(function (l, t) { return cmMonthKey(t); }, function (k) { return k === cmCurM; }, live);
+    if (trigger === 'weekTop') return cmTopWins(function (l, t) { return cmWeekKey(t); }, function (k) { return k === cmCurW; }, live);
+    if (trigger === 'yearTop') return cmTopWins(function (l, t) { return String(new Date(t).getFullYear()); }, function (k) { return k === cmCurY; }, live);
+    if (trigger === 'courseWeekTop') return cmTopWins(function (l, t) { return cmWeekKey(t) + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurW; }, live);
+    if (trigger === 'courseMonthTop') return cmTopWins(function (l, t) { return cmMonthKey(t) + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurM; }, live);
+    if (trigger === 'courseYearTop') return cmTopWins(function (l, t) { return new Date(t).getFullYear() + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurY; }, live);
+    return 0;
+  }
+  const CM_TOP_TRIGGERS = ['weekTop', 'monthTop', 'yearTop', 'courseWeekTop', 'courseMonthTop', 'courseYearTop'];
+  // 🚗 운행거리·시간 누적 + 신규 퀘스트 집계 (조 두 명 모두)
+  let kmTotal = 0, minTotal = 0, perfectCnt = 0;
   const tripLogs = [];
+  const __days = {}, __earlyDays = {}, __partners = {}, __weekIdxs = {};
   allLogs.forEach(function (l) {
     const ks = [];
     if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim());
@@ -998,7 +1004,19 @@ function cmTotalXp(data, name) {
     let mins = 0;
     if (l.startedAt && l.finishedAt) { mins = Math.min((l.finishedAt - l.startedAt) / 60000, 180); minTotal += mins; }
     tripLogs.push({ km: km, min: mins });
+    const ds = l.date || new Date(l.startedAt || 0).toLocaleDateString('ko-KR');
+    __days[ds] = (__days[ds] || 0) + 1;
+    if (l.startedAt && new Date(l.startedAt).getHours() < 8) __earlyDays[ds] = 1;
+    ks.forEach(function (k2) { if (k2 && k2 !== name) __partners[k2] = 1; });
+    if (l.startedAt) { const dd = new Date(l.startedAt); const dow = (dd.getDay() + 6) % 7; const mon = new Date(dd.getFullYear(), dd.getMonth(), dd.getDate() - dow); __weekIdxs[Math.round(mon.getTime() / 604800000)] = 1; }
+    const snap = Array.isArray(l.anchorsSnapshot) ? l.anchorsSnapshot : null;
+    const auto = l.autoCompleted || {};
+    if (snap && snap.length && snap.every(function (a) { return auto[a.id]; })) perfectCnt++;
   });
+  let streakWeeks = 0;
+  { const arr = Object.keys(__weekIdxs).map(Number).sort(function (a, b) { return a - b; }); let cur = 0, prev = null; arr.forEach(function (w) { cur = (prev != null && w === prev + 1) ? cur + 1 : 1; prev = w; if (cur > streakWeeks) streakWeeks = cur; }); }
+  const doubleDayCnt = Object.keys(__days).filter(function (k) { return __days[k] >= 2; }).length;
+  function inqResolvedCnt(cat) { let n = 0; (data.inquiries || []).forEach(function (q) { if (!q || (cat && q.category !== cat)) return; if ((q.writer || '').trim() === name && q.status === 'resolved') n++; }); return n; }
   let xp = 0;
   cmGetQuests(data).forEach(qt => {
     const per = Number(qt.xp) || 0; if (!per) return;
@@ -1007,18 +1025,20 @@ function cmTotalXp(data, name) {
     else if (qt.trigger === 'set') cnt = setTotal;
     else if (qt.trigger === 'inquiry') cnt = inqCount(qt.category || '');
     else if (qt.trigger === 'comment') cnt = cmtCount(qt.category || '');
-    else if (qt.trigger === 'monthTop') cnt = monthWins;
-    else if (qt.trigger === 'yearTop') cnt = isYearTop;
-    else if (qt.trigger === 'weekTop') cnt = weekWins;
-    else if (qt.trigger === 'courseWeekTop') cnt = courseWeekWins;
-    else if (qt.trigger === 'courseMonthTop') cnt = courseMonthWins;
-    else if (qt.trigger === 'courseYearTop') cnt = courseYearWins;
+    else if (CM_TOP_TRIGGERS.indexOf(qt.trigger) >= 0) cnt = cmWinsFor(qt.trigger, !!qt.liveTop);
     else if (qt.trigger === 'photoField') cnt = photoCnt('field');
     else if (qt.trigger === 'photoReceipt') cnt = photoCnt('receipt');
     else if (qt.trigger === 'photo') cnt = photoCnt('');
     else if (qt.trigger === 'km') cnt = Math.floor(kmTotal);
     else if (qt.trigger === 'time10') cnt = Math.floor(minTotal / 10);
     else if (qt.trigger === 'trip') { const mk = Number(qt.minKm) || 0, mm = Number(qt.minMin) || 0; cnt = tripLogs.filter(function (x) { return x.km >= mk && x.min >= mm; }).length; }
+    else if (qt.trigger === 'perfect') cnt = perfectCnt;
+    else if (qt.trigger === 'streakWeeks') cnt = streakWeeks;
+    else if (qt.trigger === 'doubleDay') cnt = doubleDayCnt;
+    else if (qt.trigger === 'inqResolved') cnt = inqResolvedCnt(qt.category || '');
+    else if (qt.trigger === 'partners') cnt = Object.keys(__partners).length;
+    else if (qt.trigger === 'early') cnt = Object.keys(__earlyDays).length;
+    else if (qt.trigger === 'debut') cnt = vaxTotal > 0 ? 1 : 0;
     if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }
     else xp += cnt * per;
   });
