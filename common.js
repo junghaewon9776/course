@@ -972,6 +972,18 @@ function cmTotalXp(data, name) {
   let monthWins = 0; Object.keys(byMonth).forEach(k => { const cc = vaxBy(byMonth[k]); let b = null, bn = 0; Object.keys(cc).forEach(n => { if (cc[n] > bn) { bn = cc[n]; b = n; } }); if (b === name) monthWins++; });
   const cy = vaxBy(allLogs); let yb = null, yn = 0; Object.keys(cy).forEach(n => { if (cy[n] > yn) { yn = cy[n]; yb = n; } });
   const isYearTop = (yb === name) ? 1 : 0;
+  // 🚗 운행거리·시간 누적 (조 두 명 모두)
+  let kmTotal = 0, minTotal = 0;
+  allLogs.forEach(function (l) {
+    const ks = [];
+    if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim());
+    if (l.crew && l.crew.assist) l.crew.assist.split(',').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (n) { ks.push(n); });
+    if (ks.indexOf(name) < 0) return;
+    const t = l.track || [];
+    let d = 0; for (let i = 1; i < t.length; i++) d += distance(t[i - 1][0], t[i - 1][1], t[i][0], t[i][1]);
+    kmTotal += d / 1000;
+    if (l.startedAt && l.finishedAt) minTotal += (l.finishedAt - l.startedAt) / 60000;
+  });
   let xp = 0;
   cmGetQuests(data).forEach(qt => {
     const per = Number(qt.xp) || 0; if (!per) return;
@@ -985,6 +997,8 @@ function cmTotalXp(data, name) {
     else if (qt.trigger === 'photoField') cnt = photoCnt('field');
     else if (qt.trigger === 'photoReceipt') cnt = photoCnt('receipt');
     else if (qt.trigger === 'photo') cnt = photoCnt('');
+    else if (qt.trigger === 'km') cnt = Math.floor(kmTotal);
+    else if (qt.trigger === 'time10') cnt = Math.floor(minTotal / 10);
     if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }
     else xp += cnt * per;
   });

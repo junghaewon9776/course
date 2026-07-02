@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702a"></script>
+<script src="common.js?v=20260702b"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -633,7 +633,9 @@ const QUEST_TRIGGERS = [
   { v: 'yearTop', t: '년도 1등 (방역 최다)' },
   { v: 'photoField', t: '현장사진 등록 (코스)' },
   { v: 'photoReceipt', t: '영수증 등록' },
-  { v: 'photo', t: '사진 전체 등록' }
+  { v: 'photo', t: '사진 전체 등록' },
+  { v: 'km', t: '운행거리 1km당' },
+  { v: 'time10', t: '운행시간 10분당' }
 ];
 function questTriggerLabel(v) { const f = QUEST_TRIGGERS.find(x => x.v === v); return f ? f.t : v; }
 // 현재 년도 필터 값('' = 전체)
@@ -781,6 +783,19 @@ function computeXpForName(name) {
     });
     return n;
   }
+  // 🚗 운행거리(km)·운행시간(분) 누적 — 조 두 명(운전+보조) 모두 인정
+  let kmTotal = 0, minTotal = 0;
+  logs.forEach(l => {
+    if (!l || !isEventVisibleForViewer(l.eventId, data)) return;
+    const keys = [];
+    if (l.crew && l.crew.driver) keys.push(l.crew.driver.trim());
+    if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
+    if (keys.indexOf(name) < 0) return;
+    const t = l.track || [];
+    let d = 0; for (let i = 1; i < t.length; i++) d += distance(t[i - 1][0], t[i - 1][1], t[i][0], t[i][1]);
+    kmTotal += d / 1000;
+    if (l.startedAt && l.finishedAt) minTotal += (l.finishedAt - l.startedAt) / 60000;
+  });
   let xp = 0; const items = [];
   quests.forEach(qt => {
     const per = Number(qt.xp) || 0;
@@ -794,6 +809,8 @@ function computeXpForName(name) {
     else if (qt.trigger === 'photoField') cnt = photoCount('field');
     else if (qt.trigger === 'photoReceipt') cnt = photoCount('receipt');
     else if (qt.trigger === 'photo') cnt = photoCount('');
+    else if (qt.trigger === 'km') cnt = Math.floor(kmTotal);          // 1km당
+    else if (qt.trigger === 'time10') cnt = Math.floor(minTotal / 10); // 10분당
     const th = Number(qt.threshold) || 0;
     let gained = 0, done = false;
     if (qt.mode === 'threshold') { done = (th > 0 && cnt >= th); if (done) gained = per; }  // N회 이상 보너스(1회)
