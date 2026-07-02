@@ -968,8 +968,15 @@ function cmTotalXp(data, name) {
   // 월별/년도 1등 계산 (방역 최다)
   function vaxBy(ls) { const m = {}; ls.forEach(l => { if (!l || !l.finishedAt) return; const ks = []; if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim()); if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => ks.push(n)); ks.forEach(n => { if (n) m[n] = (m[n] || 0) + 1; }); }); return m; }
   const allLogs = (data.logs || []).filter(l => l && l.finishedAt);
-  const byMonth = {}; allLogs.forEach(l => { const t = l.startedAt || l.finishedAt || 0; const k = new Date(t).getFullYear() + '-' + new Date(t).getMonth(); (byMonth[k] = byMonth[k] || []).push(l); });
-  let monthWins = 0; Object.keys(byMonth).forEach(k => { const cc = vaxBy(byMonth[k]); let b = null, bn = 0; Object.keys(cc).forEach(n => { if (cc[n] > bn) { bn = cc[n]; b = n; } }); if (b === name) monthWins++; });
+  function cmBucket(keyFn) { const b = {}; allLogs.forEach(function (l) { const t = l.startedAt || l.finishedAt || 0; const k = keyFn(l, t); (b[k] = b[k] || []).push(l); }); return b; }
+  function cmWeekKey(t) { const d = new Date(t); const day = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day); return mon.getFullYear() + '-' + (mon.getMonth() + 1) + '-' + mon.getDate(); }
+  function cmMonthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + d.getMonth(); }
+  function cmWins(b) { let w = 0; Object.keys(b).forEach(function (k) { const cc = vaxBy(b[k]); let best = null, bn = 0; Object.keys(cc).forEach(function (n) { if (cc[n] > bn) { bn = cc[n]; best = n; } }); if (best === name) w++; }); return w; }
+  const monthWins = cmWins(cmBucket(function (l, t) { return cmMonthKey(t); }));
+  const weekWins = cmWins(cmBucket(function (l, t) { return cmWeekKey(t); }));
+  const courseWeekWins = cmWins(cmBucket(function (l, t) { return cmWeekKey(t) + '|' + l.courseId; }));
+  const courseMonthWins = cmWins(cmBucket(function (l, t) { return cmMonthKey(t) + '|' + l.courseId; }));
+  const courseYearWins = cmWins(cmBucket(function (l, t) { return new Date(t).getFullYear() + '|' + l.courseId; }));
   const cy = vaxBy(allLogs); let yb = null, yn = 0; Object.keys(cy).forEach(n => { if (cy[n] > yn) { yn = cy[n]; yb = n; } });
   const isYearTop = (yb === name) ? 1 : 0;
   // 🚗 운행거리·시간 누적 (조 두 명 모두)
@@ -999,6 +1006,10 @@ function cmTotalXp(data, name) {
     else if (qt.trigger === 'comment') cnt = cmtCount(qt.category || '');
     else if (qt.trigger === 'monthTop') cnt = monthWins;
     else if (qt.trigger === 'yearTop') cnt = isYearTop;
+    else if (qt.trigger === 'weekTop') cnt = weekWins;
+    else if (qt.trigger === 'courseWeekTop') cnt = courseWeekWins;
+    else if (qt.trigger === 'courseMonthTop') cnt = courseMonthWins;
+    else if (qt.trigger === 'courseYearTop') cnt = courseYearWins;
     else if (qt.trigger === 'photoField') cnt = photoCnt('field');
     else if (qt.trigger === 'photoReceipt') cnt = photoCnt('receipt');
     else if (qt.trigger === 'photo') cnt = photoCnt('');

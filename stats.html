@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702d"></script>
+<script src="common.js?v=20260702e"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -629,8 +629,12 @@ const QUEST_TRIGGERS = [
   { v: 'set', t: '골고루 세트' },
   { v: 'inquiry', t: '민원/요청 글 작성' },
   { v: 'comment', t: '민원/요청 댓글' },
+  { v: 'weekTop', t: '주별 1등 (방역 최다)' },
   { v: 'monthTop', t: '월별 1등 (방역 최다)' },
   { v: 'yearTop', t: '년도 1등 (방역 최다)' },
+  { v: 'courseWeekTop', t: '코스별 주 1등' },
+  { v: 'courseMonthTop', t: '코스별 월 1등' },
+  { v: 'courseYearTop', t: '코스별 년 1등' },
   { v: 'photoField', t: '현장사진 등록 (코스)' },
   { v: 'photoReceipt', t: '영수증 등록' },
   { v: 'photo', t: '사진 전체 등록' },
@@ -659,17 +663,19 @@ let __qWinCache = null;
 function questWinners() {
   if (__qWinCache) return __qWinCache;
   const logs = rankLogs();
-  const byMonth = {};
-  logs.forEach(l => { const t = l.startedAt || l.finishedAt || 0; const k = new Date(t).getFullYear() + '-' + new Date(t).getMonth(); (byMonth[k] = byMonth[k] || []).push(l); });
-  const monthTop = {};
-  Object.keys(byMonth).forEach(k => {
-    const cc = __vaxByName(byMonth[k]); let best = null, bestN = 0;
-    Object.keys(cc).forEach(n => { if (cc[n] > bestN) { bestN = cc[n]; best = n; } });
-    if (best) monthTop[best] = (monthTop[best] || 0) + 1;
-  });
+  // 기간 버킷으로 나눠 각 버킷 1등(방역 최다)에게 우승 1회씩
+  function bucket(keyFn) { const b = {}; logs.forEach(l => { const t = l.startedAt || l.finishedAt || 0; const k = keyFn(l, t); (b[k] = b[k] || []).push(l); }); return b; }
+  function weekKey(t) { const d = new Date(t); const day = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day); return mon.getFullYear() + '-' + (mon.getMonth() + 1) + '-' + mon.getDate(); }   // 월요일 시작 주
+  function monthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + d.getMonth(); }
+  function tops(b) { const w = {}; Object.keys(b).forEach(k => { const cc = __vaxByName(b[k]); let best = null, bn = 0; Object.keys(cc).forEach(n => { if (cc[n] > bn) { bn = cc[n]; best = n; } }); if (best) w[best] = (w[best] || 0) + 1; }); return w; }
+  const monthTop = tops(bucket((l, t) => monthKey(t)));
+  const weekTop = tops(bucket((l, t) => weekKey(t)));
+  const courseWeekTop = tops(bucket((l, t) => weekKey(t) + '|' + l.courseId));
+  const courseMonthTop = tops(bucket((l, t) => monthKey(t) + '|' + l.courseId));
+  const courseYearTop = tops(bucket((l, t) => new Date(t).getFullYear() + '|' + l.courseId));
   const cy = __vaxByName(logs); let yBest = null, yN = 0;
   Object.keys(cy).forEach(n => { if (cy[n] > yN) { yN = cy[n]; yBest = n; } });
-  __qWinCache = { monthTop: monthTop, yearTop: yBest };
+  __qWinCache = { monthTop: monthTop, yearTop: yBest, weekTop: weekTop, courseWeekTop: courseWeekTop, courseMonthTop: courseMonthTop, courseYearTop: courseYearTop };
   return __qWinCache;
 }
 function computeMemberXp(matrix, name, courses) {
@@ -812,6 +818,10 @@ function computeXpForName(name) {
     else if (qt.trigger === 'comment') cnt = commentCount(qt.category || '');
     else if (qt.trigger === 'monthTop') cnt = questWinners().monthTop[name] || 0;   // 1등한 월 수
     else if (qt.trigger === 'yearTop') cnt = (questWinners().yearTop === name) ? 1 : 0;
+    else if (qt.trigger === 'weekTop') cnt = questWinners().weekTop[name] || 0;             // 1등한 주 수
+    else if (qt.trigger === 'courseWeekTop') cnt = questWinners().courseWeekTop[name] || 0; // 코스별 주 우승 수
+    else if (qt.trigger === 'courseMonthTop') cnt = questWinners().courseMonthTop[name] || 0;
+    else if (qt.trigger === 'courseYearTop') cnt = questWinners().courseYearTop[name] || 0;
     else if (qt.trigger === 'photoField') cnt = photoCount('field');
     else if (qt.trigger === 'photoReceipt') cnt = photoCount('receipt');
     else if (qt.trigger === 'photo') cnt = photoCount('');
