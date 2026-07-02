@@ -974,6 +974,7 @@ function cmTotalXp(data, name) {
   const isYearTop = (yb === name) ? 1 : 0;
   // 🚗 운행거리·시간 누적 (조 두 명 모두)
   let kmTotal = 0, minTotal = 0;
+  const tripLogs = [];
   allLogs.forEach(function (l) {
     const ks = [];
     if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim());
@@ -981,9 +982,12 @@ function cmTotalXp(data, name) {
     if (ks.indexOf(name) < 0) return;
     const t = l.track || [];
     let d = 0; for (let i = 1; i < t.length; i++) d += distance(t[i - 1][0], t[i - 1][1], t[i][0], t[i][1]);
-    kmTotal += d / 1000;
+    const km = d / 1000;
+    kmTotal += km;
     // 한 코스당 최대 180분까지만 인정 (stats.html과 동일)
-    if (l.startedAt && l.finishedAt) minTotal += Math.min((l.finishedAt - l.startedAt) / 60000, 180);
+    let mins = 0;
+    if (l.startedAt && l.finishedAt) { mins = Math.min((l.finishedAt - l.startedAt) / 60000, 180); minTotal += mins; }
+    tripLogs.push({ km: km, min: mins });
   });
   let xp = 0;
   cmGetQuests(data).forEach(qt => {
@@ -1000,6 +1004,7 @@ function cmTotalXp(data, name) {
     else if (qt.trigger === 'photo') cnt = photoCnt('');
     else if (qt.trigger === 'km') cnt = Math.floor(kmTotal);
     else if (qt.trigger === 'time10') cnt = Math.floor(minTotal / 10);
+    else if (qt.trigger === 'trip') { const mk = Number(qt.minKm) || 0, mm = Number(qt.minMin) || 0; cnt = tripLogs.filter(function (x) { return x.km >= mk && x.min >= mm; }).length; }
     if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }
     else xp += cnt * per;
   });

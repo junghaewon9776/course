@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702c"></script>
+<script src="common.js?v=20260702d"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -635,7 +635,8 @@ const QUEST_TRIGGERS = [
   { v: 'photoReceipt', t: '영수증 등록' },
   { v: 'photo', t: '사진 전체 등록' },
   { v: 'km', t: '운행거리 1km당' },
-  { v: 'time10', t: '운행시간 10분당' }
+  { v: 'time10', t: '운행시간 10분당' },
+  { v: 'trip', t: '정상 운행 1회 (km·분 동시 충족)' }
 ];
 function questTriggerLabel(v) { const f = QUEST_TRIGGERS.find(x => x.v === v); return f ? f.t : v; }
 // 현재 년도 필터 값('' = 전체)
@@ -785,6 +786,7 @@ function computeXpForName(name) {
   }
   // 🚗 운행거리(km)·운행시간(분) 누적 — 조 두 명(운전+보조) 모두 인정
   let kmTotal = 0, minTotal = 0;
+  const tripLogs = [];   // 코스별 {km, min} — 정상운행(둘 다 충족) 판정용
   logs.forEach(l => {
     if (!l || !isEventVisibleForViewer(l.eventId, data)) return;
     const keys = [];
@@ -793,9 +795,12 @@ function computeXpForName(name) {
     if (keys.indexOf(name) < 0) return;
     const t = l.track || [];
     let d = 0; for (let i = 1; i < t.length; i++) d += distance(t[i - 1][0], t[i - 1][1], t[i][0], t[i][1]);
-    kmTotal += d / 1000;
+    const km = d / 1000;
+    kmTotal += km;
     // 한 코스당 최대 180분까지만 인정 — 종료를 일부러 늦게 눌러도 점수 안 늘어남
-    if (l.startedAt && l.finishedAt) minTotal += Math.min((l.finishedAt - l.startedAt) / 60000, 180);
+    let mins = 0;
+    if (l.startedAt && l.finishedAt) { mins = Math.min((l.finishedAt - l.startedAt) / 60000, 180); minTotal += mins; }
+    tripLogs.push({ km: km, min: mins });
   });
   let xp = 0; const items = [];
   quests.forEach(qt => {
@@ -812,6 +817,10 @@ function computeXpForName(name) {
     else if (qt.trigger === 'photo') cnt = photoCount('');
     else if (qt.trigger === 'km') cnt = Math.floor(kmTotal);          // 1km당
     else if (qt.trigger === 'time10') cnt = Math.floor(minTotal / 10); // 10분당
+    else if (qt.trigger === 'trip') {                                  // 정상 운행: 거리·시간 둘 다 충족한 코스만
+      const mk = Number(qt.minKm) || 0, mm = Number(qt.minMin) || 0;
+      cnt = tripLogs.filter(x => x.km >= mk && x.min >= mm).length;
+    }
     const th = Number(qt.threshold) || 0;
     let gained = 0, done = false;
     if (qt.mode === 'threshold') { done = (th > 0 && cnt >= th); if (done) gained = per; }  // N회 이상 보너스(1회)
@@ -1186,10 +1195,21 @@ function __questRowTpl(q) {
     + '<select class="qCat" style="padding:6px;border:1px solid #ddd;border-radius:6px;">' + catOpts + '</select>'
     + '<select class="qMode" onchange="__qToggleMode(this)" style="padding:6px;border:1px solid #ddd;border-radius:6px;">' + modeOpts + '</select>'
     + '<input class="qTh" type="number" value="' + (Number(q.threshold) || 0) + '" placeholder="기준횟수" title="이 횟수 이상이면 보너스" style="width:66px;padding:6px;border:1px solid #ddd;border-radius:6px;">'
+    + '<span class="qTripWrap" style="display:none;align-items:center;gap:3px;">'
+    + '<input class="qKm" type="number" value="' + (Number(q.minKm) || 0) + '" placeholder="km" title="이 거리 이상" style="width:52px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">km↑</span>'
+    + '<input class="qMin" type="number" value="' + (Number(q.minMin) || 0) + '" placeholder="분" title="이 시간(분) 이상" style="width:52px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">분↑</span>'
+    + '</span>'
     + '<input class="qXp" type="number" value="' + (Number(q.xp) || 0) + '" placeholder="XP" style="width:60px;padding:6px;border:1px solid #ddd;border-radius:6px;"><span style="font-size:11px;color:#888;">XP</span>'
     + '<button onclick="this.parentNode.remove()" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:0 10px;cursor:pointer;">✕</button></div>';
 }
-function __qToggleCat(sel) { const row = sel.closest('.qRow'); if (!row) return; const cat = row.querySelector('.qCat'); const isInq = (sel.value === 'inquiry' || sel.value === 'comment'); cat.style.display = isInq ? '' : 'none'; }
+function __qToggleCat(sel) {
+  const row = sel.closest('.qRow'); if (!row) return;
+  const cat = row.querySelector('.qCat');
+  const isInq = (sel.value === 'inquiry' || sel.value === 'comment');
+  cat.style.display = isInq ? '' : 'none';
+  const tw = row.querySelector('.qTripWrap');
+  if (tw) tw.style.display = (sel.value === 'trip') ? 'inline-flex' : 'none';
+}
 function __qToggleMode(sel) { const row = sel.closest('.qRow'); if (!row) return; const th = row.querySelector('.qTh'); th.style.display = (sel.value === 'threshold') ? '' : 'none'; }
 function __qInitCats() { document.querySelectorAll('#qList .qRow').forEach(r => { const t = r.querySelector('.qTrig'); if (t) __qToggleCat(t); const m = r.querySelector('.qMode'); if (m) __qToggleMode(m); }); }
 function editRankTiers() {
@@ -1243,7 +1263,9 @@ function saveRankTiers() {
     const mode = r.querySelector('.qMode') ? r.querySelector('.qMode').value : 'each';
     const threshold = parseInt(r.querySelector('.qTh') ? r.querySelector('.qTh').value : '0') || 0;
     const xp = parseInt(r.querySelector('.qXp').value) || 0;
-    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment') ? category : '', mode: mode, threshold: threshold, xp: xp });
+    const minKm = parseFloat(r.querySelector('.qKm') ? r.querySelector('.qKm').value : '0') || 0;
+    const minMin = parseInt(r.querySelector('.qMin') ? r.querySelector('.qMin').value : '0') || 0;
+    quests.push({ id: 'q' + i + '_' + trigger, label: label || questTriggerLabel(trigger), trigger: trigger, category: (trigger === 'inquiry' || trigger === 'comment') ? category : '', mode: mode, threshold: threshold, xp: xp, minKm: minKm, minMin: minMin });
   });
   const d = loadData();
   d.rankTiers = tiers;
