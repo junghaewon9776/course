@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702g"></script>
+<script src="common.js?v=20260702h"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -647,6 +647,7 @@ const QUEST_TRIGGERS = [
   { v: 'inqResolved', t: '민원 해결됨 (내 글 완료처리)' },
   { v: 'partners', t: '같이 다닌 짝꿍 수' },
   { v: 'early', t: '얼리버드 (8시 전 시작한 날)' },
+  { v: 'late', t: '올빼미 (저녁 8시 후 시작한 날)' },
   { v: 'debut', t: '첫 방역 완주 (1회성)' }
 ];
 // 1등류 트리거 — 실시간/기간확정 선택 가능
@@ -806,7 +807,7 @@ function computeXpForName(name) {
   // 🚗 운행거리(km)·운행시간(분) 누적 — 조 두 명(운전+보조) 모두 인정
   let kmTotal = 0, minTotal = 0;
   const tripLogs = [];   // 코스별 {km, min} — 정상운행(둘 다 충족) 판정용
-  const __days = {}, __earlyDays = new Set(), __partners = new Set(), __weekIdxs = new Set();
+  const __days = {}, __earlyDays = new Set(), __lateDays = new Set(), __partners = new Set(), __weekIdxs = new Set();
   let perfectCnt = 0;
   logs.forEach(l => {
     if (!l || !isEventVisibleForViewer(l.eventId, data)) return;
@@ -826,6 +827,7 @@ function computeXpForName(name) {
     const ds = l.date || new Date(l.startedAt || 0).toLocaleDateString('ko-KR');
     __days[ds] = (__days[ds] || 0) + 1;
     if (l.startedAt && new Date(l.startedAt).getHours() < 8) __earlyDays.add(ds);
+    if (l.startedAt && new Date(l.startedAt).getHours() >= 20) __lateDays.add(ds);   // 저녁 8시 이후 시작
     keys.forEach(k2 => { if (k2 && k2 !== name) __partners.add(k2); });
     if (l.startedAt) { const dd = new Date(l.startedAt); const dow = (dd.getDay() + 6) % 7; const mon = new Date(dd.getFullYear(), dd.getMonth(), dd.getDate() - dow); __weekIdxs.add(Math.round(mon.getTime() / 604800000)); }
     // 거점 100%: GPS 자동체크(autoCompleted)만 인정 — 수동/일괄 체크 제외
@@ -870,6 +872,7 @@ function computeXpForName(name) {
     else if (qt.trigger === 'inqResolved') cnt = inqResolvedCount(qt.category || '');
     else if (qt.trigger === 'partners') cnt = __partners.size;         // 같이 다닌 짝꿍 수
     else if (qt.trigger === 'early') cnt = __earlyDays.size;           // 8시 전 시작한 날 수
+    else if (qt.trigger === 'late') cnt = __lateDays.size;             // 저녁 8시 후 시작한 날 수
     else if (qt.trigger === 'debut') cnt = vaxTotal > 0 ? 1 : 0;       // 첫 방역 완주
     const th = Number(qt.threshold) || 0;
     let gained = 0, done = false;

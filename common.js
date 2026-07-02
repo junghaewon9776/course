@@ -990,7 +990,7 @@ function cmTotalXp(data, name) {
   // 🚗 운행거리·시간 누적 + 신규 퀘스트 집계 (조 두 명 모두)
   let kmTotal = 0, minTotal = 0, perfectCnt = 0;
   const tripLogs = [];
-  const __days = {}, __earlyDays = {}, __partners = {}, __weekIdxs = {};
+  const __days = {}, __earlyDays = {}, __lateDays = {}, __partners = {}, __weekIdxs = {};
   allLogs.forEach(function (l) {
     const ks = [];
     if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim());
@@ -1007,6 +1007,7 @@ function cmTotalXp(data, name) {
     const ds = l.date || new Date(l.startedAt || 0).toLocaleDateString('ko-KR');
     __days[ds] = (__days[ds] || 0) + 1;
     if (l.startedAt && new Date(l.startedAt).getHours() < 8) __earlyDays[ds] = 1;
+    if (l.startedAt && new Date(l.startedAt).getHours() >= 20) __lateDays[ds] = 1;
     ks.forEach(function (k2) { if (k2 && k2 !== name) __partners[k2] = 1; });
     if (l.startedAt) { const dd = new Date(l.startedAt); const dow = (dd.getDay() + 6) % 7; const mon = new Date(dd.getFullYear(), dd.getMonth(), dd.getDate() - dow); __weekIdxs[Math.round(mon.getTime() / 604800000)] = 1; }
     const snap = Array.isArray(l.anchorsSnapshot) ? l.anchorsSnapshot : null;
@@ -1038,6 +1039,7 @@ function cmTotalXp(data, name) {
     else if (qt.trigger === 'inqResolved') cnt = inqResolvedCnt(qt.category || '');
     else if (qt.trigger === 'partners') cnt = Object.keys(__partners).length;
     else if (qt.trigger === 'early') cnt = Object.keys(__earlyDays).length;
+    else if (qt.trigger === 'late') cnt = Object.keys(__lateDays).length;
     else if (qt.trigger === 'debut') cnt = vaxTotal > 0 ? 1 : 0;
     if (qt.mode === 'threshold') { const th = Number(qt.threshold) || 0; if (th > 0 && cnt >= th) xp += per; }
     else xp += cnt * per;
