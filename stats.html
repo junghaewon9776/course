@@ -1101,8 +1101,9 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
     if (l.crew.driver) nameSet.add(l.crew.driver.trim());
     if (l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => nameSet.add(n));
   });
-  const rows = Array.from(nameSet).map(n => { const r = computeXpForName(n); return { name: n, xp: r.xp, total: r.total }; })
-    .filter(x => x.total > 0 || x.xp > 0).sort((a, b) => b.xp - a.xp);
+  // 전원 표시 — 기록 없는 회원도 이등병 0 XP로 나옴
+  const rows = Array.from(nameSet).filter(Boolean).map(n => { const r = computeXpForName(n); return { name: n, xp: r.xp, total: r.total }; })
+    .sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name, 'ko'));
   if (!rows.length) { el.innerHTML = '<div class="empty">기록 없음</div>'; return; }
   // 🏆 명예의 전당 — 최고 XP 1명
   const top = rows[0];
