@@ -982,7 +982,8 @@ function cmTotalXp(data, name) {
     const t = l.track || [];
     let d = 0; for (let i = 1; i < t.length; i++) d += distance(t[i - 1][0], t[i - 1][1], t[i][0], t[i][1]);
     kmTotal += d / 1000;
-    if (l.startedAt && l.finishedAt) minTotal += (l.finishedAt - l.startedAt) / 60000;
+    // 한 코스당 최대 180분까지만 인정 (stats.html과 동일)
+    if (l.startedAt && l.finishedAt) minTotal += Math.min((l.finishedAt - l.startedAt) / 60000, 180);
   });
   let xp = 0;
   cmGetQuests(data).forEach(qt => {
