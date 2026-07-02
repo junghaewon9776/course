@@ -889,10 +889,10 @@ function renderMyRankCard() {
     + '<div style="font-size:10px;opacity:.75;">누적 ' + total + '회 · ' + xp + ' XP</div></div>'
     + gaugeHtml + '</div>' + medalsHtml + '</div>';
 }
-// SUPER: 특정 회원의 경험치 획득 내역 모달
+// 간부(admin) 이상: 특정 회원의 경험치 획득 내역 모달
 function showXpBreakdown(name) {
   let role = null; try { role = getMyRole(); } catch (e) {}
-  if (role !== 'super') return;
+  if (role !== 'super' && role !== 'admin') return;
   const r = computeXpForName(name);
   const rows = (r.items || []).filter(it => it.gained > 0).sort((a, b) => b.gained - a.gained);
   const body = rows.length ? rows.map(it => {
@@ -995,7 +995,8 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
   const el = document.getElementById('rank_' + uid);
   if (!card || !el) return;
   let role = null; try { role = getMyRole(); } catch (e) {}
-  const canEdit = (role === 'super');
+  const canEdit = (role === 'super');                            // 계급 설정·수동 변경은 super만
+  const canViewXp = (role === 'super' || role === 'admin');      // 경험치 내역은 간부 이상
   card.style.display = 'block';   // 계급표는 모두에게 공개
   const editBtn = document.getElementById('rankEditBtn_' + uid);
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';   // 편집 버튼은 super만
@@ -1039,7 +1040,7 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
         + '<td style="padding:6px;">' + (i === 0 ? '⭐' : (i + 1)) + '</td>'
         + '<td style="padding:6px;font-weight:700;">' + String(r.name).replace(/</g, '&lt;') + '</td>'
         + '<td style="padding:6px;white-space:nowrap;">' + tierBadge(rk, 16) + '<span style="font-weight:700;color:#6c3483;">' + String(rk.name || '').replace(/</g, '&lt;') + '</span>' + (ovName ? ' <span style="font-size:10px;color:#e67e22;">(수동)</span>' : '') + sel + '</td>'
-        + (canEdit
+        + (canViewXp
           ? '<td onclick="showXpBreakdown(\'' + nmEsc + '\')" style="padding:6px;text-align:right;font-weight:700;color:#8e44ad;cursor:pointer;text-decoration:underline dotted;" title="클릭하면 획득 내역">' + r.xp + '</td>'
           : '<td style="padding:6px;text-align:right;font-weight:700;color:#6c3483;">' + r.xp + '</td>')
         + '<td style="padding:6px;">' + gauge + '</td></tr>';

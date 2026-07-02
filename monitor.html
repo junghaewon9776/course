@@ -282,6 +282,7 @@ function getVehiclesOnCourse(courseId) {
     if (!sess || sess.courseId !== courseId) continue;
     if (sess.startedAt && now - sess.startedAt > GHOST_MS) continue;
     if (__loggedKeys.has(key)) continue;   // 완료된 운행 → 제외
+    if (sess.lastUpdate && now - sess.lastUpdate > 30 * 60 * 1000) continue;   // 30분 이상 신호 없음(앱 꺼짐) → 종료 취급
     const hocha = deriveHochaName(sess) || sess.crew?.driver || '?';
     const driver = sess.crew?.driver || '';
     const driverPhone = sess.crew?.driverPhone || '';
@@ -1191,6 +1192,7 @@ function renderLive(live) {
     if (!sess || typeof sess.lat !== 'number') continue;
     if (sess.startedAt && now - sess.startedAt > GHOST_MS) continue;
     if (__loggedKeys.has(key)) continue;   // 완료된 운행 → 라이브에서 제외
+    if (sess.lastUpdate && now - sess.lastUpdate > 30 * 60 * 1000) continue;   // 30분 이상 신호 없음(앱 꺼짐) → 종료 취급
     activeKeys.add(key);
     const course = getCourse(data, sess.courseId);
     const event = getEvent(data, sess.eventId);
@@ -1732,6 +1734,8 @@ function render() {
     const roleNow = getMyRole();
     const mgmtBtns = (roleNow === 'super' || roleNow === 'admin')
       ? `<button class="small danger" style="font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();hideLog('${(l.key||'').replace(/'/g,"\\'")}')">🗑 삭제</button>`
+        + `<button class="small" style="background:#2980b9;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();addLogPhoto(${i},'field')">📷 사진</button>`
+        + `<button class="small" style="background:#e67e22;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();addLogPhoto(${i},'receipt')">🧾 영수증</button>`
       : '';
     return `
       <div style="border-bottom:1px solid #e5e5e5;border-left:5px solid ${course?.color || '#999'};${selectedLogIdx===i?'background:#fff9e6;':''}padding:9px 12px;">
@@ -1816,6 +1820,51 @@ function playLogFromList(idx) {
     if (!l || !l.track || l.track.length < 2) { alert('이동 궤적이 없는 기록입니다'); return; }
     startReplay(l.track);
   }, 650);
+}
+
+// 📷 간부: 로그에 사진/영수증 소급 업로드 — 그 로그의 조(운전+보조)에게 XP
+function addLogPhoto(idx, type) {
+  const role = getMyRole();
+  if (role !== 'super' && role !== 'admin') { alert('간부 이상만 가능합니다.'); return; }
+  const l = getFilteredLogs()[idx];
+  if (!l) return;
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
+  input.onchange = async function () {
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+    const typeLabel = type === 'receipt' ? '🧾 영수증' : '📷 사진';
+    let ok = 0;
+    for (const f of files) {
+      try {
+        await uploadFieldPhoto(f, {
+          type: type || 'field',
+          sessionKey: l.key || '',
+          eventId: l.eventId || '',
+          courseId: l.courseId || '',
+          teamId: l.teamId || '',
+          lat: null, lng: null,
+          note: (l.crew && l.crew.driver) || '',
+          driver: (l.crew && l.crew.driver) || '',
+          assist: (l.crew && l.crew.assist) || ''   // 조 두 명 모두 XP
+        });
+        ok++;
+      } catch (e) { console.warn('사진 업로드 실패', e); }
+    }
+    if (ok) {
+      alert('✅ ' + typeLabel + ' ' + ok + '장 업로드 완료\n(' + ((l.crew && l.crew.driver) || '') + ((l.crew && l.crew.assist) ? ' · ' + l.crew.assist : '') + ' 조에 반영)');
+      // 진급 확인 (그 조 두 명)
+      try {
+        const names = [];
+        if (l.crew && l.crew.driver) names.push(l.crew.driver.trim());
+        if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => names.push(n));
+        if (typeof checkPromotionForNames === 'function' && names.length) checkPromotionForNames(names);
+      } catch (e) {}
+    } else {
+      alert('❌ 업로드 실패 — Drive 사진 설정을 확인하세요');
+    }
+  };
+  input.click();
 }
 
 function clearDirectionMarkers() {

@@ -2795,6 +2795,17 @@ function finishCourse() {
 function cancelCourse() {
   if (!currentSession) return;
   if (!confirm('진행 중인 코스를 취소할까요?\n(운행기록 저장 안 됨)')) return;
+  // 취소 알림 — 시작 알림만 가고 취소는 안 가면 계속 도는 줄 앎
+  try {
+    const __d = loadData();
+    const __ev = getEvent(__d, currentSession.eventId);
+    const __co = getCourse(__d, currentSession.courseId);
+    sendTelegram(`✕ <b>코스 취소</b> (기록 저장 안 됨)\n${__ev?.name || ''} · ${__co?.name || ''}\n운전: ${currentSession.crew?.driver || '-'}${currentSession.crew?.assist ? ' / 보조: ' + currentSession.crew.assist : ''}\n취소: ${new Date().toLocaleString('ko-KR')}`);
+    if (typeof sendAppPush === 'function') {
+      var __pt = pushTemplate('courseCancel', { 행사: (__ev && __ev.name) || '', 코스: (__co && __co.name) || '' }, '✕ 코스 취소', '{행사} · {코스} — 테스트/취소로 종료됨');
+      sendAppPush(__pt.title, __pt.body, 'admin');
+    }
+  } catch (e) {}
   if (watchId !== null) stopGPS();
   releaseWakeLock();
   try { unpublishLiveSession(currentSession.key); } catch (e) {}
