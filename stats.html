@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260701f"></script>
+<script src="common.js?v=20260702a"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -761,11 +761,22 @@ function computeXpForName(name) {
     });
     return n;
   }
+  // 세션키→조원 맵 (예전 사진 소급 반영: 사진의 sessionKey로 그때 운행 조를 찾음)
+  const __sessCrew = {};
+  (data.logs || []).forEach(l => {
+    if (!l || !l.key || !l.crew) return;
+    const ns = [];
+    if (l.crew.driver) ns.push(l.crew.driver.trim());
+    if (l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(x => ns.push(x));
+    if (ns.length) __sessCrew[l.key] = ns;
+  });
   function photoCount(ptype) {
     let n = 0; const ph = data.photos || {};
     Object.keys(ph).forEach(k => {
       const p = ph[k]; if (!p) return; if (ptype && p.type !== ptype) return; if (!__inYear(p.takenAt)) return;
-      const names = (p.crewNames && p.crewNames.length) ? p.crewNames : [p.uploader];   // 조 두 명 모두
+      let names = (p.crewNames && p.crewNames.length) ? p.crewNames : null;
+      if (!names && p.sessionKey && __sessCrew[p.sessionKey]) names = __sessCrew[p.sessionKey];  // 소급: 그때 조 두 명
+      if (!names) names = [p.uploader || p.note];   // 최후: 업로더/운전자명
       if (names.map(x => (x || '').trim()).indexOf(name) >= 0) n++;
     });
     return n;

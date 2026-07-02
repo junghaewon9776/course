@@ -955,7 +955,16 @@ function cmTotalXp(data, name) {
   });
   function inqCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; if ((q.writer || '').trim() === name) n++; }); return n; }
   function cmtCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; (q.comments || []).forEach(c => { if (c && (c.writer || '').trim() === name) n++; }); }); return n; }
-  function photoCnt(pt) { let n = 0; const ph = data.photos || {}; Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; const nm = (p.crewNames && p.crewNames.length) ? p.crewNames : [p.uploader]; if (nm.map(function (x) { return (x || '').trim(); }).indexOf(name) >= 0) n++; }); return n; }
+  // 세션키→조원 맵 (예전 사진 소급 반영)
+  const __sessCrew = {};
+  (data.logs || []).forEach(function (l) {
+    if (!l || !l.key || !l.crew) return;
+    const ns = [];
+    if (l.crew.driver) ns.push(l.crew.driver.trim());
+    if (l.crew.assist) l.crew.assist.split(',').map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (x) { ns.push(x); });
+    if (ns.length) __sessCrew[l.key] = ns;
+  });
+  function photoCnt(pt) { let n = 0; const ph = data.photos || {}; Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; let nm = (p.crewNames && p.crewNames.length) ? p.crewNames : null; if (!nm && p.sessionKey && __sessCrew[p.sessionKey]) nm = __sessCrew[p.sessionKey]; if (!nm) nm = [p.uploader || p.note]; if (nm.map(function (x) { return (x || '').trim(); }).indexOf(name) >= 0) n++; }); return n; }
   // 월별/년도 1등 계산 (방역 최다)
   function vaxBy(ls) { const m = {}; ls.forEach(l => { if (!l || !l.finishedAt) return; const ks = []; if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim()); if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => ks.push(n)); ks.forEach(n => { if (n) m[n] = (m[n] || 0) + 1; }); }); return m; }
   const allLogs = (data.logs || []).filter(l => l && l.finishedAt);
