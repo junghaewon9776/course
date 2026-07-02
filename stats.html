@@ -1092,7 +1092,16 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
   const editBtn = document.getElementById('rankEditBtn_' + uid);
   if (editBtn) editBtn.style.display = canEdit ? '' : 'none';   // 편집 버튼은 super만
   const tiers = getRankTiers();
-  const rows = sortedAll.map(x => { const r = computeXpForName(x[0]); return { name: x[0], xp: r.xp, total: r.total }; })
+  // 계급표 명단은 기간 필터와 무관 — 년도 전체 참여자 + 등록 회원 전부에서 뽑음
+  const __data = loadData();
+  const nameSet = new Set();
+  (__data.members || []).forEach(m => { if (m && m.name) nameSet.add(String(m.name).trim()); });
+  rankLogs().forEach(l => {
+    if (!l || !l.crew) return;
+    if (l.crew.driver) nameSet.add(l.crew.driver.trim());
+    if (l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => nameSet.add(n));
+  });
+  const rows = Array.from(nameSet).map(n => { const r = computeXpForName(n); return { name: n, xp: r.xp, total: r.total }; })
     .filter(x => x.total > 0 || x.xp > 0).sort((a, b) => b.xp - a.xp);
   if (!rows.length) { el.innerHTML = '<div class="empty">기록 없음</div>'; return; }
   // 🏆 명예의 전당 — 최고 XP 1명
