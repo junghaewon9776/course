@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>정산 - 방역코스</title>
+  <link rel="stylesheet" href="style.css?v=20260611b">
+  <style>
+    .exp-row { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid #eee; font-size:13px; flex-wrap:wrap; }
+    .exp-cat { display:inline-block; background:#2c3e50; color:#fff; padding:2px 9px; border-radius:10px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .exp-amt { font-weight:800; color:#c0392b; margin-left:auto; white-space:nowrap; }
+    .sum-row { display:flex; justify-content:space-between; padding:7px 10px; border-bottom:1px dashed #e0e0e0; font-size:13px; }
+    .sum-row b { color:#2c3e50; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>💳 정산</h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="admin.html">관리</a>
+    <a href="today.html">오늘운영</a>
+    <a href="monitor.html">모니터링</a>
+    <a href="stats.html">통계</a>
+    <a href="expense.html" class="active">정산</a>
+    <a href="#" onclick="adminLogout();return false;">로그아웃</a>
+  </nav>
+</header>
+
+<div class="container">
+  <!-- 문자 붙여넣기 -->
+  <div class="card" style="border-left:4px solid #2980b9;">
+    <h2>📩 결제 문자 붙여넣기</h2>
+    <p class="sub" style="margin:4px 0 8px;">카드 결제 문자를 복사해서 붙여넣으면 금액·일시·가맹점을 자동으로 뽑아요.</p>
+    <textarea id="smsBox" rows="4" placeholder="예)&#10;신한카드승인 홍*동&#10;45,000원 일시불&#10;06/05 14:22 주식회사OO주유소" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;" oninput="parseSms()"></textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;">
+      <label style="font-size:12px;font-weight:700;">금액<br><input id="expAmt" type="number" placeholder="원" style="width:110px;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+      <label style="font-size:12px;font-weight:700;">일시<br><input id="expAt" type="datetime-local" style="padding:7px;border:1px solid #ddd;border-radius:6px;"></label>
+      <label style="font-size:12px;font-weight:700;flex:1;min-width:130px;">가맹점<br><input id="expShop" placeholder="가맹점명" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ddd;border-radius:6px;"></label>
+      <label style="font-size:12px;font-weight:700;">항목<br><select id="expCat" style="padding:8px;border:1px solid #ddd;border-radius:6px;"></select></label>
+    </div>
+    <input id="expMemo" placeholder="메모 (선택)" style="width:100%;box-sizing:border-box;padding:8px;border:1px solid #ddd;border-radius:6px;margin-top:8px;">
+    <button onclick="saveExpense()" style="width:100%;margin-top:10px;background:#27ae60;color:#fff;border:none;padding:13px;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;">💾 지출 저장</button>
+  </div>
+
+  <!-- 항목 관리 -->
+  <div class="card">
+    <div class="flex-between">
+      <h2>🏷 지출 항목</h2>
+      <button class="small" style="background:#2c3e50;color:#fff;" onclick="addCategory()">+ 항목 추가</button>
+    </div>
+    <div id="catList" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;"></div>
+  </div>
+
+  <!-- 정산 보고서 -->
+  <div class="card" style="border-left:4px solid #8e44ad;">
+    <div class="flex-between" style="flex-wrap:wrap;gap:6px;">
+      <h2>📊 정산 보고서</h2>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <input type="month" id="repMonth" onchange="render()" style="padding:6px;border:1px solid #ddd;border-radius:6px;">
+        <button class="small" style="background:#16a085;color:#fff;" onclick="exportCsv()">⬇️ 엑셀</button>
+      </div>
+    </div>
+    <div id="sumBox" style="margin-top:8px;"></div>
+  </div>
+
+  <!-- 지출 목록 -->
+  <div class="card">
+    <h2>🧾 지출 내역</h2>
+    <div id="expList"></div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js?v=20260512v"></script>
+<script src="common.js?v=20260702j"></script>
+<script>
+window.onAuthSuccess = () => onDataReady(init);
+window.onDataChanged = () => render();
+checkAdminAuth().then(ok => { if (ok) onDataReady(init); });
+
+const DEFAULT_CATS = ['주유', '식비', '음료·간식', '자재·소모품', '수리·정비', '기타'];
+
+function getCats() {
+  const d = loadData();
+  return (Array.isArray(d.expenseCategories) && d.expenseCategories.length) ? d.expenseCategories : DEFAULT_CATS;
+}
+function getExpenses() {
+  const d = loadData();
+  const e = d.expenses;
+  if (!e) return [];
+  return (Array.isArray(e) ? e : Object.keys(e).map(k => Object.assign({ _key: k }, e[k]))).filter(Boolean);
+}
+
+function init() {
+  // 간부 이상만
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  if (role !== 'super' && role !== 'admin') {
+    document.querySelector('.container').innerHTML = '<div class="card"><div class="empty">간부 이상만 볼 수 있는 페이지입니다.</div></div>';
+    return;
+  }
+  // 이번 달 기본
+  const now = new Date();
+  document.getElementById('repMonth').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+  render();
+}
+
+// ── 📩 문자 파서: 카드사 공통 패턴에서 금액/일시/가맹점 추출 ──
+function parseSms() {
+  const t = document.getElementById('smsBox').value || '';
+  if (!t.trim()) return;
+  // 금액: "12,345원" — 누적/잔액/한도 줄은 제외하고 첫 번째
+  let amt = null;
+  t.split(/\n/).forEach(line => {
+    if (amt != null) return;
+    if (/누적|잔액|한도|포인트/.test(line)) return;
+    const m = line.match(/([\d,]+)\s*원/);
+    if (m) { const v = parseInt(m[1].replace(/,/g, '')); if (v > 0) amt = v; }
+  });
+  if (amt == null) { const m = t.match(/([\d,]+)\s*원/); if (m) amt = parseInt(m[1].replace(/,/g, '')); }
+  if (amt != null) document.getElementById('expAmt').value = amt;
+  // 일시: "06/05 14:22" 또는 "06.05 14:22"
+  const dm = t.match(/(\d{1,2})[\/.](\d{1,2})\s+(\d{1,2}):(\d{2})/);
+  if (dm) {
+    const y = new Date().getFullYear();
+    const pad = n => String(n).padStart(2, '0');
+    document.getElementById('expAt').value = y + '-' + pad(dm[1]) + '-' + pad(dm[2]) + 'T' + pad(dm[3]) + ':' + dm[4];
+  }
+  // 가맹점: 카드/승인/원/일시불/체크 안 들어간 줄 중 가장 그럴듯한 것
+  let shop = '';
+  t.split(/\n/).map(s => s.trim()).forEach(line => {
+    if (!line || /카드|승인|원|일시불|할부|체크|누적|잔액|출금|입금|\d{1,2}[\/.]\d{1,2}\s+\d{1,2}:\d{2}/.test(line)) {
+      // 날짜줄 뒤에 가맹점이 붙는 형식: "06/05 14:22 OO주유소"
+      const m2 = line.match(/\d{1,2}[\/.]\d{1,2}\s+\d{1,2}:\d{2}\s+(.+)$/);
+      if (m2 && m2[1] && !shop) shop = m2[1].trim();
+      return;
+    }
+    if (!shop && line.length >= 2 && line.length <= 30) shop = line;
+  });
+  if (shop) document.getElementById('expShop').value = shop;
+}
+
+function renderCatSelect() {
+  const sel = document.getElementById('expCat');
+  const cur = sel.value;
+  sel.innerHTML = getCats().map(c => '<option value="' + c.replace(/"/g, '&quot;') + '"' + (cur === c ? ' selected' : '') + '>' + c.replace(/</g, '&lt;') + '</option>').join('');
+}
+function renderCats() {
+  const el = document.getElementById('catList');
+  let role = null; try { role = getMyRole(); } catch (e) {}
+  const canEdit = (role === 'super' || role === 'admin');
+  el.innerHTML = getCats().map(c => '<span style="display:inline-flex;align-items:center;gap:5px;background:#2c3e50;color:#fff;padding:5px 11px;border-radius:14px;font-size:13px;font-weight:600;">' + c.replace(/</g, '&lt;')
+    + (canEdit ? ' <span onclick="delCategory(\'' + c.replace(/'/g, "\\'") + '\')" style="cursor:pointer;color:#ff8a80;font-weight:800;">✕</span>' : '') + '</span>').join('');
+}
+function addCategory() {
+  const nm = prompt('추가할 항목 이름'); if (!nm || !nm.trim()) return;
+  const d = loadData();
+  const cats = getCats().slice();
+  if (cats.indexOf(nm.trim()) >= 0) { alert('이미 있는 항목입니다.'); return; }
+  cats.push(nm.trim());
+  d.expenseCategories = cats;
+  saveData(d); render();
+}
+function delCategory(nm) {
+  if (!confirm('"' + nm + '" 항목을 삭제할까요?\n(기존 지출 기록은 그대로 남습니다)')) return;
+  const d = loadData();
+  d.expenseCategories = getCats().filter(c => c !== nm);
+  saveData(d); render();
+}
+
+function saveExpense() {
+  const amt = parseInt(document.getElementById('expAmt').value) || 0;
+  if (!amt) { alert('금액을 입력하세요.'); return; }
+  const atStr = document.getElementById('expAt').value;
+  const at = atStr ? new Date(atStr).getTime() : Date.now();
+  const entry = {
+    amount: amt,
+    at: at,
+    shop: (document.getElementById('expShop').value || '').trim(),
+    category: document.getElementById('expCat').value || '기타',
+    memo: (document.getElementById('expMemo').value || '').trim(),
+    raw: (document.getElementById('smsBox').value || '').trim(),
+    writer: (function () { try { const u = fbAuth.currentUser; const ui = (loadData().users || {})[u.uid] || {}; return ui.name || u.email || ''; } catch (e) { return ''; } })(),
+    createdAt: Date.now()
+  };
+  fbDb.ref('/expenses').push(entry).then(() => {
+    document.getElementById('smsBox').value = '';
+    document.getElementById('expAmt').value = '';
+    document.getElementById('expShop').value = '';
+    document.getElementById('expMemo').value = '';
+    alert('✅ 저장됨: ' + entry.category + ' ' + entry.amount.toLocaleString() + '원');
+    render();
+  }).catch(e => alert('저장 실패: ' + e.message));
+}
+function delExpense(key) {
+  if (getMyRole() !== 'super' && getMyRole() !== 'admin') return;
+  if (!confirm('이 지출을 삭제할까요?')) return;
+  fbDb.ref('/expenses/' + key).remove().then(() => { if (_cache && _cache.expenses) delete _cache.expenses[key]; render(); });
+}
+
+function fmtW(n) { return (n || 0).toLocaleString() + '원'; }
+function render() {
+  renderCatSelect(); renderCats();
+  const mv = document.getElementById('repMonth').value;   // 'YYYY-MM'
+  const all = getExpenses().sort((a, b) => (b.at || 0) - (a.at || 0));
+  const inMonth = all.filter(x => {
+    if (!mv) return true;
+    const d = new Date(x.at || 0);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') === mv;
+  });
+  // 항목별 합계
+  const byCat = {};
+  inMonth.forEach(x => { byCat[x.category || '기타'] = (byCat[x.category || '기타'] || 0) + (x.amount || 0); });
+  const total = inMonth.reduce((s, x) => s + (x.amount || 0), 0);
+  document.getElementById('sumBox').innerHTML =
+    Object.keys(byCat).sort((a, b) => byCat[b] - byCat[a]).map(c =>
+      '<div class="sum-row"><b>' + c.replace(/</g, '&lt;') + '</b><span>' + fmtW(byCat[c]) + '</span></div>').join('')
+    + '<div class="sum-row" style="background:#f3eefa;font-weight:800;font-size:15px;"><b>합계 (' + inMonth.length + '건)</b><span style="color:#8e44ad;">' + fmtW(total) + '</span></div>';
+  // 목록
+  const el = document.getElementById('expList');
+  if (!inMonth.length) { el.innerHTML = '<div class="empty">이 달 지출 없음</div>'; return; }
+  el.innerHTML = inMonth.map(x => {
+    const d = new Date(x.at || 0);
+    const ds = (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    return '<div class="exp-row">'
+      + '<span class="exp-cat">' + String(x.category || '기타').replace(/</g, '&lt;') + '</span>'
+      + '<span style="color:#888;font-size:12px;white-space:nowrap;">' + ds + '</span>'
+      + '<span style="font-weight:600;">' + String(x.shop || '-').replace(/</g, '&lt;') + '</span>'
+      + (x.memo ? '<span style="color:#999;font-size:12px;">' + String(x.memo).replace(/</g, '&lt;') + '</span>' : '')
+      + '<span class="exp-amt">' + fmtW(x.amount) + '</span>'
+      + (x._key ? '<button onclick="delExpense(\'' + x._key + '\')" style="background:#e74c3c;color:#fff;border:none;border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">✕</button>' : '')
+      + '</div>';
+  }).join('');
+}
+
+function exportCsv() {
+  const mv = document.getElementById('repMonth').value || '전체';
+  const all = getExpenses().sort((a, b) => (a.at || 0) - (b.at || 0));
+  const rows = all.filter(x => {
+    if (!document.getElementById('repMonth').value) return true;
+    const d = new Date(x.at || 0);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') === document.getElementById('repMonth').value;
+  });
+  let csv = '﻿일시,항목,가맹점,금액,메모,입력자\n';
+  rows.forEach(x => {
+    const d = new Date(x.at || 0);
+    const ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    csv += '"' + ds + '","' + (x.category || '') + '","' + String(x.shop || '').replace(/"/g, '""') + '",' + (x.amount || 0) + ',"' + String(x.memo || '').replace(/"/g, '""') + '","' + String(x.writer || '').replace(/"/g, '""') + '"\n';
+  });
+  const byCat = {};
+  rows.forEach(x => { byCat[x.category || '기타'] = (byCat[x.category || '기타'] || 0) + (x.amount || 0); });
+  csv += '\n항목별 합계\n';
+  Object.keys(byCat).forEach(c => { csv += '"' + c + '",' + byCat[c] + '\n'; });
+  csv += '"총합",' + rows.reduce((s, x) => s + (x.amount || 0), 0) + '\n';
+  const fname = '정산보고서_' + mv + '.csv';
+  if (typeof saveFile === 'function') { saveFile(fname, csv, 'text/csv;charset=utf-8'); }
+  else { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' })); a.download = fname; a.click(); }
+}
+</script>
+</body>
+</html>
