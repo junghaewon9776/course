@@ -1941,16 +1941,18 @@ function addComplaintAt(lat, lng, areaHint = '') {
     if (!Array.isArray(data.complaints)) data.complaints = [];
     const u = fbAuth.currentUser;
     const uInfo = (data.users || {})[u?.uid];
+    const __cid = uid(), __iqid = uid();   // 🔗 지도 민원 ↔ 게시판 글 양방향 연결
     data.complaints.push({
-      id: uid(), eventId, lat, lng,
+      id: __cid, eventId, lat, lng,
       phone: (r.phone || '').trim(),
       content: (r.content || '').trim(),
       area: areaHint || '',
       status: 'pending',
       createdAt: Date.now(),
-      createdBy: uInfo?.name || u?.email || ''
+      createdBy: uInfo?.name || u?.email || '',
+      inquiryId: __iqid
     });
-    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:(r.content||'').trim(),phone:(r.phone||'').trim(),writer:(uInfo&&uInfo.name)||(u&&u.email)||'관리자',writerUid:(u&&u.uid)||'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()}); if(typeof sendAppPush==='function'){var __mp=pushTemplate('field',{유형:'주민민원',코스:'',내용:(r.content||'').slice(0,60)},'📞 주민민원 추가','{내용}'); sendAppPush(__mp.title,__mp.body,'all','complaint');}
+    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:__iqid,category:'resident',categoryName:'주민민원',subCategory:'',content:(r.content||'').trim(),phone:(r.phone||'').trim(),writer:(uInfo&&uInfo.name)||(u&&u.email)||'관리자',writerUid:(u&&u.uid)||'',status:'pending',adminMemo:'',comments:[],lat:lat,lng:lng,complaintId:__cid,createdAt:Date.now()}); if(typeof sendAppPush==='function'){var __mp=pushTemplate('field',{유형:'주민민원',코스:'',내용:(r.content||'').slice(0,60)},'📞 주민민원 추가','{내용}'); sendAppPush(__mp.title,__mp.body,'all','complaint');}
     saveData(data); refreshAll();
     sendTelegram(`📞 <b>민원 추가</b> (관리자)\n연락처: ${(r.phone || '-')}\n내용: ${(r.content || '-').slice(0, 50)}`);
   });
@@ -2033,6 +2035,8 @@ function toggleComplaintStatus(id) {
   const c = (data.complaints || []).find(x => x.id === id);
   if (!c) return;
   c.status = c.status === 'resolved' ? 'pending' : 'resolved';
+  // 🔗 게시판 연동: 지도 민원 상태 바꾸면 게시판 글도 같이
+  if (c.inquiryId) { const q = (data.inquiries || []).find(x => x.id === c.inquiryId); if (q) q.status = c.status; }
   saveData(data); refreshAll();
   const label = c.status === 'resolved' ? '처리완료' : '대기복원';
   sendTelegram(`📞 <b>민원 ${label}</b>\n내용: ${(c.content || '-').slice(0, 50)}\n연락처: ${c.phone || '-'}`);
@@ -2099,6 +2103,7 @@ function convertComplaintToAnchor(id) {
   // 민원은 처리완료 + 거점전환 플래그
   c.status = 'resolved';
   c.convertedToAnchor = true;
+  if (c.inquiryId) { const q = (data.inquiries || []).find(x => x.id === c.inquiryId); if (q) q.status = 'resolved'; }   // 게시판 글도 완료
   saveData(data); refreshAll();
   alert(`✅ ${course.name}의 거점으로 추가됨`);
   sendTelegram(`🔄 <b>민원→거점 전환</b>\n민원: ${(c.content || '-').slice(0, 30)}\n→ 거점: ${name}\n코스: ${course.name}`);

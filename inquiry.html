@@ -102,7 +102,21 @@
     <textarea id="inqContent" rows="3" placeholder="구체적인 상황을 적어주세요" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;resize:vertical;margin-bottom:12px;"></textarea>
 
     <label style="font-size:13px;font-weight:700;">연락처 <span style="font-weight:400;color:#aaa;">(선택)</span></label>
-    <input id="inqPhone" type="tel" placeholder="010-0000-0000" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:16px;">
+    <input id="inqPhone" type="tel" placeholder="010-0000-0000" style="width:100%;box-sizing:border-box;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;margin-bottom:12px;">
+
+    <label style="font-size:13px;font-weight:700;">📷 사진 첨부 <span style="font-weight:400;color:#aaa;">(선택 · 최대 3장)</span></label>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 12px;">
+      <button type="button" onclick="document.getElementById('inqImgUpload').click()" style="padding:8px 16px;background:#3498db;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">+ 사진 추가</button>
+      <input type="file" id="inqImgUpload" accept="image/*" multiple style="display:none" onchange="handleInqImages(event)">
+      <div id="inqImgPreview" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+    </div>
+
+    <label style="font-size:13px;font-weight:700;">📍 위치 <span style="font-weight:400;color:#aaa;">(선택 · 첨부하면 관리 지도에 민원 지역으로 표시)</span></label>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 16px;">
+      <button type="button" onclick="attachInqLocation()" style="padding:8px 16px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">📍 현재 위치 첨부</button>
+      <span id="inqLocStatus" style="font-size:12px;color:#999;">위치 없음</span>
+      <button type="button" id="inqLocClear" onclick="clearInqLocation()" style="display:none;background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;">✕ 제거</button>
+    </div>
 
     <button onclick="submitInquiry()" style="width:100%;padding:14px;background:#2980b9;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;">
       📨 접수하기
@@ -287,6 +301,49 @@ function selectSub(val) {
   }
 }
 
+// ────── 📷 접수 사진 첨부 ──────
+let __inqImages = [];
+async function handleInqImages(e) {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  for (const f of files) {
+    if (__inqImages.length >= 3) { alert('사진은 최대 3장까지'); break; }
+    try { __inqImages.push(await compressImage(f, 900, 0.72)); } catch (err) { alert('사진을 불러오지 못했습니다'); }
+  }
+  renderInqImgPreview();
+}
+function renderInqImgPreview() {
+  const el = document.getElementById('inqImgPreview');
+  if (!el) return;
+  el.innerHTML = __inqImages.map((img, i) =>
+    `<span style="position:relative;display:inline-block;">
+      <img src="${img}" style="width:72px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #ddd;">
+      <span onclick="__inqImages.splice(${i},1);renderInqImgPreview();" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#e74c3c;color:#fff;font-size:12px;line-height:20px;text-align:center;cursor:pointer;">✕</span>
+    </span>`).join('');
+}
+// ────── 📍 접수 위치 첨부 ──────
+let __inqLoc = null;
+function attachInqLocation() {
+  const st = document.getElementById('inqLocStatus');
+  st.textContent = '위치 확인 중...';
+  if (!navigator.geolocation) { st.textContent = '이 기기는 위치를 지원하지 않아요'; return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    __inqLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    st.textContent = '✅ 위치 첨부됨 (' + __inqLoc.lat.toFixed(5) + ', ' + __inqLoc.lng.toFixed(5) + ')';
+    st.style.color = '#27ae60';
+    document.getElementById('inqLocClear').style.display = '';
+  }, err => {
+    st.textContent = '❌ 위치를 가져오지 못했어요 (위치 권한 확인)';
+    st.style.color = '#e74c3c';
+  }, { enableHighAccuracy: true, timeout: 10000 });
+}
+function clearInqLocation() {
+  __inqLoc = null;
+  const st = document.getElementById('inqLocStatus');
+  st.textContent = '위치 없음'; st.style.color = '#999';
+  document.getElementById('inqLocClear').style.display = 'none';
+}
+
 // ────── 접수 ──────
 function submitInquiry() {
   // 🛡️ 민원 작성 권한 체크
@@ -326,8 +383,30 @@ function submitInquiry() {
     status: 'pending',
     adminMemo: '',
     comments: [],
+    images: __inqImages.slice(),
+    lat: __inqLoc ? __inqLoc.lat : null,
+    lng: __inqLoc ? __inqLoc.lng : null,
     createdAt: Date.now()
   };
+  // 📍 위치가 있으면 관리 지도의 민원 지역에도 자동 등록 (마커·근접 알림 연동)
+  if (__inqLoc) {
+    if (!Array.isArray(data.complaints)) data.complaints = [];
+    const vis = (data.visibility || {}).events || {};
+    const ev = (data.events || []).find(e => vis[e.id] !== false);
+    const cId = uid();
+    data.complaints.push({
+      id: cId, eventId: (ev && ev.id) || '',
+      lat: __inqLoc.lat, lng: __inqLoc.lng,
+      phone: inquiry.phone || '',
+      content: '[' + (cat?.name || '민원') + (selectedSub ? '·' + selectedSub : '') + '] ' + (content || ''),
+      area: '',
+      status: 'pending',
+      createdAt: Date.now(),
+      createdBy: writerName,
+      inquiryId: inquiry.id
+    });
+    inquiry.complaintId = cId;
+  }
   data.inquiries.push(inquiry);
   saveData(data);
   try { if (typeof checkPromotionForName === 'function') checkPromotionForName(writerName); } catch (e) {}
@@ -341,6 +420,8 @@ function submitInquiry() {
   selectedCat = ''; selectedSub = '';
   document.getElementById('inqContent').value = '';
   document.getElementById('inqPhone').value = '';
+  __inqImages = []; renderInqImgPreview();
+  clearInqLocation();
   renderCategoryBtns();
   document.getElementById('subCategoryArea').style.display = 'none';
   document.getElementById('subCategorySel').innerHTML = '<option value="">-- 항목을 선택하세요 --</option>';
@@ -481,10 +562,12 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
         <span class="status-badge ${statusClass}">${statusText}</span>
       </div>
       ${q.content ? `<div style="margin:8px 0;color:#444;font-size:14px;white-space:pre-wrap;line-height:1.5;">${q.content.replace(/</g,'&lt;')}</div>` : ''}
+      ${(q.images && q.images.length) ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;">${q.images.map((img,ii)=>`<img src="${img}" onclick="viewInqImage('${q.id}',${ii})" style="width:110px;height:82px;object-fit:cover;border-radius:8px;border:1px solid #ddd;cursor:pointer;">`).join('')}</div>` : ''}
       <div style="font-size:12px;color:#999;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
         <span>🕐 ${when}</span>
         <span>👤 ${writerLabel(q.writerUid, q.writer).replace(/</g,'&lt;')}</span>
         ${q.phone ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;" onclick="event.stopPropagation()">📞 ${q.phone}</a>` : ''}
+        ${(q.lat && q.lng) ? `<a href="https://map.kakao.com/link/map/민원위치,${q.lat},${q.lng}" target="_blank" style="color:#e67e22;text-decoration:none;font-weight:700;" onclick="event.stopPropagation()">📍 위치 보기</a>` : ''}
         ${q.deviceName ? `<span>📱 ${q.deviceName}</span>` : ''}
       </div>
       ${q.adminMemo ? `<div style="margin-top:8px;padding:8px 10px;background:#fff8e1;border-radius:6px;font-size:13px;border-left:3px solid #f1c40f;"><b>관리자 메모:</b> ${q.adminMemo.replace(/</g,'&lt;')}</div>` : ''}
@@ -642,7 +725,27 @@ function changeInqStatus(id, status) {
   const q = (data.inquiries || []).find(x => x.id === id);
   if (!q) return;
   q.status = status;
+  // 🔗 지도 민원 연동: 게시판 상태 바꾸면 관리 지도의 민원도 같이
+  if (q.complaintId) {
+    const c = (data.complaints || []).find(x => x.id === q.complaintId);
+    if (c) c.status = (status === 'resolved') ? 'resolved' : 'pending';
+  }
   saveData(data);
+}
+// 접수 글 첨부 사진 크게 보기
+function viewInqImage(id, idx) {
+  const data = loadData();
+  const q = (data.inquiries || []).find(x => x.id === id);
+  if (!q || !q.images?.[idx]) return;
+  let viewer = document.getElementById('imgViewer');
+  if (viewer) viewer.remove();
+  viewer = document.createElement('div');
+  viewer.id = 'imgViewer';
+  viewer.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;cursor:pointer;padding:20px;';
+  viewer.onclick = () => viewer.remove();
+  viewer.innerHTML = `<img src="${q.images[idx]}" style="max-width:95vw;max-height:90vh;border-radius:8px;box-shadow:0 0 40px rgba(0,0,0,0.5);">
+    <div style="position:fixed;top:16px;right:20px;color:#fff;font-size:32px;font-weight:700;cursor:pointer;">✕</div>`;
+  document.body.appendChild(viewer);
 }
 
 function editInqMemo(id) {
