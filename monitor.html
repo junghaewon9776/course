@@ -1732,11 +1732,12 @@ function render() {
     const assist = l.crew?.assist || '';
     const fmtT = (ts) => ts ? new Date(ts).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-';
     const roleNow = getMyRole();
-    const mgmtBtns = (roleNow === 'super' || roleNow === 'admin')
+    // 📷 사진/영수증은 모두 가능 (회원은 본인 참여 운행만 — addLogPhoto에서 검사), 삭제는 간부만
+    const photoBtns = `<button class="small" style="background:#2980b9;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();addLogPhoto(${i},'field')">📷 사진</button>`
+      + `<button class="small" style="background:#e67e22;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();addLogPhoto(${i},'receipt')">🧾 영수증</button>`;
+    const mgmtBtns = ((roleNow === 'super' || roleNow === 'admin')
       ? `<button class="small danger" style="font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();hideLog('${(l.key||'').replace(/'/g,"\\'")}')">🗑 삭제</button>`
-        + `<button class="small" style="background:#2980b9;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();addLogPhoto(${i},'field')">📷 사진</button>`
-        + `<button class="small" style="background:#e67e22;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();addLogPhoto(${i},'receipt')">🧾 영수증</button>`
-      : '';
+      : '') + photoBtns;
     return `
       <div style="border-bottom:1px solid #e5e5e5;border-left:5px solid ${course?.color || '#999'};${selectedLogIdx===i?'background:#fff9e6;':''}padding:9px 12px;">
         <div onclick="selectLog(${i})" style="cursor:pointer;">
@@ -1825,9 +1826,17 @@ function playLogFromList(idx) {
 // 📷 간부: 로그에 사진/영수증 소급 업로드 — 그 로그의 조(운전+보조)에게 XP
 function addLogPhoto(idx, type) {
   const role = getMyRole();
-  if (role !== 'super' && role !== 'admin') { alert('간부 이상만 가능합니다.'); return; }
   const l = getFilteredLogs()[idx];
   if (!l) return;
+  // 회원은 본인이 참여한 운행에만 (XP가 그 조에게 가므로 남의 운행 도배 방지)
+  if (role !== 'super' && role !== 'admin') {
+    let my = '';
+    try { const m = getMemberByUid(loadData(), fbAuth.currentUser.uid); my = ((m && m.name) || '').trim(); } catch (e) {}
+    const crewNames = [];
+    if (l.crew && l.crew.driver) crewNames.push(l.crew.driver.trim());
+    if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => crewNames.push(n));
+    if (!my || crewNames.indexOf(my) < 0) { alert('본인이 참여한 운행에만 사진을 올릴 수 있어요.'); return; }
+  }
   const input = document.createElement('input');
   input.type = 'file'; input.accept = 'image/*'; input.multiple = true;
   input.onchange = async function () {
