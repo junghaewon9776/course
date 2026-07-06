@@ -112,11 +112,16 @@
     </div>
 
     <label style="font-size:13px;font-weight:700;">📍 위치 <span style="font-weight:400;color:#aaa;">(선택 · 첨부하면 관리 지도에 민원 지역으로 표시)</span></label>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 16px;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 8px;">
       <button type="button" onclick="attachInqLocation()" style="padding:8px 16px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">📍 현재 위치 첨부</button>
       <span id="inqLocStatus" style="font-size:12px;color:#999;">위치 없음</span>
       <button type="button" id="inqLocClear" onclick="clearInqLocation()" style="display:none;background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;">✕ 제거</button>
     </div>
+    <div style="display:flex;gap:6px;margin:0 0 6px;">
+      <input id="inqAddrQ" placeholder="주소·장소명 검색 (예: 법성리 123, OO슈퍼)" onkeydown="if(event.key==='Enter'){event.preventDefault();searchInqAddress();}" style="flex:1;box-sizing:border-box;padding:9px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;">
+      <button type="button" onclick="searchInqAddress()" style="padding:9px 16px;background:#2c3e50;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">🔍 검색</button>
+    </div>
+    <div id="inqAddrResults" style="margin:0 0 16px;"></div>
 
     <button onclick="submitInquiry()" style="width:100%;padding:14px;background:#2980b9;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;">
       📨 접수하기
@@ -342,6 +347,52 @@ function clearInqLocation() {
   const st = document.getElementById('inqLocStatus');
   st.textContent = '위치 없음'; st.style.color = '#999';
   document.getElementById('inqLocClear').style.display = 'none';
+  const rb = document.getElementById('inqAddrResults'); if (rb) rb.innerHTML = '';
+}
+// ────── 🔍 주소/장소 검색 (카카오) ──────
+function __loadKakaoForSearch(cb) {
+  if (window.kakao && kakao.maps && kakao.maps.services) return cb();
+  if (document.querySelector('script[data-kakao-sdk]')) {
+    const w = setInterval(() => { if (window.kakao && kakao.maps && kakao.maps.services) { clearInterval(w); cb(); } }, 200);
+    setTimeout(() => clearInterval(w), 10000);
+    return;
+  }
+  const s = document.createElement('script');
+  s.dataset.kakaoSdk = '1';
+  s.src = '//dapi.kakao.com/v2/maps/sdk.js?appkey=' + KAKAO_KEY + '&autoload=false&libraries=services';
+  s.onload = () => kakao.maps.load(cb);
+  s.onerror = () => { const b = document.getElementById('inqAddrResults'); if (b) b.innerHTML = '<div style="font-size:12px;color:#e74c3c;">지도 서비스를 불러오지 못했습니다</div>'; };
+  document.head.appendChild(s);
+}
+function searchInqAddress() {
+  const q = (document.getElementById('inqAddrQ').value || '').trim();
+  const box = document.getElementById('inqAddrResults');
+  if (!q) { alert('주소나 장소명을 입력하세요'); return; }
+  box.innerHTML = '<div style="font-size:12px;color:#999;">🔍 검색 중...</div>';
+  __loadKakaoForSearch(() => {
+    const show = list => {
+      if (!list.length) { box.innerHTML = '<div style="font-size:12px;color:#e74c3c;">검색 결과가 없어요</div>'; return; }
+      box.innerHTML = list.slice(0, 5).map(r =>
+        '<div onclick="pickInqAddr(' + r.lat + ',' + r.lng + ',\'' + String(r.name).replace(/'/g, '') + '\')" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;margin-bottom:4px;font-size:13px;cursor:pointer;background:#fafafa;">📍 ' + String(r.name).replace(/</g, '&lt;') + '</div>').join('');
+    };
+    const geocoder = new kakao.maps.services.Geocoder();
+    geocoder.addressSearch(q, (gd, gs) => {
+      if (gs === kakao.maps.services.Status.OK && gd.length) { show(gd.map(d => ({ name: d.address_name, lat: +d.y, lng: +d.x }))); return; }
+      const places = new kakao.maps.services.Places();
+      places.keywordSearch(q, (pd, ps) => {
+        if (ps === kakao.maps.services.Status.OK && pd.length) show(pd.map(d => ({ name: d.place_name + (d.road_address_name || d.address_name ? ' (' + (d.road_address_name || d.address_name) + ')' : ''), lat: +d.y, lng: +d.x })));
+        else show([]);
+      });
+    });
+  });
+}
+function pickInqAddr(lat, lng, name) {
+  __inqLoc = { lat: lat, lng: lng, name: name || '' };
+  const st = document.getElementById('inqLocStatus');
+  st.textContent = '✅ ' + (name || '위치') + ' 첨부됨';
+  st.style.color = '#27ae60';
+  document.getElementById('inqLocClear').style.display = '';
+  document.getElementById('inqAddrResults').innerHTML = '';
 }
 
 // ────── 접수 ──────
@@ -386,6 +437,7 @@ function submitInquiry() {
     images: __inqImages.slice(),
     lat: __inqLoc ? __inqLoc.lat : null,
     lng: __inqLoc ? __inqLoc.lng : null,
+    locName: (__inqLoc && __inqLoc.name) || '',
     createdAt: Date.now()
   };
   // 📍 위치가 있으면 관리 지도의 민원 지역에도 자동 등록 (마커·근접 알림 연동)
@@ -399,7 +451,7 @@ function submitInquiry() {
       lat: __inqLoc.lat, lng: __inqLoc.lng,
       phone: inquiry.phone || '',
       content: '[' + (cat?.name || '민원') + (selectedSub ? '·' + selectedSub : '') + '] ' + (content || ''),
-      area: '',
+      area: (__inqLoc && __inqLoc.name) || '',
       status: 'pending',
       createdAt: Date.now(),
       createdBy: writerName,
@@ -567,7 +619,7 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
         <span>🕐 ${when}</span>
         <span>👤 ${writerLabel(q.writerUid, q.writer).replace(/</g,'&lt;')}</span>
         ${q.phone ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;" onclick="event.stopPropagation()">📞 ${q.phone}</a>` : ''}
-        ${(q.lat && q.lng) ? `<a href="https://map.kakao.com/link/map/민원위치,${q.lat},${q.lng}" target="_blank" style="color:#e67e22;text-decoration:none;font-weight:700;" onclick="event.stopPropagation()">📍 위치 보기</a>` : ''}
+        ${(q.lat && q.lng) ? `<a href="https://map.kakao.com/link/map/민원위치,${q.lat},${q.lng}" target="_blank" style="color:#e67e22;text-decoration:none;font-weight:700;" onclick="event.stopPropagation()">📍 ${(q.locName||'위치 보기').replace(/</g,'&lt;')}</a>` : ''}
         ${q.deviceName ? `<span>📱 ${q.deviceName}</span>` : ''}
       </div>
       ${q.adminMemo ? `<div style="margin-top:8px;padding:8px 10px;background:#fff8e1;border-radius:6px;font-size:13px;border-left:3px solid #f1c40f;"><b>관리자 메모:</b> ${q.adminMemo.replace(/</g,'&lt;')}</div>` : ''}
