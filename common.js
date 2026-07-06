@@ -935,8 +935,10 @@ function cmGetQuests(data) {
   const c = cmXpCfg(data);
   return [{ trigger: 'vax', category: '', xp: c.perVax }, { trigger: 'set', category: '', xp: c.setBonus }];
 }
-// 특정 사람의 총 XP(퀘스트 합산, 전체 누적) → 계급 인덱스
+// 특정 사람의 총 XP(퀘스트 합산, 올해 기준 — stats.html 기본 화면과 동일) → 계급 인덱스
 function cmTotalXp(data, name) {
+  const __y = new Date().getFullYear();
+  function __inYr(ts) { return new Date(ts || 0).getFullYear() === __y; }
   let vaxTotal = 0, setTotal = 0;
   (data.events || []).forEach(ev => {
     const courses = ev.courses || [];
@@ -944,6 +946,7 @@ function cmTotalXp(data, name) {
     const counts = courses.map(() => 0);
     (data.logs || []).forEach(l => {
       if (!l || l.eventId !== ev.id || !l.finishedAt) return;
+      if (!__inYr(l.startedAt || l.finishedAt)) return;   // 올해 로그만 (통계와 동일)
       const keys = [];
       if (l.crew && l.crew.driver) keys.push(l.crew.driver.trim());
       if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
@@ -953,8 +956,8 @@ function cmTotalXp(data, name) {
     vaxTotal += counts.reduce((s, v) => s + v, 0);
     setTotal += counts.length ? Math.min.apply(null, counts) : 0;
   });
-  function inqCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; if ((q.writer || '').trim() === name) n++; }); return n; }
-  function cmtCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; (q.comments || []).forEach(c => { if (c && (c.writer || '').trim() === name) n++; }); }); return n; }
+  function inqCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; if ((q.writer || '').trim() === name && __inYr(q.createdAt)) n++; }); return n; }
+  function cmtCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; (q.comments || []).forEach(c => { if (c && (c.writer || '').trim() === name && __inYr(c.createdAt || q.createdAt)) n++; }); }); return n; }
   // 세션키→조원 맵 (예전 사진 소급 반영)
   const __sessCrew = {};
   (data.logs || []).forEach(function (l) {
@@ -966,14 +969,14 @@ function cmTotalXp(data, name) {
   });
   function photoCnt(pt, capPerCourse) {
     const perSess = {}; const ph = data.photos || {};
-    Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; let nm = (p.crewNames && p.crewNames.length) ? p.crewNames : null; if (!nm && p.sessionKey && __sessCrew[p.sessionKey]) nm = __sessCrew[p.sessionKey]; if (!nm) nm = [p.uploader || p.note]; if (nm.map(function (x) { return (x || '').trim(); }).indexOf(name) < 0) return; const sk = p.sessionKey || 'nokey'; perSess[sk] = (perSess[sk] || 0) + 1; });
+    Object.keys(ph).forEach(k => { const p = ph[k]; if (!p) return; if (pt && p.type !== pt) return; if (!__inYr(p.takenAt)) return; let nm = (p.crewNames && p.crewNames.length) ? p.crewNames : null; if (!nm && p.sessionKey && __sessCrew[p.sessionKey]) nm = __sessCrew[p.sessionKey]; if (!nm) nm = [p.uploader || p.note]; if (nm.map(function (x) { return (x || '').trim(); }).indexOf(name) < 0) return; const sk = p.sessionKey || 'nokey'; perSess[sk] = (perSess[sk] || 0) + 1; });
     const cap = Number(capPerCourse) || 0;
     let n = 0; Object.keys(perSess).forEach(function (sk) { n += cap > 0 ? Math.min(perSess[sk], cap) : perSess[sk]; });
     return n;
   }
   // 월별/년도 1등 계산 (방역 최다)
   function vaxBy(ls) { const m = {}; ls.forEach(l => { if (!l || !l.finishedAt) return; const ks = []; if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim()); if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => ks.push(n)); ks.forEach(n => { if (n) m[n] = (m[n] || 0) + 1; }); }); return m; }
-  const allLogs = (data.logs || []).filter(l => l && l.finishedAt);
+  const allLogs = (data.logs || []).filter(l => l && l.finishedAt && __inYr(l.startedAt || l.finishedAt));   // 올해 로그만
   function cmBucket(keyFn) { const b = {}; allLogs.forEach(function (l) { const t = l.startedAt || l.finishedAt || 0; const k = keyFn(l, t); (b[k] = b[k] || []).push(l); }); return b; }
   function cmWeekKey(t) { const d = new Date(t); const day = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day); return mon.getFullYear() + '-' + (mon.getMonth() + 1) + '-' + mon.getDate(); }
   function cmMonthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + d.getMonth(); }
@@ -1073,6 +1076,8 @@ function checkPromotionForNames(names) {
           const body = name + '님이 ' + (rk.name || '') + ' 계급으로 진급했습니다! (' + st.xp + ' XP)';
           if (uid) sendAppPush(title, body, 'all', null, uid);   // 본인에게(uid로 좁힘)
           sendAppPush('🎖 진급 소식', name + '님 → ' + (rk.name || '') + ' 진급!', 'all', null, '');  // 전체 축하
+        } else if (st.rankIndex < prev) {
+          fbDb.ref(path).set(st.rankIndex);   // 기준이 실제보다 높게 저장돼 있으면 조용히 보정 (과거 잘못된 계산/설정 변경 대응)
         }
       }).catch(() => {});
     });
