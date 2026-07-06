@@ -1453,6 +1453,7 @@ function getAccessCfg() {
   return {
     memberLogs: a.memberLogs !== false,    // 운행기록 회원 열람 (기본 허용)
     memberLive: !!a.memberLive,             // 모니터링 실시간 회원 열람 (기본 비허용)
+    memberLogPhoto: a.memberLogPhoto !== false,  // 운행기록 사진 등록 회원 허용 (기본 허용, 본인 참여 운행만)
     complaintWrite: a.complaintWrite || 'all'  // 민원 작성: all | member | admin
   };
 }
