@@ -377,7 +377,14 @@ function buildLocPicker(host, initial, onChange) {
     if (!pmap) return;
     const pos = new kakao.maps.LatLng(lat, lng);
     if (!marker) {
-      marker = new kakao.maps.Marker({ position: pos, map: pmap, draggable: true });
+      // 다른 지도들과 동일한 노란 전화 아이콘 (카카오 기본 핀은 너무 큼)
+      const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><circle cx="14" cy="14" r="12" fill="#f1c40f" stroke="white" stroke-width="2"/><path d="M11 9c-.5 0-1 .4-1 1 0 4 3 7 7 7 .6 0 1-.4 1-1v-2c0-.5-.4-1-1-1l-2 .3c-.4-.6-.8-1-1.3-1.3l.3-2c0-.6-.4-1-1-1H11z" fill="white"/></svg>';
+      const img = new kakao.maps.MarkerImage(
+        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+        new kakao.maps.Size(28, 28),
+        { offset: new kakao.maps.Point(14, 14) }
+      );
+      marker = new kakao.maps.Marker({ position: pos, map: pmap, draggable: true, image: img });
       kakao.maps.event.addListener(marker, 'dragend', () => {   // 핑 드래그로 미세 이동
         const p = marker.getPosition();
         setLoc(p.getLat(), p.getLng(), null, false);
