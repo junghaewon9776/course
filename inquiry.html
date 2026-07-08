@@ -111,17 +111,8 @@
       <div id="inqImgPreview" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
     </div>
 
-    <label style="font-size:13px;font-weight:700;">📍 위치 <span style="font-weight:400;color:#aaa;">(선택 · 첨부하면 관리 지도에 민원 지역으로 표시)</span></label>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0 8px;">
-      <button type="button" onclick="attachInqLocation()" style="padding:8px 16px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">📍 현재 위치 첨부</button>
-      <span id="inqLocStatus" style="font-size:12px;color:#999;">위치 없음</span>
-      <button type="button" id="inqLocClear" onclick="clearInqLocation()" style="display:none;background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;">✕ 제거</button>
-    </div>
-    <div style="display:flex;gap:6px;margin:0 0 6px;">
-      <input id="inqAddrQ" placeholder="주소·장소명 검색 (예: 법성리 123, OO슈퍼)" onkeydown="if(event.key==='Enter'){event.preventDefault();searchInqAddress();}" style="flex:1;box-sizing:border-box;padding:9px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;">
-      <button type="button" onclick="searchInqAddress()" style="padding:9px 16px;background:#2c3e50;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">🔍 검색</button>
-    </div>
-    <div id="inqAddrResults" style="margin:0 0 16px;"></div>
+    <label style="font-size:13px;font-weight:700;">📍 위치 <span style="font-weight:400;color:#aaa;">(선택 · 지도 탭=핑, 핑 드래그=이동, 검색=핑 이동)</span></label>
+    <div id="inqPickerHost" style="margin:6px 0 16px;"></div>
 
     <button onclick="submitInquiry()" style="width:100%;padding:14px;background:#2980b9;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;">
       📨 접수하기
@@ -349,6 +340,126 @@ function clearInqLocation() {
   document.getElementById('inqLocClear').style.display = 'none';
   const rb = document.getElementById('inqAddrResults'); if (rb) rb.innerHTML = '';
 }
+// ────── 🗺 위치 지정 지도 피커 (관리 지도처럼: 탭=핑, 드래그=이동, 검색=핑 이동) ──────
+function buildLocPicker(host, initial, onChange) {
+  host.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'border:1.5px solid #ddd;border-radius:10px;padding:8px;background:#fafafa;';
+  // 검색줄
+  const srow = document.createElement('div'); srow.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;';
+  const sin = document.createElement('input'); sin.placeholder = '주소·장소명 검색 → 핑이 이동해요';
+  sin.style.cssText = 'flex:1;box-sizing:border-box;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;';
+  const sbtn = document.createElement('button'); sbtn.type = 'button'; sbtn.textContent = '🔍';
+  sbtn.style.cssText = 'padding:8px 14px;background:#2c3e50;color:#fff;border:none;border-radius:8px;font-weight:700;cursor:pointer;';
+  srow.appendChild(sin); srow.appendChild(sbtn);
+  const results = document.createElement('div');
+  // 버튼줄 (지도 옆 작은 버튼들)
+  const brow = document.createElement('div'); brow.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;';
+  const gpsBtn = document.createElement('button'); gpsBtn.type = 'button'; gpsBtn.textContent = '📍 현재위치';
+  gpsBtn.style.cssText = 'padding:6px 12px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;';
+  const clrBtn = document.createElement('button'); clrBtn.type = 'button'; clrBtn.textContent = '✕ 제거';
+  clrBtn.style.cssText = 'padding:6px 12px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;display:none;';
+  const status = document.createElement('span'); status.style.cssText = 'font-size:12px;color:#999;';
+  brow.appendChild(gpsBtn); brow.appendChild(clrBtn); brow.appendChild(status);
+  // 지도
+  const mapDiv = document.createElement('div'); mapDiv.style.cssText = 'width:100%;height:230px;border-radius:8px;background:#eee;';
+  wrap.appendChild(srow); wrap.appendChild(results); wrap.appendChild(brow); wrap.appendChild(mapDiv);
+  host.appendChild(wrap);
+
+  let pmap = null, marker = null, cur = initial ? { lat: initial.lat, lng: initial.lng, name: initial.name || '' } : null;
+  function renderStatus() {
+    status.textContent = cur ? ('✅ ' + (cur.name || (cur.lat.toFixed(5) + ', ' + cur.lng.toFixed(5)))) : '지도를 탭해 핑을 찍거나 검색하세요';
+    status.style.color = cur ? '#27ae60' : '#999';
+    clrBtn.style.display = cur ? '' : 'none';
+  }
+  function emit() { onChange(cur ? { lat: cur.lat, lng: cur.lng, name: cur.name || '' } : null); renderStatus(); }
+  function placeMarker(lat, lng, center) {
+    if (!pmap) return;
+    const pos = new kakao.maps.LatLng(lat, lng);
+    if (!marker) {
+      marker = new kakao.maps.Marker({ position: pos, map: pmap, draggable: true });
+      kakao.maps.event.addListener(marker, 'dragend', () => {   // 핑 드래그로 미세 이동
+        const p = marker.getPosition();
+        setLoc(p.getLat(), p.getLng(), null, false);
+      });
+    } else marker.setPosition(pos);
+    if (center !== false) pmap.setCenter(pos);
+  }
+  function setLoc(lat, lng, name, center) {
+    cur = { lat: lat, lng: lng, name: name || '' };
+    placeMarker(lat, lng, center);
+    emit();
+    if (name == null) {   // 이름 없으면 역지오코딩으로 주소 채움
+      try {
+        new kakao.maps.services.Geocoder().coord2Address(lng, lat, (res, st) => {
+          if (st === kakao.maps.services.Status.OK && res[0]) {
+            const a = res[0];
+            const nm = (a.road_address && a.road_address.address_name) || (a.address && a.address.address_name) || '';
+            if (cur && cur.lat === lat && cur.lng === lng) { cur.name = nm; emit(); }
+          }
+        });
+      } catch (e) {}
+    }
+  }
+  __loadKakaoForSearch(() => {
+    const d = (typeof loadData === 'function' && loadData()) || {};
+    const md = d.mapDefault || {};
+    const c = cur ? new kakao.maps.LatLng(cur.lat, cur.lng) : new kakao.maps.LatLng(md.lat || 35.35, md.lng || 126.47);
+    pmap = new kakao.maps.Map(mapDiv, { center: c, level: cur ? 3 : (md.level || 5) });
+    setTimeout(() => { try { pmap.relayout(); pmap.setCenter(c); } catch (e) {} }, 150);
+    kakao.maps.event.addListener(pmap, 'click', e => setLoc(e.latLng.getLat(), e.latLng.getLng(), null, false));   // 탭 = 핑
+    if (cur) placeMarker(cur.lat, cur.lng, true);
+    renderStatus();
+  });
+  function doSearch() {
+    const q = (sin.value || '').trim();
+    if (!q) return;
+    results.innerHTML = '<div style="font-size:12px;color:#999;padding:4px;">🔍 검색 중...</div>';
+    __loadKakaoForSearch(() => {
+      const show = list => {
+        if (!list.length) { results.innerHTML = '<div style="font-size:12px;color:#e74c3c;padding:4px;">검색 결과가 없어요</div>'; return; }
+        results.innerHTML = '';
+        list.slice(0, 5).forEach(r => {
+          const it = document.createElement('div');
+          it.textContent = '📍 ' + r.name;
+          it.style.cssText = 'padding:8px 10px;border:1px solid #ddd;border-radius:8px;margin-bottom:4px;font-size:13px;cursor:pointer;background:#fff;';
+          it.onclick = () => { results.innerHTML = ''; setLoc(r.lat, r.lng, r.name, true); };   // 검색 선택 = 핑 이동 (이후 드래그로 조정)
+          results.appendChild(it);
+        });
+      };
+      const geocoder = new kakao.maps.services.Geocoder();
+      geocoder.addressSearch(q, (gd, gs) => {
+        if (gs === kakao.maps.services.Status.OK && gd.length) { show(gd.map(x => ({ name: x.address_name, lat: +x.y, lng: +x.x }))); return; }
+        new kakao.maps.services.Places().keywordSearch(q, (pd, ps) => {
+          if (ps === kakao.maps.services.Status.OK && pd.length) show(pd.map(x => ({ name: x.place_name + (x.road_address_name || x.address_name ? ' (' + (x.road_address_name || x.address_name) + ')' : ''), lat: +x.y, lng: +x.x })));
+          else show([]);
+        });
+      });
+    });
+  }
+  sbtn.onclick = doSearch;
+  sin.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } };
+  gpsBtn.onclick = () => {
+    status.textContent = '위치 확인 중...'; status.style.color = '#999';
+    if (!navigator.geolocation) { status.textContent = '이 기기는 위치를 지원하지 않아요'; return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => setLoc(pos.coords.latitude, pos.coords.longitude, null, true),
+      () => { status.textContent = '❌ 위치를 가져오지 못했어요'; status.style.color = '#e74c3c'; },
+      { enableHighAccuracy: true, timeout: 10000 });
+  };
+  clrBtn.onclick = () => { cur = null; if (marker) { marker.setMap(null); marker = null; } emit(); };
+  renderStatus();
+  return { clear: () => clrBtn.onclick(), relayout: () => { try { if (pmap) pmap.relayout(); } catch (e) {} } };
+}
+// 접수 폼 위치 지도 초기화
+function __initInqPicker() {
+  const h = document.getElementById('inqPickerHost');
+  if (!h || h.__done) return;
+  h.__done = 1;
+  window.__inqPickerApi = buildLocPicker(h, null, l => { __inqLoc = l; });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', __initInqPicker);
+else __initInqPicker();
 // ────── 🔍 주소/장소 검색 (카카오) ──────
 function __loadKakaoForSearch(cb) {
   if (window.kakao && kakao.maps && kakao.maps.services) return cb();
@@ -359,7 +470,7 @@ function __loadKakaoForSearch(cb) {
   }
   const s = document.createElement('script');
   s.dataset.kakaoSdk = '1';
-  s.src = '//dapi.kakao.com/v2/maps/sdk.js?appkey=' + KAKAO_KEY + '&autoload=false&libraries=services';
+  s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + KAKAO_KEY + '&autoload=false&libraries=services';
   s.onload = () => kakao.maps.load(cb);
   s.onerror = () => { const b = document.getElementById('inqAddrResults'); if (b) b.innerHTML = '<div style="font-size:12px;color:#e74c3c;">지도 서비스를 불러오지 못했습니다</div>'; };
   document.head.appendChild(s);
@@ -473,7 +584,7 @@ function submitInquiry() {
   document.getElementById('inqContent').value = '';
   document.getElementById('inqPhone').value = '';
   __inqImages = []; renderInqImgPreview();
-  clearInqLocation();
+  if (window.__inqPickerApi) __inqPickerApi.clear();
   renderCategoryBtns();
   document.getElementById('subCategoryArea').style.display = 'none';
   document.getElementById('subCategorySel').innerHTML = '<option value="">-- 항목을 선택하세요 --</option>';
@@ -849,17 +960,8 @@ function editInqContent(id) {
         <input type="file" id="editImgUpload" accept="image/*" multiple style="display:none" onchange="handleEditImages(event)">
       </div>
       <div id="editImgPreview" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px;"></div>
-      <label style="font-size:13px;font-weight:700;">📍 위치</label>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0 6px;">
-        <button type="button" onclick="attachEditLocation()" style="padding:7px 14px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">📍 현재 위치</button>
-        <span id="editLocStatus" style="font-size:12px;color:#999;">위치 없음</span>
-        <button type="button" id="editLocClear" onclick="clearEditLocation()" style="display:none;background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;">✕ 제거</button>
-      </div>
-      <div style="display:flex;gap:6px;margin:0 0 6px;">
-        <input id="editAddrQ" placeholder="주소·장소명 검색" onkeydown="if(event.key==='Enter'){event.preventDefault();searchEditAddress();}" style="flex:1;box-sizing:border-box;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
-        <button type="button" onclick="searchEditAddress()" style="padding:8px 14px;background:#2c3e50;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">🔍</button>
-      </div>
-      <div id="editAddrResults" style="margin:0 0 10px;"></div>
+      <label style="font-size:13px;font-weight:700;">📍 위치 <span style="font-weight:400;color:#aaa;">(지도 탭=핑 · 드래그=이동)</span></label>
+      <div id="editPickerHost" style="margin:4px 0 10px;"></div>
       ${amAdmin ? `<label style="font-size:13px;font-weight:700;">관리자 메모</label>
       <input id="editMemo" type="text" value="${(q.adminMemo||'').replace(/"/g,'&quot;')}" placeholder="메모 (접수자에게 표시)"
         style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">` : ''}
@@ -874,7 +976,7 @@ function editInqContent(id) {
   __editImages = Array.isArray(q.images) ? q.images.slice() : [];
   __editLoc = (q.lat && q.lng) ? { lat: q.lat, lng: q.lng, name: q.locName || '' } : null;
   renderEditImgPreview();
-  renderEditLocStatus();
+  buildLocPicker(document.getElementById('editPickerHost'), __editLoc, l => { __editLoc = l; });
 }
 
 // ── 수정 모달: 사진 ──
