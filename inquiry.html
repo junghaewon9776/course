@@ -843,6 +843,23 @@ function editInqContent(id) {
       <label style="font-size:13px;font-weight:700;">연락처</label>
       <input id="editPhone" type="tel" value="${(q.phone||'').replace(/"/g,'&quot;')}"
         style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      <label style="font-size:13px;font-weight:700;">📷 사진 <span style="font-weight:400;color:#aaa;">(최대 3장)</span></label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 6px;">
+        <button type="button" onclick="document.getElementById('editImgUpload').click()" style="padding:7px 14px;background:#3498db;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">+ 사진 추가</button>
+        <input type="file" id="editImgUpload" accept="image/*" multiple style="display:none" onchange="handleEditImages(event)">
+      </div>
+      <div id="editImgPreview" style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px;"></div>
+      <label style="font-size:13px;font-weight:700;">📍 위치</label>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0 6px;">
+        <button type="button" onclick="attachEditLocation()" style="padding:7px 14px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">📍 현재 위치</button>
+        <span id="editLocStatus" style="font-size:12px;color:#999;">위치 없음</span>
+        <button type="button" id="editLocClear" onclick="clearEditLocation()" style="display:none;background:#95a5a6;color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:12px;cursor:pointer;">✕ 제거</button>
+      </div>
+      <div style="display:flex;gap:6px;margin:0 0 6px;">
+        <input id="editAddrQ" placeholder="주소·장소명 검색" onkeydown="if(event.key==='Enter'){event.preventDefault();searchEditAddress();}" style="flex:1;box-sizing:border-box;padding:8px;border:1px solid #ddd;border-radius:8px;font-size:13px;">
+        <button type="button" onclick="searchEditAddress()" style="padding:8px 14px;background:#2c3e50;color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">🔍</button>
+      </div>
+      <div id="editAddrResults" style="margin:0 0 10px;"></div>
       ${amAdmin ? `<label style="font-size:13px;font-weight:700;">관리자 메모</label>
       <input id="editMemo" type="text" value="${(q.adminMemo||'').replace(/"/g,'&quot;')}" placeholder="메모 (접수자에게 표시)"
         style="width:100%;padding:8px;margin:4px 0 14px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">` : ''}
@@ -853,6 +870,86 @@ function editInqContent(id) {
     </div>
   `;
   document.body.appendChild(modal);
+  // 기존 사진·위치 불러오기
+  __editImages = Array.isArray(q.images) ? q.images.slice() : [];
+  __editLoc = (q.lat && q.lng) ? { lat: q.lat, lng: q.lng, name: q.locName || '' } : null;
+  renderEditImgPreview();
+  renderEditLocStatus();
+}
+
+// ── 수정 모달: 사진 ──
+let __editImages = [], __editLoc = null;
+async function handleEditImages(e) {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  for (const f of files) {
+    if (__editImages.length >= 3) { alert('사진은 최대 3장까지'); break; }
+    try { __editImages.push(await compressImage(f, 900, 0.72)); } catch (err) { alert('사진을 불러오지 못했습니다'); }
+  }
+  renderEditImgPreview();
+}
+function renderEditImgPreview() {
+  const el = document.getElementById('editImgPreview');
+  if (!el) return;
+  el.innerHTML = __editImages.map((img, i) =>
+    `<span style="position:relative;display:inline-block;">
+      <img src="${img}" style="width:72px;height:54px;object-fit:cover;border-radius:8px;border:1px solid #ddd;">
+      <span onclick="__editImages.splice(${i},1);renderEditImgPreview();" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:#e74c3c;color:#fff;font-size:12px;line-height:20px;text-align:center;cursor:pointer;">✕</span>
+    </span>`).join('');
+}
+// ── 수정 모달: 위치 ──
+function renderEditLocStatus() {
+  const st = document.getElementById('editLocStatus'), clr = document.getElementById('editLocClear');
+  if (!st) return;
+  if (__editLoc) {
+    st.textContent = '✅ ' + (__editLoc.name || (__editLoc.lat.toFixed(5) + ', ' + __editLoc.lng.toFixed(5))) + ' 첨부됨';
+    st.style.color = '#27ae60';
+    if (clr) clr.style.display = '';
+  } else {
+    st.textContent = '위치 없음'; st.style.color = '#999';
+    if (clr) clr.style.display = 'none';
+  }
+}
+function attachEditLocation() {
+  const st = document.getElementById('editLocStatus');
+  st.textContent = '위치 확인 중...';
+  if (!navigator.geolocation) { st.textContent = '이 기기는 위치를 지원하지 않아요'; return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    __editLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude, name: '' };
+    renderEditLocStatus();
+  }, () => { st.textContent = '❌ 위치를 가져오지 못했어요'; st.style.color = '#e74c3c'; }, { enableHighAccuracy: true, timeout: 10000 });
+}
+function clearEditLocation() {
+  __editLoc = null;
+  renderEditLocStatus();
+  const rb = document.getElementById('editAddrResults'); if (rb) rb.innerHTML = '';
+}
+function searchEditAddress() {
+  const q = (document.getElementById('editAddrQ').value || '').trim();
+  const box = document.getElementById('editAddrResults');
+  if (!q) { alert('주소나 장소명을 입력하세요'); return; }
+  box.innerHTML = '<div style="font-size:12px;color:#999;">🔍 검색 중...</div>';
+  __loadKakaoForSearch(() => {
+    const show = list => {
+      if (!list.length) { box.innerHTML = '<div style="font-size:12px;color:#e74c3c;">검색 결과가 없어요</div>'; return; }
+      box.innerHTML = list.slice(0, 5).map(r =>
+        '<div onclick="pickEditAddr(' + r.lat + ',' + r.lng + ',\'' + String(r.name).replace(/'/g, '') + '\')" style="padding:8px 10px;border:1px solid #ddd;border-radius:8px;margin-bottom:4px;font-size:13px;cursor:pointer;background:#fafafa;">📍 ' + String(r.name).replace(/</g, '&lt;') + '</div>').join('');
+    };
+    const geocoder = new kakao.maps.services.Geocoder();
+    geocoder.addressSearch(q, (gd, gs) => {
+      if (gs === kakao.maps.services.Status.OK && gd.length) { show(gd.map(d => ({ name: d.address_name, lat: +d.y, lng: +d.x }))); return; }
+      const places = new kakao.maps.services.Places();
+      places.keywordSearch(q, (pd, ps) => {
+        if (ps === kakao.maps.services.Status.OK && pd.length) show(pd.map(d => ({ name: d.place_name + (d.road_address_name || d.address_name ? ' (' + (d.road_address_name || d.address_name) + ')' : ''), lat: +d.y, lng: +d.x })));
+        else show([]);
+      });
+    });
+  });
+}
+function pickEditAddr(lat, lng, name) {
+  __editLoc = { lat: lat, lng: lng, name: name || '' };
+  renderEditLocStatus();
+  document.getElementById('editAddrResults').innerHTML = '';
 }
 
 function saveEditInq(id) {
@@ -869,6 +966,35 @@ function saveEditInq(id) {
   q.phone = (document.getElementById('editPhone').value || '').trim();
   const memoEl = document.getElementById('editMemo');
   if (memoEl) q.adminMemo = (memoEl.value || '').trim();
+  // 📷 사진 반영
+  q.images = __editImages.slice();
+  // 📍 위치 반영 + 관리 지도 민원 동기화
+  if (!Array.isArray(data.complaints)) data.complaints = [];
+  const __cContent = '[' + (cat?.name || '민원') + (q.subCategory ? '·' + q.subCategory : '') + '] ' + (q.content || '');
+  let __c = q.complaintId ? data.complaints.find(x => x.id === q.complaintId) : null;
+  if (__editLoc) {
+    q.lat = __editLoc.lat; q.lng = __editLoc.lng; q.locName = __editLoc.name || '';
+    if (__c) {   // 기존 지도 민원 위치·내용 갱신
+      __c.lat = __editLoc.lat; __c.lng = __editLoc.lng;
+      if (__editLoc.name) __c.area = __editLoc.name;
+      __c.content = __cContent; __c.phone = q.phone || __c.phone || '';
+    } else {     // 위치를 새로 붙였으면 지도 민원 생성
+      const __cid = uid();
+      const vis = (data.visibility || {}).events || {};
+      const ev = (data.events || []).find(e => vis[e.id] !== false);
+      data.complaints.push({
+        id: __cid, eventId: (ev && ev.id) || '',
+        lat: __editLoc.lat, lng: __editLoc.lng,
+        phone: q.phone || '', content: __cContent,
+        area: __editLoc.name || '', status: q.status === 'resolved' ? 'resolved' : 'pending',
+        createdAt: Date.now(), createdBy: q.writer || '', inquiryId: q.id
+      });
+      q.complaintId = __cid;
+    }
+  } else {
+    q.lat = null; q.lng = null; q.locName = '';
+    if (__c) { data.complaints = data.complaints.filter(x => x.id !== q.complaintId); q.complaintId = ''; }   // 위치 제거 → 지도 민원도 제거
+  }
   saveData(data);
   document.getElementById('editInqModal').remove();
   renderMyInquiries(); renderMemberBoard(); renderAdminBoard();
