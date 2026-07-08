@@ -2482,14 +2482,11 @@ function renderMap() {
     bounds.extend(pos); hasPoints = true;
     const m = new kakao.maps.Marker({
       position: pos, map, draggable: true,
-      image: new kakao.maps.MarkerImage(
-        'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-        new kakao.maps.Size(28, 28),
-        { offset: new kakao.maps.Point(14, 14) }
-      ),
+      image: scaledCircleMarkerImage(svg, getMarkerScale(map.getLevel())),   // 거점처럼 줌에 따라 축소 (고정 28px이면 멀리서 너무 큼)
       title: '[민원] ' + (c.phone || ''),
       zIndex: 8
     });
+    m.__markerMeta = { type: 'circle', svg };
     kakao.maps.event.addListener(m, 'dragend', () => {
       const p = m.getPosition();
       if (!confirm(`이 민원 위치를 이동할까요?`)) {
