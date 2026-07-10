@@ -95,6 +95,93 @@ function unpublishLiveSession(sessionKey) {
   fbDb.ref('/live/' + sessionKey).remove()
     .catch(e => console.warn('live unpublish 실패:', e.message));
 }
+
+// ───────── 🛰 코스 추적 엔진 (오늘운영 밖에서도 세션 살아있으면 계속 기록) ─────────
+// today.html은 자체 추적하므로 엔진은 그 페이지에선 쉬고, 그 외 모든 페이지에서 이어받아 기록한다.
+var __ctWatchId = null, __ctLastPub = 0, __ctInited = false;
+function __ctPageName() { try { return (location.pathname.split('/').pop() || '').toLowerCase(); } catch (e) { return ''; } }
+function __ctGetSession() {
+  try {
+    var raw = localStorage.getItem('lastActiveSession'); if (!raw) return null;
+    var s = JSON.parse(raw);
+    if (!s || s.finishedAt) return null;
+    if (Date.now() - (s.startedAt || 0) > 12 * 60 * 60 * 1000) return null;   // 12시간 넘으면 무효
+    return s;
+  } catch (e) { return null; }
+}
+function __ctPublish(s, lat, lng, heading) {
+  try {
+    if (typeof fbDb === 'undefined' || !s.key) return;
+    var now = Date.now();
+    if (now - __ctLastPub < 10000) return;   // 10초 throttle (today.html과 동일)
+    __ctLastPub = now;
+    var data = (typeof _cache !== 'undefined' && _cache) || {};
+    var anchors = (data.anchors || []).filter(function (a) { return a.courseId === s.courseId; });
+    var findPhone = function (nm) { if (!nm) return ''; var m = (data.members || []).find(function (x) { return (x.name || '').trim() === String(nm).trim(); }); return (m && m.phone) || ''; };
+    var crew = s.crew || {};
+    publishLiveSession(s.key, {
+      lat: lat, lng: lng, heading: (heading != null ? heading : null),
+      eventId: s.eventId, courseId: s.courseId, teamId: s.teamId,
+      crew: Object.assign({}, crew, { driverPhone: crew.driverPhone || findPhone(crew.driver), assistPhone: crew.assistPhone || findPhone(crew.assist) }),
+      completedCount: (s.completions || []).length,
+      totalCount: anchors.length,
+      startedAt: s.startedAt,
+      device: (typeof getDeviceName === 'function' && getDeviceName()) || '',
+      pins: (s.pins || []),
+      track: (s.track || []).slice(-200)
+    });
+  } catch (e) {}
+}
+function __ctOnUpdate(lat, lng, heading) {
+  var s = __ctGetSession();
+  if (!s) { __ctStop(); return; }   // 세션 종료/취소됐으면 엔진 정지
+  if (!Array.isArray(s.track)) s.track = [];
+  var last = s.track[s.track.length - 1];
+  var moved = 999;
+  try { if (last) moved = distance(last[0], last[1], lat, lng); } catch (e) {}
+  if (!last || moved > 5) {   // 5m 이상 이동 시만 기록 (today.html과 동일)
+    s.track.push([lat, lng, Date.now()]);
+    try { localStorage.setItem('lastActiveSession', JSON.stringify(s)); } catch (e) {}
+  }
+  __ctPublish(s, lat, lng, heading);
+}
+function __ctStart() {
+  if (__ctWatchId !== null) return;
+  var BG = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) || null;
+  if (BG) {
+    var ret = BG.addWatcher({
+      backgroundMessage: "운영이 끝나면 오늘운영에서 코스완료를 눌러주세요",
+      backgroundTitle: "🚐 방역코스 운행 중",
+      requestPermissions: true, stale: false, distanceFilter: 1
+    }, function (loc, err) {
+      if (err) { console.warn('추적엔진 GPS 오류', err); return; }
+      if (loc) __ctOnUpdate(loc.latitude, loc.longitude, (loc.bearing != null ? loc.bearing : null));
+    });
+    if (ret && typeof ret.then === 'function') ret.then(function (id) { __ctWatchId = id || 'bg'; });
+    else __ctWatchId = ret || 'bg';
+  } else if (navigator.geolocation) {
+    __ctWatchId = navigator.geolocation.watchPosition(function (p) {
+      __ctOnUpdate(p.coords.latitude, p.coords.longitude, p.coords.heading);
+    }, function (e) { console.warn('추적엔진 web GPS', e); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+  }
+}
+function __ctStop() {
+  if (__ctWatchId === null) return;
+  var BG = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation) || null;
+  try {
+    if (BG && __ctWatchId && __ctWatchId !== 'bg') BG.removeWatcher({ id: __ctWatchId });
+    else if (typeof __ctWatchId === 'number') navigator.geolocation.clearWatch(__ctWatchId);
+  } catch (e) {}
+  __ctWatchId = null;
+}
+function initCourseTracker() {
+  if (__ctInited) return; __ctInited = true;
+  if (__ctPageName() === 'today.html') return;   // 오늘운영은 자체 추적 → 엔진 쉼
+  window.addEventListener('pagehide', __ctStop);  // 이 페이지 떠날 땐 정리(다음 페이지가 이어받음)
+  if (__ctGetSession()) __ctStart();              // 진행 중 세션 있으면 어느 화면이든 계속 기록
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCourseTracker);
+else initCourseTracker();
 // 공개 모니터링 토큰 생성 (16자 랜덤)
 function generatePublicToken() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';

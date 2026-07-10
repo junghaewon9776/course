@@ -115,7 +115,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260702n"></script>
+<script src="common.js?v=20260702p"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -226,16 +226,13 @@ setTimeout(() => {
   try { s = JSON.parse(raw); } catch { return; }
   if (s.finishedAt) { clearLastActiveSession(); return; }
   if (Date.now() - (s.startedAt || 0) > 12 * 60 * 60 * 1000) { clearLastActiveSession(); return; }
-  // Firebase 데이터 안 와도 일단 물어봄
+  // 🔄 묻지 않고 무조건 자동 이어가기 — 탭 이동/앱 재실행해도 기록 계속 (끊으려면 ✕코스취소)
   const elapsed = Math.floor((Date.now() - s.startedAt) / 60000);
-  const completed = (s.completions || []).length;
-  const driver = s.crew?.driver || '';
-  if (confirm(`이전 운영 이어가기?\n\n${driver ? '운전: ' + driver + '\n' : ''}진행: ${completed}개 거점 완료\n시작: ${elapsed}분 전\n\n[확인] = 이어가기  /  [취소] = 새로 시작`)) {
-    // Firebase 데이터 도착할 때까지 기다린 후 resume
-    onDataReady(() => resumeSession(s));
-  } else {
-    clearLastActiveSession();
-  }
+  onDataReady(() => resumeSession(s));
+  try {
+    const gs = document.getElementById('gpsStatus');
+    if (gs) gs.textContent = '🔄 진행 중이던 운영 자동 이어가기 (' + elapsed + '분 경과)';
+  } catch (e) {}
 }, 100);
 
 // auth 상태 확인 - 있으면 그대로, 없으면 익명 로그인
@@ -2002,6 +1999,17 @@ function releaseWakeLock() {
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && watchId && !wakeLock) requestWakeLock();
+});
+// 🔄 다른 탭/페이지로 이동할 때만 이 페이지 워쳐 정리(중복 방지). 세션은 유지 → common.js 추적 엔진이 이어받아 계속 기록.
+// (화면 끔·다른 앱 전환은 pagehide가 안 떠서 여기 있는 동안 백그라운드로 계속 기록됨)
+window.addEventListener('pagehide', function () {
+  try {
+    if (currentSession && !currentSession.finishedAt) saveSession();   // 최신 궤적 확정 저장
+    const BG = getBgGeo();
+    if (BG && window.__bgWatcherId) { BG.removeWatcher({ id: window.__bgWatcherId }); window.__bgWatcherId = null; }
+    else if (typeof watchId === 'number') { navigator.geolocation.clearWatch(watchId); }
+    watchId = null;
+  } catch (e) {}
 });
 
 // 앱(Capacitor) 환경이면 백그라운드 위치 플러그인 사용
