@@ -1064,7 +1064,8 @@ function checkPromotionForNames(names) {
     const users = data.users || {};
     names.filter((n, i) => n && names.indexOf(n) === i).forEach(name => {
       const st = cmTotalXp(data, name);
-      const path = '/rankState/' + cmRankKey(name);
+      // rankState2: 구버전(전체년도 XP로 계산하던) 클라이언트와 분리 — 옛 주소는 부풀린 기준이 남아 구버전 폰이 더는 못 쏨
+      const path = '/rankState2/' + cmRankKey(name);
       fbDb.ref(path).once('value').then(snap => {
         const prev = snap.val();
         if (prev == null) { fbDb.ref(path).set(st.rankIndex); return; }   // 최초 기록은 기준만 저장(푸시 X)
