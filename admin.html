@@ -339,7 +339,9 @@ checkAdminAuth().then(ok => {
   if (ok) onDataReady(loadKakaoMap);
 });
 // 🗺 지도는 데이터(Firebase 전체 로드)를 기다리지 말고 즉시 병렬로 띄운다 (늦게 뜨던 것 개선).
-loadKakaoMap();
+// ⚠️ setTimeout(0) 필수 — 즉시 호출하면 SDK 캐시된 재방문 시 아래 let(pendingClickMode 등) 초기화 전에
+//    initMap→refreshAll이 실행돼 TDZ 에러로 스크립트 전체가 죽음(데이터·마커 안 뜸).
+setTimeout(loadKakaoMap, 0);
 
 let __kakaoLoadAttempt = 0;
 function loadKakaoMap() {
