@@ -1364,6 +1364,18 @@ function submitAccessGate() {
   }
 }
 
+// GPS 궤적 점 솎기 — 최소 간격(m) 이상 떨어진 점만 남김(첫·끝점 보존). 용량↓, 지도·거리·재생 사실상 동일
+function __thinTrack(track, minGap) {
+  if (!Array.isArray(track) || track.length <= 2) return track || [];
+  minGap = minGap || 10;
+  var out = [track[0]], last = track[0];
+  for (var i = 1; i < track.length - 1; i++) {
+    var p = track[i]; if (!p) continue;
+    if (distance(last[0], last[1], p[0], p[1]) >= minGap) { out.push(p); last = p; }
+  }
+  out.push(track[track.length - 1]);
+  return out;
+}
 // 거점만 타깃 저장 — 전체 트리(수 MB, 사진 base64 포함) 업로드 없이 /anchors만 써서 빠름
 function saveAnchors() {
   const d = loadData();

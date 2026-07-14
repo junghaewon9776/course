@@ -116,7 +116,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260702r"></script>
+<script src="common.js?v=20260702s"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2735,6 +2735,8 @@ function finishCourse() {
   // 로그에 누적 — ⚠️ 전체 트리(saveData) 대신 /logs에 개별 push (관리자 동시 편집과 충돌 방지)
   const fresh = loadData();
   const logEntry = { ...currentSession };
+  // 🗜 GPS 궤적 점 솎기(10m 간격) — 용량 대폭 절감, 지도·거리·재생은 그대로
+  try { if (typeof __thinTrack === 'function' && Array.isArray(logEntry.track)) logEntry.track = __thinTrack(logEntry.track, 10); } catch (e) {}
   // 📸 거점 스냅샷: 완료 시점의 거점 목록을 로그에 같이 저장 → 나중에 거점 바꿔도 과거 기록은 그대로
   try {
     logEntry.anchorsSnapshot = getCourseAnchors(fresh, currentSession.courseId)

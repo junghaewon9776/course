@@ -162,7 +162,7 @@
       <div class="card">
         <div class="flex-between">
           <h2>운행 목록</h2>
-          <span class="super-only" style="display:flex;gap:4px;flex-wrap:wrap;"><button class="small" style="background:#16a085;" onclick="exportLogsExcel()">📊 엑셀</button><button class="small" style="background:#2980b9;" onclick="exportLogCoords()">📍 좌표</button><button class="small danger" onclick="clearLogs()">🗑 전체삭제</button><button class="small" style="background:#e67e22;" onclick="restoreAllLogs()">↩ 되돌리기</button></span>
+          <span class="super-only" style="display:flex;gap:4px;flex-wrap:wrap;"><button class="small" style="background:#16a085;" onclick="exportLogsExcel()">📊 엑셀</button><button class="small" style="background:#2980b9;" onclick="exportLogCoords()">📍 좌표</button><button class="small danger" onclick="clearLogs()">🗑 전체삭제</button><button class="small" style="background:#e67e22;" onclick="restoreAllLogs()">↩ 되돌리기</button><button class="small" style="background:#8e44ad;" onclick="dietLogTracks()">🗜 궤적 다이어트</button></span>
         </div>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:2px 0 8px;cursor:pointer;color:#2c3e50;">
           <input type="checkbox" id="groupByCourse" onchange="toggleGroupByCourse()"> 📁 코스로 묶어서 보기 <span style="color:#888;font-size:11px;">(인원별 운영 합쳐보기)</span>
@@ -193,7 +193,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260702r"></script>
+<script src="common.js?v=20260702s"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -1767,6 +1767,33 @@ function render() {
   if (selectedLogIdx !== null && logs[selectedLogIdx] && !__replayMarker) drawLog(logs[selectedLogIdx]);
 }
 function toggleLogsExpanded() { __logsExpanded = !__logsExpanded; render(); }
+// 🗜 운행기록 궤적 다이어트 — 기존 로그들의 GPS 점을 10m 간격으로 솎아 용량 절감 (super 전용)
+//    기록 자체·거리·재생 유지, 점 개수만 줄임. /logs/{key}/track 만 개별로 덮어써서 안전(키·구조 보존).
+async function dietLogTracks() {
+  if (getMyRole() !== 'super') { alert('super 권한만 가능합니다.'); return; }
+  if (typeof __thinTrack !== 'function') { alert('업데이트가 아직 반영 안 됐어요. 새로고침 후 다시 시도하세요.'); return; }
+  if (!confirm('운행기록의 GPS 점을 줄여 용량을 확 줄입니다.\n(기록·거리·재생은 그대로, 궤적만 살짝 성기게)\n진행할까요?')) return;
+  try {
+    const snap = await fbDb.ref('/logs').once('value');
+    const logs = snap.val() || {};
+    const updates = {};
+    let before = 0, after = 0, n = 0;
+    Object.keys(logs).forEach(key => {
+      const l = logs[key];
+      if (!l || !Array.isArray(l.track) || l.track.length < 3) return;
+      const thin = __thinTrack(l.track, 10);
+      if (thin.length < l.track.length) {
+        before += l.track.length; after += thin.length; n++;
+        updates['/logs/' + key + '/track'] = thin;
+      }
+    });
+    if (!n) { alert('이미 가벼워요 — 줄일 게 없습니다.'); return; }
+    await fbDb.ref().update(updates);
+    alert('✅ 완료!\n' + n + '개 기록 정리\nGPS 점: ' + before.toLocaleString() + ' → ' + after.toLocaleString() + '개\n(' + Math.round((1 - after / before) * 100) + '% 감소)\n\n앱/웹 새로고침하면 훨씬 가벼워집니다.');
+  } catch (e) {
+    alert('다이어트 실패: ' + e.message);
+  }
+}
 // 📊 운행기록 엑셀(CSV) 내보내기 — super 전용
 function exportLogsExcel() {
   if (getMyRole() !== 'super') { alert('super 권한만 가능합니다.'); return; }
