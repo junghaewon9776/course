@@ -326,14 +326,15 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702v"></script>
+<script src="common.js?v=20260702w"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
 
 // 인증 → 데이터 동기화 → 카카오 지도 초기화
 window.onAuthSuccess = () => onDataReady(loadKakaoMap);
-window.onDataChanged = () => { if (map) refreshAll(); };
+// 데이터가 준비되면 지도 로드 여부와 무관하게 목록·드롭다운을 채운다 (지도 로딩이 늦어도 코스 선택이 비지 않게)
+window.onDataChanged = () => { try { refreshAll(); } catch (e) { console.warn('refreshAll', e); } };
 
 checkAdminAuth().then(ok => {
   if (ok) onDataReady(loadKakaoMap);

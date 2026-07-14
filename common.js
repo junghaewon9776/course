@@ -1266,8 +1266,25 @@ let _cache = null;
 let _cacheReady = false;
 const _readyCallbacks = [];
 
+// 캐시 준비완료 1회 처리 — 빠른 부트스트랩/전체동기화 중 먼저 도착한 쪽이 호출
+function _fireCacheReady() {
+  if (_cacheReady) return;
+  _cacheReady = true;
+  try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
+  try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
+  try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
+  try { renderNotifBell(); } catch (e) {}        // 🔔 알림 벨 표시(미확인 수)
+  _readyCallbacks.forEach(cb => cb());
+  _readyCallbacks.length = 0;
+}
+
 let _syncInitialized = false;
 let _signingOut = false;   // 로그아웃 중 flag — DB 에러 무시용
+// ⚡ 무거운 /logs(운행기록) 없이 화면부터 뜨게 하는 "가벼운 핵심 노드"들. 로그는 전체동기화(백그라운드)/모니터링에서만 받음.
+const _LIGHT_KEYS = ['events','anchors','complaints','requests','teams','members','vehicles',
+  'noSprayZones','visibility','config','users','pushLog','pushPrefs','pushTemplates',
+  'mapDefault','access','accessGate','memberPinFlags','rankOverride','publicMonitor',
+  'telegram','naverSms','sheetSync','eventConfig','deviceNames','savedTeams','memberAuth'];
 function initFirebaseSync() {
   if (_syncInitialized) return;
   if (typeof fbDb === 'undefined') {
@@ -1275,6 +1292,19 @@ function initFirebaseSync() {
     return;
   }
   _syncInitialized = true;
+
+  // ⚡ 빠른 첫 화면: 핵심 노드만 1회 먼저 읽어 즉시 렌더 (전체 트리·로그 다운로드를 기다리지 않음)
+  try {
+    _LIGHT_KEYS.forEach(function (k) {
+      fbDb.ref('/' + k).once('value').then(function (snap) {
+        if (!_cache) _cache = {};
+        if (_cache[k] === undefined) _cache[k] = snap.val();   // 전체동기화가 이미 채웠으면 덮지 않음
+        _fireCacheReady();
+        if (window.onDataChanged) window.onDataChanged();
+      }).catch(function () {});
+    });
+  } catch (e) {}
+
   fbDb.ref('/').on('value', (snapshot) => {
     const data = snapshot.val();
     if (!data) {
@@ -1290,15 +1320,7 @@ function initFirebaseSync() {
       }
     }
 
-    if (!_cacheReady) {
-      _cacheReady = true;
-      try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
-      try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
-      try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
-      try { renderNotifBell(); } catch (e) {}        // 🔔 알림 벨 표시(미확인 수)
-      _readyCallbacks.forEach(cb => cb());
-      _readyCallbacks.length = 0;
-    }
+    _fireCacheReady();
     try { checkAccessGate(); } catch (e) {}
     try { maybeResavePushToken(); } catch (e) {}
     try { renderNotifBell(); } catch (e) {}   // 🔔 알림 벨 미확인 수 갱신
