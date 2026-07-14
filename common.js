@@ -182,6 +182,39 @@ function initCourseTracker() {
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCourseTracker);
 else initCourseTracker();
+
+// ───────── 🗺 로드뷰 (카카오 내장 — 어느 지도에서든 위치의 거리 사진) ─────────
+function openRoadview(lat, lng, title) {
+  lat = Number(lat); lng = Number(lng);
+  if (!lat || !lng) { alert('위치 정보가 없습니다.'); return; }
+  if (!(window.kakao && kakao.maps && kakao.maps.Roadview && kakao.maps.RoadviewClient)) {
+    alert('지도가 아직 준비 중입니다. 잠시 후 다시 눌러주세요.'); return;
+  }
+  var ov = document.getElementById('__rvModal'); if (ov) ov.remove();
+  ov = document.createElement('div'); ov.id = '__rvModal';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:#000;display:flex;flex-direction:column;';
+  var bar = document.createElement('div');
+  bar.style.cssText = 'flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:#1a1a1a;color:#fff;font-size:14px;font-weight:700;';
+  bar.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🗺 로드뷰' + (title ? ' · ' + String(title).replace(/</g, '&lt;') : '') + '</span>';
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ 닫기';
+  closeBtn.style.cssText = 'flex:none;background:#e74c3c;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;font-size:14px;cursor:pointer;';
+  closeBtn.onclick = function () { ov.remove(); };
+  bar.appendChild(closeBtn);
+  var rvDiv = document.createElement('div'); rvDiv.style.cssText = 'flex:1;width:100%;';
+  ov.appendChild(bar); ov.appendChild(rvDiv);
+  document.body.appendChild(ov);
+  var pos = new kakao.maps.LatLng(lat, lng);
+  var rv = new kakao.maps.Roadview(rvDiv);
+  var client = new kakao.maps.RoadviewClient();
+  client.getNearestPanoId(pos, 120, function (panoId) {
+    if (panoId === null) {
+      rvDiv.innerHTML = '<div style="color:#fff;text-align:center;padding:80px 20px;font-size:15px;line-height:1.6;">이 위치 주변엔 로드뷰가 없어요.<br><span style="opacity:.7;font-size:13px;">(골목·시골길·농로는 로드뷰 미지원 구간이 많아요)</span></div>';
+      return;
+    }
+    rv.setPanoId(panoId, pos);
+  });
+}
 // 공개 모니터링 토큰 생성 (16자 랜덤)
 function generatePublicToken() {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';

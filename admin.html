@@ -326,7 +326,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702p"></script>
+<script src="common.js?v=20260702q"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -560,21 +560,40 @@ function handleMapClick(lat, lng) {
     alert('먼저 "거점" 패널에서 대상 코스를 선택하세요');
     return;
   }
-  openFormModal('📍 거점 추가', [
-    { key: 'name', label: '거점 이름', placeholder: '예: 행복어린이집 정문' },
-    { key: 'memo', label: '메모 (선택)', placeholder: '정차 위치, 골목 안내 등' }
-  ], r => {
-    if (!r.name.trim()) { alert('이름을 입력하세요'); return; }
-    const d = loadData();
-    if (!d.anchors) d.anchors = [];
-    const order = d.anchors.filter(a => a.courseId === courseId).length + 1;
-    const eventId = getCourseEventId(d, courseId);
-    const anchorName = r.name.trim();
-    d.anchors.push({ id: uid(), name: anchorName, lat, lng, memo: (r.memo || '').trim(), eventId, courseId, order });
-    saveData(d); refreshAll();
-    const crs = getCourse(d, courseId);
-    sendTelegram(`📍 <b>거점 추가</b>\n코스: ${crs?.name || ''}\n거점: ${anchorName}`);
+  // 좌표 → 주소 자동 변환 후 모달 (그냥 찍어도 주소가 메모에 채워짐)
+  __reverseGeocode(lat, lng, addr => {
+    openFormModal('📍 거점 추가', [
+      { key: 'name', label: '거점 이름', placeholder: '예: 행복어린이집 정문' },
+      { key: 'memo', label: '메모 (주소 자동입력됨)', placeholder: '주소·정차위치·골목 안내 등', value: addr || '' }
+    ], r => {
+      if (!r.name.trim()) { alert('이름을 입력하세요'); return; }
+      const d = loadData();
+      if (!d.anchors) d.anchors = [];
+      const order = d.anchors.filter(a => a.courseId === courseId).length + 1;
+      const eventId = getCourseEventId(d, courseId);
+      const anchorName = r.name.trim();
+      d.anchors.push({ id: uid(), name: anchorName, lat, lng, memo: (r.memo || '').trim(), address: addr || '', eventId, courseId, order });
+      saveData(d); refreshAll();
+      const crs = getCourse(d, courseId);
+      sendTelegram(`📍 <b>거점 추가</b>\n코스: ${crs?.name || ''}\n거점: ${anchorName}${addr ? '\n주소: ' + addr : ''}`);
+    });
   });
+}
+// 좌표 → 도로명/지번 주소 (카카오 역지오코딩). 실패/2.5초 초과 시 빈 문자열
+function __reverseGeocode(lat, lng, cb) {
+  try {
+    if (!(window.kakao && kakao.maps && kakao.maps.services)) { cb(''); return; }
+    const geocoder = new kakao.maps.services.Geocoder();
+    let done = false;
+    const t = setTimeout(() => { if (!done) { done = true; cb(''); } }, 2500);
+    geocoder.coord2Address(lng, lat, (res, st) => {
+      if (done) return; done = true; clearTimeout(t);
+      if (st === kakao.maps.services.Status.OK && res[0]) {
+        const a = res[0];
+        cb((a.road_address && a.road_address.address_name) || (a.address && a.address.address_name) || '');
+      } else cb('');
+    });
+  } catch (e) { cb(''); }
 }
 
 // ────── ✏️ 연속 거점 그리기 (점 찍고 → 저장 눌러야 등록, 되돌리기/취소 가능) ──────
@@ -2373,6 +2392,7 @@ function renderMap() {
           </div>
           <div style="font-size:13px;font-weight:700;color:#2c3e50;margin-bottom:3px;">${(a.name||'').replace(/</g,'&lt;')}</div>
           ${a.memo ? `<div style="color:#7f8c8d;font-size:11px;margin-bottom:8px;line-height:1.4;">${a.memo.replace(/</g,'&lt;')}</div>` : '<div style="margin-bottom:8px;"></div>'}
+          <button onclick="openRoadview(${a.lat},${a.lng},'${(a.name||'거점').replace(/'/g,'')}')" style="width:100%;background:#16a085;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:4px;">🗺 로드뷰</button>
           <div style="display:flex;gap:4px;">
             <button onclick="editAnchor('${a.id}')" style="flex:1;background:#3498db;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✎수정</button>
             <button onclick="moveAnchorTo('${a.id}', ${(getCourseAnchors(loadData(), course.id)).length})" style="flex:1;background:#9b59b6;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">№순번</button>
@@ -2509,7 +2529,8 @@ function renderMap() {
       ? `<div style="margin-top:8px;font-size:11px;text-align:right;"><a href="tel:${phoneTel}" style="color:#27ae60;text-decoration:none;">📞 ${c.phone}</a></div>`
       : '';
     const actBtns = `
-      <div style="display:flex;gap:4px;margin-top:8px;">
+      <button onclick="openRoadview(${c.lat},${c.lng},'민원 위치')" style="width:100%;margin-top:8px;padding:6px 4px;background:#16a085;color:#fff;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;">🗺 로드뷰</button>
+      <div style="display:flex;gap:4px;margin-top:4px;">
         <button onclick="editComplaint('${c.id}')" style="flex:1;padding:6px 4px;background:#3498db;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">✎ 수정</button>
         <button onclick="toggleComplaintStatus('${c.id}')" style="flex:1;padding:6px 4px;background:${isResolved?'#95a5a6':'#27ae60'};color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">${isResolved?'↺ 대기로':'✓ 완료'}</button>
         <button onclick="deleteComplaint('${c.id}')" style="flex:1;padding:6px 4px;background:#e74c3c;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">🗑 삭제</button>

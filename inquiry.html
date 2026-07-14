@@ -165,7 +165,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702p"></script>
+<script src="common.js?v=20260702q"></script>
 <script>
 // ────── 기본 분류 데이터 ──────
 const DEFAULT_CATEGORIES = [
@@ -359,8 +359,11 @@ function buildLocPicker(host, initial, onChange) {
   gpsBtn.style.cssText = 'padding:6px 12px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;';
   const clrBtn = document.createElement('button'); clrBtn.type = 'button'; clrBtn.textContent = '✕ 제거';
   clrBtn.style.cssText = 'padding:6px 12px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;display:none;';
+  const rvBtn = document.createElement('button'); rvBtn.type = 'button'; rvBtn.textContent = '🗺 로드뷰';
+  rvBtn.style.cssText = 'padding:6px 12px;background:#16a085;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;display:none;';
+  rvBtn.onclick = function () { if (cur && typeof openRoadview === 'function') openRoadview(cur.lat, cur.lng, cur.name || '민원 위치'); };
   const status = document.createElement('span'); status.style.cssText = 'font-size:12px;color:#999;';
-  brow.appendChild(gpsBtn); brow.appendChild(clrBtn); brow.appendChild(status);
+  brow.appendChild(gpsBtn); brow.appendChild(rvBtn); brow.appendChild(clrBtn); brow.appendChild(status);
   // 지도
   const mapDiv = document.createElement('div'); mapDiv.style.cssText = 'width:100%;height:230px;border-radius:8px;background:#eee;';
   wrap.appendChild(srow); wrap.appendChild(results); wrap.appendChild(brow); wrap.appendChild(mapDiv);
@@ -371,6 +374,7 @@ function buildLocPicker(host, initial, onChange) {
     status.textContent = cur ? ('✅ ' + (cur.name || (cur.lat.toFixed(5) + ', ' + cur.lng.toFixed(5)))) : '지도를 탭해 핑을 찍거나 검색하세요';
     status.style.color = cur ? '#27ae60' : '#999';
     clrBtn.style.display = cur ? '' : 'none';
+    rvBtn.style.display = cur ? '' : 'none';
   }
   function emit() { onChange(cur ? { lat: cur.lat, lng: cur.lng, name: cur.name || '' } : null); renderStatus(); }
   function placeMarker(lat, lng, center) {
