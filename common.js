@@ -1280,11 +1280,77 @@ function _fireCacheReady() {
 
 let _syncInitialized = false;
 let _signingOut = false;   // 로그아웃 중 flag — DB 에러 무시용
-// ⚡ 무거운 /logs(운행기록) 없이 화면부터 뜨게 하는 "가벼운 핵심 노드"들. 로그는 전체동기화(백그라운드)/모니터링에서만 받음.
-const _LIGHT_KEYS = ['events','anchors','complaints','requests','teams','members','vehicles',
-  'noSprayZones','visibility','config','users','pushLog','pushPrefs','pushTemplates',
-  'mapDefault','access','accessGate','memberPinFlags','rankOverride','publicMonitor',
-  'telegram','naverSms','sheetSync','eventConfig','deviceNames','savedTeams','memberAuth'];
+// 🐘 무겁고 특정 화면에서만 쓰는 노드 — 처음엔 안 받고, 필요한 화면에서 ensureNode()로 그때 받는다.
+//    (실측: logs 975KB + inquiries 513KB + photos 240KB = 전체 2MB의 약 87%)
+const _HEAVY_KEYS = ['logs', 'inquiries', 'photos'];
+// 키 자동발견이 실패했을 때만 쓰는 예비 목록
+const _FALLBACK_KEYS = ['events','anchors','complaints','requests','teams','members','vehicles',
+  'noSprayZones','visibility','config','users','pushLog','pushPrefs','pushTemplates','pushWebhook',
+  'mapDefault','access','accessGate','memberPinFlags','rankOverride','publicMonitor','telegram',
+  'naverSms','sheetSync','eventConfig','deviceNames','savedTeams','memberAuth','expenses','live',
+  'rankIcons','rankTiers','quests','layout','inquiryCategories','rankState','xpConfig','pushTokens'];
+
+const _subscribed = {};   // 이미 구독 중인 노드
+let _changedTimer = null;
+// 여러 노드가 동시에 도착해도 화면 갱신은 한 번만 (마커 수백~천 개 재렌더 폭주 방지)
+function _scheduleChanged() {
+  if (_changedTimer) clearTimeout(_changedTimer);
+  _changedTimer = setTimeout(() => {
+    try { checkAccessGate(); } catch (e) {}
+    try { maybeResavePushToken(); } catch (e) {}
+    try { renderNotifBell(); } catch (e) {}
+    if (window.onDataChanged) window.onDataChanged();
+  }, 120);
+}
+
+// 최상위 키를 실행 중에 자동 발견 — 코드에 목록을 박아두면 새로 생긴 노드를 놓침
+function _discoverTopKeys() {
+  try {
+    const url = ((firebase.app().options || {}).databaseURL || '').replace(/\/$/, '');
+    if (!url) return Promise.resolve(null);
+    const user = (typeof fbAuth !== 'undefined' && fbAuth.currentUser) ? fbAuth.currentUser : null;
+    const p = user ? user.getIdToken() : Promise.resolve(null);
+    return p.then(token =>
+      fetch(url + '/.json?shallow=true' + (token ? '&auth=' + token : ''))
+        .then(r => r.ok ? r.json() : null)
+        .then(o => (o && typeof o === 'object') ? Object.keys(o) : null)
+    ).catch(() => null);
+  } catch (e) { return Promise.resolve(null); }
+}
+
+// 노드 하나 구독 (첫 도착 시 resolve, 이후 변경은 화면 갱신 예약)
+function _subscribeNode(k) {
+  return new Promise((resolve) => {
+    if (_subscribed[k]) return resolve();
+    _subscribed[k] = true;
+    let first = true;
+    fbDb.ref('/' + k).on('value', (snap) => {
+      if (!_cache) _cache = {};
+      _cache[k] = snap.val();
+      if (first) { first = false; resolve(); }
+      else _scheduleChanged();
+    }, (err) => {
+      if (!_signingOut) console.warn('노드 읽기 오류 /' + k + ':', err.message);
+      if (first) { first = false; resolve(); }
+    });
+  });
+}
+
+// 🐘 무거운 노드를 필요할 때 불러오기 — 모니터링/통계(logs), 게시판(inquiries), 사진(photos)에서 호출
+function ensureNode(key) {
+  if (typeof fbDb === 'undefined') return Promise.resolve(null);
+  if (_subscribed[key]) return Promise.resolve(_cache ? _cache[key] : null);
+  return _subscribeNode(key).then(() => {
+    _scheduleChanged();
+    return _cache ? _cache[key] : null;
+  });
+}
+// 노드를 이미 불러왔는지 — 값이 비어있을 수도 있으므로 값이 아니라 구독 여부로 판단(무한 재시도 방지)
+function isNodeLoaded(key) { return !!_subscribed[key]; }
+function ensureLogs() { return ensureNode('logs'); }
+function ensureInquiries() { return ensureNode('inquiries'); }
+function ensurePhotos() { return ensureNode('photos'); }
+
 function initFirebaseSync() {
   if (_syncInitialized) return;
   if (typeof fbDb === 'undefined') {
@@ -1293,62 +1359,33 @@ function initFirebaseSync() {
   }
   _syncInitialized = true;
 
-  // ⚡ 빠른 첫 화면: 핵심 노드만 먼저 읽어 즉시 렌더 (전체 트리·로그 다운로드를 기다리지 않음)
-  // ⚠️ 렌더(onDataChanged)는 딱 1회만 — 키마다 부르면 300개 마커를 수십 번 다시 그려 화면이 멈춤
-  try {
-    var _lightPending = _LIGHT_KEYS.length;
-    var _lightFired = false;
-    var _lightRender = function () {
-      if (_lightFired) return;
-      // events·anchors가 도착했거나(핵심), 모든 키를 다 받았으면 1회 렌더
-      var coreReady = _cache && _cache.events !== undefined && _cache.anchors !== undefined;
-      if (!coreReady && _lightPending > 0) return;
-      _lightFired = true;
-      _fireCacheReady();
-      if (window.onDataChanged) window.onDataChanged();
-    };
-    _LIGHT_KEYS.forEach(function (k) {
-      fbDb.ref('/' + k).once('value').then(function (snap) {
-        if (!_cache) _cache = {};
-        if (_cache[k] === undefined) _cache[k] = snap.val();   // 전체동기화가 이미 채웠으면 덮지 않음
-      }).catch(function () {}).then(function () {
-        _lightPending--;
-        _lightRender();
-      });
-    });
-  } catch (e) {}
-
-  fbDb.ref('/').on('value', (snapshot) => {
-    const data = snapshot.val();
-    if (!data) {
-      // 진짜 최초 (DB 완전 비어있음): 기본 데이터 업로드
+  _discoverTopKeys().then((found) => {
+    // DB가 완전히 비어있으면 기본 데이터 업로드 (최초 1회)
+    if (found && found.length === 0) {
       _cache = JSON.parse(JSON.stringify(defaultData));
       fbDb.ref('/').set(_cache);
-    } else {
-      _cache = data;
-      // mapDefault만 복원 (배열은 사용자가 비웠을 수 있으니 손대지 않음)
-      if (_cache.mapDefault === undefined) {
+    }
+    const keys = Array.from(new Set(
+      (found && found.length ? found : _FALLBACK_KEYS).concat(Object.keys(defaultData))
+    )).filter(k => _HEAVY_KEYS.indexOf(k) < 0);
+
+    if (!_cache) _cache = {};
+    Promise.all(keys.map(k => _subscribeNode(k))).then(() => {
+      // mapDefault 없으면 기본값 복원 (배열은 사용자가 비웠을 수 있으니 손대지 않음)
+      if (_cache && _cache.mapDefault === undefined) {
         _cache.mapDefault = defaultData.mapDefault;
         fbDb.ref('/mapDefault').set(_cache.mapDefault);
       }
-    }
-
-    _fireCacheReady();
-    try { checkAccessGate(); } catch (e) {}
-    try { maybeResavePushToken(); } catch (e) {}
-    try { renderNotifBell(); } catch (e) {}   // 🔔 알림 벨 미확인 수 갱신
-    if (window.onDataChanged) window.onDataChanged();
-  }, (err) => {
-    // 로그아웃 중이면 무시 (signOut → signInAnonymously 사이에 발생)
-    if (_signingOut) return;
-    console.error('Firebase 읽기 오류:', err);
-    alert('Firebase 연결 실패: ' + err.message);
+      _fireCacheReady();
+      _scheduleChanged();
+    });
   });
 }
 function stopFirebaseSync() {
-  if (_syncInitialized && typeof fbDb !== 'undefined') {
-    fbDb.ref('/').off('value');
+  if (typeof fbDb !== 'undefined') {
+    Object.keys(_subscribed).forEach(k => { try { fbDb.ref('/' + k).off('value'); } catch (e) {} });
   }
+  Object.keys(_subscribed).forEach(k => delete _subscribed[k]);
   _syncInitialized = false;
   _cacheReady = false;
 }
@@ -1466,6 +1503,14 @@ function saveData(data, force) {
     const payload = { ...data };
     delete payload.live;    // driver 가 직접 ref('/live/...').set 으로 관리
     delete payload.photos;  // 현장사진은 별도 노드, saveData가 안 건드림
+    // 🛡 무거운 노드(logs/inquiries)는 "불러온 적 없으면" 저장에서 제외 —
+    //    안 불러온 상태에서 빈 배열에 1건만 넣고 저장하면 DB 전체가 그 1건으로 덮여 사라짐
+    _HEAVY_KEYS.forEach(k => {
+      if (payload[k] !== undefined && !_subscribed[k]) {
+        console.warn('saveData: /' + k + ' 미로딩 → 저장 제외(데이터 보호). 쓰기 전에 ensureNode(\'' + k + '\') 필요');
+        delete payload[k];
+      }
+    });
     fbDb.ref('/').update(payload).catch(err => {
       console.error('저장 실패:', err);
       alert('저장 실패: ' + err.message);

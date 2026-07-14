@@ -326,7 +326,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702z"></script>
+<script src="common.js?v=20260703a"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -509,8 +509,11 @@ function addNoSprayAt(lat, lng, areaHint = '') {
       radius,
       createdAt: Date.now()
     });
+    // 🐘 문의(inquiries)는 지연로딩 → 쓰기 전에 반드시 불러와야 기존 글이 안 날아감
+    ensureInquiries().then(() => {
     if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'noSprayReq',categoryName:'방역금지구역',subCategory:'',content:r.name.trim()+(r.reason?' — '+r.reason.trim():'')+' (반경 '+radius+'m)',phone:'',writer:'관리자',writerUid:'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
     saveData(data); refreshAll();
+    });
     sendTelegram(`🚫 <b>방역불가 추가</b>\n이름: ${r.name.trim()}\n반경: ${radius}m`);
     { var __pt=pushTemplate('noSpray',{이름:r.name.trim(),반경:radius},'🚫 방역금지 추가','{이름} (반경 {반경}m)'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'all','noSpray'); }
   });
@@ -1985,8 +1988,12 @@ function addComplaintAt(lat, lng, areaHint = '') {
       createdBy: uInfo?.name || u?.email || '',
       inquiryId: __iqid
     });
-    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:__iqid,category:'resident',categoryName:'주민민원',subCategory:'',content:(r.content||'').trim(),phone:(r.phone||'').trim(),writer:(uInfo&&uInfo.name)||(u&&u.email)||'관리자',writerUid:(u&&u.uid)||'',status:'pending',adminMemo:'',comments:[],lat:lat,lng:lng,complaintId:__cid,createdAt:Date.now()}); if(typeof sendAppPush==='function'){var __mp=pushTemplate('field',{유형:'주민민원',코스:'',내용:(r.content||'').slice(0,60)},'📞 주민민원 추가','{내용}'); sendAppPush(__mp.title,__mp.body,'all','complaint');}
+    if(typeof sendAppPush==='function'){var __mp=pushTemplate('field',{유형:'주민민원',코스:'',내용:(r.content||'').slice(0,60)},'📞 주민민원 추가','{내용}'); sendAppPush(__mp.title,__mp.body,'all','complaint');}
+    // 🐘 문의(inquiries)는 지연로딩 → 쓰기 전에 반드시 불러와야 기존 글이 안 날아감
+    ensureInquiries().then(() => {
+    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:__iqid,category:'resident',categoryName:'주민민원',subCategory:'',content:(r.content||'').trim(),phone:(r.phone||'').trim(),writer:(uInfo&&uInfo.name)||(u&&u.email)||'관리자',writerUid:(u&&u.uid)||'',status:'pending',adminMemo:'',comments:[],lat:lat,lng:lng,complaintId:__cid,createdAt:Date.now()});
     saveData(data); refreshAll();
+    });
     sendTelegram(`📞 <b>민원 추가</b> (관리자)\n연락처: ${(r.phone || '-')}\n내용: ${(r.content || '-').slice(0, 50)}`);
   });
 }
