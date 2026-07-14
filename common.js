@@ -1293,15 +1293,28 @@ function initFirebaseSync() {
   }
   _syncInitialized = true;
 
-  // ⚡ 빠른 첫 화면: 핵심 노드만 1회 먼저 읽어 즉시 렌더 (전체 트리·로그 다운로드를 기다리지 않음)
+  // ⚡ 빠른 첫 화면: 핵심 노드만 먼저 읽어 즉시 렌더 (전체 트리·로그 다운로드를 기다리지 않음)
+  // ⚠️ 렌더(onDataChanged)는 딱 1회만 — 키마다 부르면 300개 마커를 수십 번 다시 그려 화면이 멈춤
   try {
+    var _lightPending = _LIGHT_KEYS.length;
+    var _lightFired = false;
+    var _lightRender = function () {
+      if (_lightFired) return;
+      // events·anchors가 도착했거나(핵심), 모든 키를 다 받았으면 1회 렌더
+      var coreReady = _cache && _cache.events !== undefined && _cache.anchors !== undefined;
+      if (!coreReady && _lightPending > 0) return;
+      _lightFired = true;
+      _fireCacheReady();
+      if (window.onDataChanged) window.onDataChanged();
+    };
     _LIGHT_KEYS.forEach(function (k) {
       fbDb.ref('/' + k).once('value').then(function (snap) {
         if (!_cache) _cache = {};
         if (_cache[k] === undefined) _cache[k] = snap.val();   // 전체동기화가 이미 채웠으면 덮지 않음
-        _fireCacheReady();
-        if (window.onDataChanged) window.onDataChanged();
-      }).catch(function () {});
+      }).catch(function () {}).then(function () {
+        _lightPending--;
+        _lightRender();
+      });
     });
   } catch (e) {}
 
