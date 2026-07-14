@@ -2079,3 +2079,25 @@ function openKakaoNavi(name, lat, lng) {
     window.open(webUrl);
   }
 }
+
+// 🔄 페이지 이동 링크에 common.js 버전을 자동으로 붙임 → 앱 웹뷰 캐시 때문에 예전 화면이 뜨는 문제 방지
+(function __versionLinks() {
+  try {
+    var me = document.currentScript;
+    if (!me) { var ss = document.getElementsByTagName('script'); for (var i = 0; i < ss.length; i++) { if (/common\.js/.test(ss[i].src)) me = ss[i]; } }
+    var ver = '';
+    if (me && me.src) { var q = me.src.split('?')[1] || ''; var mm = q.match(/(?:^|&)v=([^&]+)/); ver = mm ? mm[1] : ''; }
+    if (!ver) return;
+    var apply = function () {
+      var as = document.querySelectorAll('a[href$=".html"]');
+      for (var j = 0; j < as.length; j++) {
+        var h = as[j].getAttribute('href');
+        if (h && h.indexOf('v=') < 0 && !/^https?:/.test(h) && h.indexOf('//') !== 0) {
+          as[j].setAttribute('href', h + (h.indexOf('?') < 0 ? '?' : '&') + 'v=' + ver);
+        }
+      }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+    else apply();
+  } catch (e) {}
+})();
