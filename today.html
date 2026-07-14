@@ -100,8 +100,11 @@
 
     <div class="card" id="progressCard">
       <h2 id="progressTitle">거점 진행</h2>
-      <div id="anchorRows"></div>
-      <div id="pinRows" style="display:none;"></div>
+      <div id="anchorScroll" style="max-height:340px;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #eee;border-radius:8px;" data-open="0">
+        <div id="anchorRows"></div>
+        <div id="pinRows" style="display:none;"></div>
+      </div>
+      <button id="btnAnchorExpand" onclick="toggleAnchorExpand()" style="width:100%;margin-top:6px;background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:8px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;">▼ 거점 전체 펼치기</button>
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
         <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스완료</button>
         <button id="btnReqAnchor2" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
@@ -116,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260702u"></script>
+<script src="common.js?v=20260702v"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1352,6 +1355,22 @@ function resumeSession(s) {
   if (watchId === null) setTimeout(() => toggleGPS(), 500);
 }
 
+function toggleAnchorExpand() {
+  const box = document.getElementById('anchorScroll');
+  const btn = document.getElementById('btnAnchorExpand');
+  if (!box) return;
+  const open = box.dataset.open === '1';
+  if (open) {
+    box.style.maxHeight = '340px';
+    box.dataset.open = '0';
+    if (btn) btn.textContent = '▼ 거점 전체 펼치기';
+  } else {
+    box.style.maxHeight = 'none';
+    box.dataset.open = '1';
+    if (btn) btn.textContent = '▲ 접기';
+  }
+}
+
 function renderAnchorRows() {
   const data = loadData();
   const anchors = getCourseAnchors(data, currentSession.courseId);
@@ -1372,6 +1391,17 @@ function renderAnchorRows() {
       </div>
     `;
   }).join('');
+  // 거점이 많아 스크롤 박스를 넘칠 때만 펼치기 버튼 표시 (적으면 숨김)
+  try {
+    const box = document.getElementById('anchorScroll');
+    const btn = document.getElementById('btnAnchorExpand');
+    if (box && btn) {
+      setTimeout(() => {
+        const overflowing = box.dataset.open !== '1' && box.scrollHeight > box.clientHeight + 4;
+        btn.style.display = (overflowing || box.dataset.open === '1') ? '' : 'none';
+      }, 0);
+    }
+  } catch (e) {}
 }
 
 // ───────── 📍 전단지 핑 (현장에서 직접 찍는 마커) ─────────
