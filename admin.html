@@ -326,7 +326,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260702q"></script>
+<script src="common.js?v=20260702r"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -573,7 +573,7 @@ function handleMapClick(lat, lng) {
       const eventId = getCourseEventId(d, courseId);
       const anchorName = r.name.trim();
       d.anchors.push({ id: uid(), name: anchorName, lat, lng, memo: (r.memo || '').trim(), address: addr || '', eventId, courseId, order });
-      saveData(d); refreshAll();
+      saveAnchors(); refreshAll();
       const crs = getCourse(d, courseId);
       sendTelegram(`📍 <b>거점 추가</b>\n코스: ${crs?.name || ''}\n거점: ${anchorName}${addr ? '\n주소: ' + addr : ''}`);
     });
@@ -637,7 +637,7 @@ function saveDrawAnchors() {
   const eventId = getCourseEventId(d, courseId);
   const n = __drawAnchor.points.length;
   __drawAnchor.points.forEach(p => { order++; d.anchors.push({ id: uid(), name: '거점 ' + order, lat: p[0], lng: p[1], memo: '', eventId: eventId, courseId: courseId, order: order }); });
-  saveData(d); refreshAll();
+  saveAnchors(); refreshAll();
   cleanupDrawAnchor();
   alert('✅ ' + n + '개 거점 등록 완료!\n이름은 거점 목록에서 수정하세요.');
 }
@@ -992,7 +992,7 @@ function pickSearchResult(r) {
     const eventId = getCourseEventId(data, courseId);
     const aName = res.name.trim();
     data.anchors.push({ id: uid(), name: aName, lat: r.lat, lng: r.lng, memo: (res.memo || '').trim(), eventId, courseId, order });
-    saveData(data);
+    saveAnchors();
     document.getElementById('searchInput').value = '';
     refreshAll();
     const crs = getCourse(data, courseId);
@@ -1735,7 +1735,7 @@ function renderAnchors() {
         reordered.splice(evt.oldIndex, 1);
         reordered.splice(evt.newIndex, 0, moved);
         reordered.forEach((a, i) => { a.order = i + 1; });
-        saveData(data); refreshAll();
+        saveAnchors(); refreshAll();
       }
     });
   }
@@ -1795,7 +1795,7 @@ function finishReorderMode() {
     const a = data.anchors.find(x => x.id === id);
     if (a) a.order = i + 1;
   });
-  saveData(data);
+  saveAnchors();
   cancelReorderMode();
 }
 
@@ -1826,7 +1826,7 @@ function moveAnchorTo(id, total) {
   reordered.splice(curIdx, 1);
   reordered.splice(newIdx, 0, anchor);
   reordered.forEach((a, i) => { a.order = i + 1; });
-  saveData(data); refreshAll();
+  saveAnchors(); refreshAll();
 }
 
 function toggleFeaturedAnchor(id) {
@@ -1834,7 +1834,7 @@ function toggleFeaturedAnchor(id) {
   const a = data.anchors.find(x => x.id === id);
   if (!a) return;
   a.featured = !a.featured;
-  saveData(data); refreshAll();
+  saveAnchors(); refreshAll();
 }
 function moveAnchor(id, dir) {
   const data = loadData();
@@ -1844,7 +1844,7 @@ function moveAnchor(id, dir) {
   const target = list[idx + dir];
   if (!target) return;
   [anchor.order, target.order] = [target.order, anchor.order];
-  saveData(data); refreshAll();
+  saveAnchors(); refreshAll();
 }
 function editAnchor(id) {
   const data = loadData();
@@ -1871,7 +1871,7 @@ function editAnchor(id) {
     a.name = newName;
     a.memo = (r.memo || '').trim();
     a.villageHeadIds = headIds;
-    saveData(data); refreshAll();
+    saveAnchors(); refreshAll();
     sendTelegram(`✏️ <b>거점 수정</b>\n거점: ${newName}`);
   });
 }
@@ -1882,7 +1882,7 @@ function deleteAnchor(id) {
   const data = loadData();
   const aName = (data.anchors || []).find(a => a.id === id)?.name || id;
   data.anchors = data.anchors.filter(a => a.id !== id);
-  saveData(data); refreshAll();
+  saveAnchors(); refreshAll();
   sendTelegram(`🗑 <b>거점 삭제</b>\n거점: ${aName}`);
 }
 

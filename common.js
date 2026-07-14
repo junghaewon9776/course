@@ -1364,6 +1364,12 @@ function submitAccessGate() {
   }
 }
 
+// 거점만 타깃 저장 — 전체 트리(수 MB, 사진 base64 포함) 업로드 없이 /anchors만 써서 빠름
+function saveAnchors() {
+  const d = loadData();
+  if (typeof fbDb === 'undefined') return;
+  fbDb.ref('/anchors').set(d.anchors || []).catch(err => { console.error('거점 저장 실패:', err); alert('거점 저장 실패: ' + err.message); });
+}
 function loadData() {
   const data = _cache || JSON.parse(JSON.stringify(defaultData));
   // Firebase가 array를 object로 변환했을 수 있음 → 다시 array로
