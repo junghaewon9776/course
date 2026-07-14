@@ -2006,7 +2006,11 @@ function scaledCircleMarkerImage(svgContent, scale) {
 //                     | { type:'pin', svg, baseW, baseH }
 function setupMarkerZoomScale(map, getMarkers) {
   let lastScale = getMarkerScale(map.getLevel());
+  let __zoomTimer = null;
   kakao.maps.event.addListener(map, 'zoom_changed', () => {
+    // 줌 애니메이션 중엔 무거운 마커 재생성 금지 → 줌 멈춘 뒤 한 번만 (확대/축소 부드럽게)
+    if (__zoomTimer) clearTimeout(__zoomTimer);
+    __zoomTimer = setTimeout(() => {
     const scale = getMarkerScale(map.getLevel());
     if (scale === lastScale) return;
     lastScale = scale;
@@ -2028,6 +2032,7 @@ function setupMarkerZoomScale(map, getMarkers) {
         ));
       }
     });
+    }, 180);
   });
 }
 
