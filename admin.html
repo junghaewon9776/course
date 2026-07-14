@@ -338,6 +338,8 @@ window.onDataChanged = () => { if (map) refreshAll(); };
 checkAdminAuth().then(ok => {
   if (ok) onDataReady(loadKakaoMap);
 });
+// 🗺 지도는 데이터(Firebase 전체 로드)를 기다리지 말고 즉시 병렬로 띄운다 (늦게 뜨던 것 개선).
+loadKakaoMap();
 
 let __kakaoLoadAttempt = 0;
 function loadKakaoMap() {
@@ -362,9 +364,10 @@ function loadKakaoMap() {
 
 function initMap() {
   const data = loadData();
+  const md = (data && data.mapDefault) || { lat: 35.3556, lng: 126.4730, level: 5 };   // 데이터 아직 없어도 즉시 뜨게 (법성포 기본좌표)
   map = new kakao.maps.Map(document.getElementById('map'), {
-    center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
-    level: data.mapDefault.level || 5
+    center: new kakao.maps.LatLng(md.lat, md.lng),
+    level: md.level || 5
   });
   map.relayout();
   // 확대/축소 컨트롤 (+/-)
@@ -386,7 +389,7 @@ function initMap() {
     const lng = e.latLng.getLng();
     handleMapClick(lat, lng);
   });
-  refreshAll();
+  try { refreshAll(); } catch (e) { /* 데이터 아직이면 스킵 — onDataReady에서 다시 채움 */ }
 }
 
 function setMapType(type) {
