@@ -2728,20 +2728,19 @@ function finishCourse() {
 }
 
 function __showFinishChoice(unchecked) {
-  const N = 15;
-  const head = unchecked.slice(0, N).map((a, i) => `${i + 1}. ${a.name}`).join('<br>');
-  const rest = unchecked.slice(N).map((a, i) => `${N + i + 1}. ${a.name}`).join('<br>');
-  const moreBtn = rest
-    ? `<div id="__fcMore" style="margin-top:6px;color:#2980b9;cursor:pointer;font-weight:700;">▼ 나머지 ${unchecked.length - N}곳 펼치기</div>`
+  const listHtml = unchecked.map((a, i) => `${i + 1}. ${a.name}`).join('<br>');
+  const many = unchecked.length > 15;
+  const toggleBtn = many
+    ? '<button id="__fcMore" style="width:100%;background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:8px;padding:8px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px;">▼ 전체 ' + unchecked.length + '곳 펼쳐보기</button>'
     : '';
   const ov = document.createElement('div');
   ov.style.cssText = 'position:fixed;inset:0;z-index:100003;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto;';
   ov.innerHTML =
-    '<div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,.3);max-height:90vh;display:flex;flex-direction:column;">'
+    '<div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,.3);max-height:92vh;display:flex;flex-direction:column;">'
     + '<div style="font-size:16px;font-weight:800;color:#2c3e50;margin-bottom:6px;">코스 완료 보고</div>'
     + '<div style="font-size:13px;color:#e67e22;margin-bottom:6px;">아직 체크 안 한 거점 ' + unchecked.length + '곳:</div>'
-    + '<div style="font-size:12px;color:#777;max-height:34vh;overflow:auto;background:#faf7f0;border-radius:8px;padding:8px 10px;margin-bottom:14px;line-height:1.6;">'
-    + head + '<div id="__fcRest" style="display:none;">' + (rest ? '<br>' + rest : '') + '</div>' + moreBtn + '</div>'
+    + '<div id="__fcBox" style="font-size:12px;color:#777;max-height:' + (many ? '18vh' : '30vh') + ';overflow:auto;background:#faf7f0;border-radius:8px;padding:8px 10px;margin-bottom:' + (many ? '8px' : '14px') + ';line-height:1.7;">' + listHtml + '</div>'
+    + toggleBtn
     + '<button id="__fcDone" style="width:100%;background:#27ae60;color:#fff;border:none;padding:15px;border-radius:10px;font-size:17px;font-weight:800;cursor:pointer;margin-bottom:8px;">✅ 코스 완료 (돌았던 곳만)</button>'
     + '<button id="__fcCancel" style="width:100%;background:#eee;color:#555;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">취소 (계속 진행)</button>'
     + '<div style="text-align:center;margin-top:12px;"><span id="__fcAll" style="font-size:11px;color:#c8c8c8;cursor:pointer;text-decoration:underline;">모두 완료 처리</span></div>'
@@ -2750,7 +2749,15 @@ function __showFinishChoice(unchecked) {
   const close = () => ov.remove();
   ov.onclick = e => { if (e.target === ov) close(); };
   const moreEl = ov.querySelector('#__fcMore');
-  if (moreEl) moreEl.onclick = () => { ov.querySelector('#__fcRest').style.display = 'block'; moreEl.style.display = 'none'; };
+  if (moreEl) {
+    let open = false;
+    moreEl.onclick = () => {
+      open = !open;
+      const box = ov.querySelector('#__fcBox');
+      box.style.maxHeight = open ? '55vh' : '18vh';
+      moreEl.textContent = open ? '▲ 접기' : ('▼ 전체 ' + unchecked.length + '곳 펼쳐보기');
+    };
+  }
   ov.querySelector('#__fcCancel').onclick = close;
   ov.querySelector('#__fcDone').onclick = () => { close(); __doFinishCourse(); };
   ov.querySelector('#__fcAll').onclick = () => {
