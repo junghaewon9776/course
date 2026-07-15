@@ -1363,6 +1363,25 @@ function initFirebaseSync() {
   _syncInitialized = true;
   try { window.__syncStartAt = Math.round(performance.now()); } catch (e) {}   // 진단용: 동기화 시작 시각
 
+  if (!_cache) _cache = {};
+  // ⚡ 핵심 노드(행사·거점)는 키 발견 REST 왕복(약 260ms)을 기다리지 않고 곧바로 구독 → 화면이 그만큼 빨리 뜸
+  let _coreLeft = _CORE_KEYS.length;
+  const _finishReady = () => {
+    if (_cache && _cache.mapDefault === undefined && isNodeLoaded('mapDefault')) {
+      _cache.mapDefault = defaultData.mapDefault;
+      fbDb.ref('/mapDefault').set(_cache.mapDefault);
+    }
+    _fireCacheReady();
+    _scheduleChanged();
+  };
+  _CORE_KEYS.forEach(k => {
+    _subscribeNode(k).then(() => {
+      try { (window.__nodeMs = window.__nodeMs || {})[k] = Math.round(performance.now()); } catch (e) {}
+      if (--_coreLeft <= 0) _finishReady();
+    });
+  });
+  setTimeout(_finishReady, 3000);   // 안전망: 핵심 노드가 안 와도 3초 뒤엔 무조건 렌더
+
   _discoverTopKeys().then((found) => {
     try { window.__discoverDoneAt = Math.round(performance.now()); } catch (e) {}   // 진단용: 키 발견 완료 시각
     // DB가 완전히 비어있을 때만 기본 데이터 업로드 (최초 1회)
@@ -1379,32 +1398,13 @@ function initFirebaseSync() {
       (found && found.length ? found : _FALLBACK_KEYS).concat(Object.keys(defaultData))
     )).filter(k => _HEAVY_KEYS.indexOf(k) < 0);
 
-    if (!_cache) _cache = {};
-
-    // ⚡ 화면에 꼭 필요한 핵심 노드만 오면 즉시 그린다.
-    //    (36개 전부를 기다리면 그중 하나만 느려도 화면 전체가 그만큼 늦게 뜸)
-    const core = _CORE_KEYS.filter(k => keys.indexOf(k) >= 0);
-    let coreLeft = core.length;
-    const finishReady = () => {
-      if (_cache && _cache.mapDefault === undefined && isNodeLoaded('mapDefault')) {
-        _cache.mapDefault = defaultData.mapDefault;
-        fbDb.ref('/mapDefault').set(_cache.mapDefault);
-      }
-      _fireCacheReady();
-      _scheduleChanged();
-    };
-
+    // 핵심 노드는 위에서 이미 구독 중 → _subscribeNode가 중복을 걸러줌. 나머지만 붙는다.
     keys.forEach(k => {
       _subscribeNode(k).then(() => {
         try { (window.__nodeMs = window.__nodeMs || {})[k] = Math.round(performance.now()); } catch (e) {}
-        if (core.indexOf(k) >= 0 && --coreLeft <= 0) finishReady();   // 핵심 다 옴 → 즉시 렌더
-        else if (_cacheReady) _scheduleChanged();                      // 나머지는 도착하는 대로 갱신
+        if (_cacheReady) _scheduleChanged();   // 나머지는 도착하는 대로 화면 갱신
       });
     });
-
-    // 안전망: 핵심 노드가 없거나 응답이 없어도 3초 뒤엔 무조건 화면을 그린다
-    setTimeout(finishReady, 3000);
-    if (!core.length) finishReady();
   });
 }
 function stopFirebaseSync() {
