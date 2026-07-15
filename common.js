@@ -183,7 +183,12 @@ function initCourseTracker() {
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCourseTracker);
 else initCourseTracker();
 
-// ───────── 🗺 로드뷰 (카카오 내장 — 어느 지도에서든 위치의 거리 사진) ─────────
+// ───────── 로드뷰 (카카오 내장 — 어느 지도에서든 위치의 거리 사진) ─────────
+// 로드뷰 버튼 아이콘 — 카카오/구글 로드뷰의 그 "사람 모양(펙맨)". currentColor라 버튼 글자색을 따라감
+const RV_ICON = '<svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" aria-hidden="true">'
+  + '<circle cx="12" cy="4.2" r="2.9" fill="currentColor"/>'
+  + '<path d="M15.5 8.4h-7A1.5 1.5 0 0 0 7 9.9v4.4h2.1V22h5.8v-7.7H17V9.9a1.5 1.5 0 0 0-1.5-1.5z" fill="currentColor"/>'
+  + '</svg>';
 function openRoadview(lat, lng, title) {
   lat = Number(lat); lng = Number(lng);
   if (!lat || !lng) { alert('위치 정보가 없습니다.'); return; }
@@ -195,7 +200,7 @@ function openRoadview(lat, lng, title) {
   ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:#000;display:flex;flex-direction:column;';
   var bar = document.createElement('div');
   bar.style.cssText = 'flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:#1a1a1a;color:#fff;font-size:14px;font-weight:700;';
-  bar.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🗺 로드뷰' + (title ? ' · ' + String(title).replace(/</g, '&lt;') : '') + '</span>';
+  bar.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + RV_ICON + ' 로드뷰' + (title ? ' · ' + String(title).replace(/</g, '&lt;') : '') + '</span>';
   var closeBtn = document.createElement('button');
   closeBtn.textContent = '✕ 닫기';
   closeBtn.style.cssText = 'flex:none;background:#e74c3c;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;font-size:14px;cursor:pointer;';

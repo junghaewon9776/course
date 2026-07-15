@@ -165,7 +165,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260715c"></script>
+<script src="common.js?v=20260715d"></script>
 <script>
 // ────── 기본 분류 데이터 ──────
 const DEFAULT_CATEGORIES = [
@@ -359,7 +359,7 @@ function buildLocPicker(host, initial, onChange) {
   gpsBtn.style.cssText = 'padding:6px 12px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;';
   const clrBtn = document.createElement('button'); clrBtn.type = 'button'; clrBtn.textContent = '✕ 제거';
   clrBtn.style.cssText = 'padding:6px 12px;background:#95a5a6;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;display:none;';
-  const rvBtn = document.createElement('button'); rvBtn.type = 'button'; rvBtn.textContent = '🗺 로드뷰';
+  const rvBtn = document.createElement('button'); rvBtn.type = 'button'; rvBtn.innerHTML = RV_ICON + ' 로드뷰';
   rvBtn.style.cssText = 'padding:6px 12px;background:#16a085;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:12px;cursor:pointer;display:none;';
   rvBtn.onclick = function () { if (cur && typeof openRoadview === 'function') openRoadview(cur.lat, cur.lng, cur.name || '민원 위치'); };
   const status = document.createElement('span'); status.style.cssText = 'font-size:12px;color:#999;';

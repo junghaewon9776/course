@@ -326,7 +326,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260715c"></script>
+<script src="common.js?v=20260715d"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -2389,7 +2389,7 @@ function renderMap() {
           </div>
           <div style="font-size:13px;font-weight:700;color:#2c3e50;margin-bottom:3px;">${(a.name||'').replace(/</g,'&lt;')}</div>
           ${a.memo ? `<div style="color:#7f8c8d;font-size:11px;margin-bottom:8px;line-height:1.4;">${a.memo.replace(/</g,'&lt;')}</div>` : '<div style="margin-bottom:8px;"></div>'}
-          <button onclick="openRoadview(${a.lat},${a.lng},'${(a.name||'거점').replace(/'/g,'')}')" style="width:100%;background:#16a085;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:4px;">🗺 로드뷰</button>
+          <button onclick="openRoadview(${a.lat},${a.lng},'${(a.name||'거점').replace(/'/g,'')}')" style="width:100%;background:#16a085;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;margin-bottom:4px;">${RV_ICON} 로드뷰</button>
           <div style="display:flex;gap:4px;">
             <button onclick="editAnchor('${a.id}')" style="flex:1;background:#3498db;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✎수정</button>
             <button onclick="moveAnchorTo('${a.id}', ${(getCourseAnchors(loadData(), course.id)).length})" style="flex:1;background:#9b59b6;color:#fff;padding:7px 2px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">№순번</button>
@@ -2526,7 +2526,7 @@ function renderMap() {
       ? `<div style="margin-top:8px;font-size:11px;text-align:right;"><a href="tel:${phoneTel}" style="color:#27ae60;text-decoration:none;">📞 ${c.phone}</a></div>`
       : '';
     const actBtns = `
-      <button onclick="openRoadview(${c.lat},${c.lng},'민원 위치')" style="width:100%;margin-top:8px;padding:6px 4px;background:#16a085;color:#fff;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;">🗺 로드뷰</button>
+      <button onclick="openRoadview(${c.lat},${c.lng},'민원 위치')" style="width:100%;margin-top:8px;padding:6px 4px;background:#16a085;color:#fff;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;">${RV_ICON} 로드뷰</button>
       <div style="display:flex;gap:4px;margin-top:4px;">
         <button onclick="editComplaint('${c.id}')" style="flex:1;padding:6px 4px;background:#3498db;color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">✎ 수정</button>
         <button onclick="toggleComplaintStatus('${c.id}')" style="flex:1;padding:6px 4px;background:${isResolved?'#95a5a6':'#27ae60'};color:#fff;border:none;border-radius:4px;font-size:11px;cursor:pointer;">${isResolved?'↺ 대기로':'✓ 완료'}</button>

@@ -193,7 +193,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260715c"></script>
+<script src="common.js?v=20260715d"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -556,7 +556,7 @@ function renderComplaintsAndNoSpray() {
       <div style="font-weight:700;color:#b7950b;margin-bottom:4px;">📞 민원 (미처리)</div>
       <div style="color:#444;white-space:pre-wrap;font-size:12px;word-break:keep-all;">${escapeHtml(c.content || '내용 없음')}</div>
       ${phoneLink}
-      <button onclick="openRoadview(${c.lat},${c.lng},'민원 위치')" style="width:100%;margin-top:8px;padding:6px;background:#16a085;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🗺 로드뷰</button>
+      <button onclick="openRoadview(${c.lat},${c.lng},'민원 위치')" style="width:100%;margin-top:8px;padding:6px;background:#16a085;color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">${RV_ICON} 로드뷰</button>
       <div style="margin-top:6px;font-size:10px;color:#888;">${new Date(c.createdAt || 0).toLocaleString('ko-KR')}</div>
     </div>`;
     attachAnchorInfoWindow(m, iwHtml);
