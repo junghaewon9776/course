@@ -1360,10 +1360,15 @@ function initFirebaseSync() {
   _syncInitialized = true;
 
   _discoverTopKeys().then((found) => {
-    // DB가 완전히 비어있으면 기본 데이터 업로드 (최초 1회)
+    // DB가 완전히 비어있을 때만 기본 데이터 업로드 (최초 1회)
+    // 🛡 키 목록이 비어 보인다는 이유만으로 set('/')하면 DB 전체가 날아감 → 실제 읽기로 한 번 더 확인
     if (found && found.length === 0) {
-      _cache = JSON.parse(JSON.stringify(defaultData));
-      fbDb.ref('/').set(_cache);
+      fbDb.ref('/').once('value').then(s => {
+        if (!s.exists()) {
+          _cache = JSON.parse(JSON.stringify(defaultData));
+          fbDb.ref('/').set(_cache);
+        }
+      }).catch(() => {});
     }
     const keys = Array.from(new Set(
       (found && found.length ? found : _FALLBACK_KEYS).concat(Object.keys(defaultData))
