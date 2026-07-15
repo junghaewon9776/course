@@ -1291,6 +1291,8 @@ const _FALLBACK_KEYS = ['events','anchors','complaints','requests','teams','memb
   'naverSms','sheetSync','eventConfig','deviceNames','savedTeams','memberAuth','expenses','live',
   'rankIcons','rankTiers','quests','layout','inquiryCategories','rankState','xpConfig','pushTokens'];
 
+// 화면을 그리는 데 꼭 필요한 노드 — 이것만 오면 바로 렌더하고, 나머지는 도착하는 대로 채운다
+const _CORE_KEYS = ['events', 'anchors', 'visibility', 'mapDefault'];
 const _subscribed = {};   // 이미 구독 중인 노드
 let _changedTimer = null;
 // 여러 노드가 동시에 도착해도 화면 갱신은 한 번만 (마커 수백~천 개 재렌더 폭주 방지)
@@ -1378,15 +1380,31 @@ function initFirebaseSync() {
     )).filter(k => _HEAVY_KEYS.indexOf(k) < 0);
 
     if (!_cache) _cache = {};
-    Promise.all(keys.map(k => _subscribeNode(k))).then(() => {
-      // mapDefault 없으면 기본값 복원 (배열은 사용자가 비웠을 수 있으니 손대지 않음)
-      if (_cache && _cache.mapDefault === undefined) {
+
+    // ⚡ 화면에 꼭 필요한 핵심 노드만 오면 즉시 그린다.
+    //    (36개 전부를 기다리면 그중 하나만 느려도 화면 전체가 그만큼 늦게 뜸)
+    const core = _CORE_KEYS.filter(k => keys.indexOf(k) >= 0);
+    let coreLeft = core.length;
+    const finishReady = () => {
+      if (_cache && _cache.mapDefault === undefined && isNodeLoaded('mapDefault')) {
         _cache.mapDefault = defaultData.mapDefault;
         fbDb.ref('/mapDefault').set(_cache.mapDefault);
       }
       _fireCacheReady();
       _scheduleChanged();
+    };
+
+    keys.forEach(k => {
+      _subscribeNode(k).then(() => {
+        try { (window.__nodeMs = window.__nodeMs || {})[k] = Math.round(performance.now()); } catch (e) {}
+        if (core.indexOf(k) >= 0 && --coreLeft <= 0) finishReady();   // 핵심 다 옴 → 즉시 렌더
+        else if (_cacheReady) _scheduleChanged();                      // 나머지는 도착하는 대로 갱신
+      });
     });
+
+    // 안전망: 핵심 노드가 없거나 응답이 없어도 3초 뒤엔 무조건 화면을 그린다
+    setTimeout(finishReady, 3000);
+    if (!core.length) finishReady();
   });
 }
 function stopFirebaseSync() {
