@@ -326,28 +326,18 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260703e"></script>
+<script src="common.js?v=20260715a"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
 
 // 인증 → 데이터 동기화 → 카카오 지도 초기화
 window.onAuthSuccess = () => onDataReady(loadKakaoMap);
-// 데이터가 준비되면 지도 로드 여부와 무관하게 목록·드롭다운을 채운다 (지도 로딩이 늦어도 코스 선택이 비지 않게)
-// ⚠️ 디바운스 — 데이터가 몰아쳐 들어와도 무거운 refreshAll(마커 수백 개 재렌더)은 한 번만
-let __refreshTimer = null;
-window.onDataChanged = () => {
-  if (__refreshTimer) clearTimeout(__refreshTimer);
-  __refreshTimer = setTimeout(() => { try { refreshAll(); } catch (e) { console.warn('refreshAll', e); } }, 150);
-};
+window.onDataChanged = () => { if (map) refreshAll(); };
 
 checkAdminAuth().then(ok => {
   if (ok) onDataReady(loadKakaoMap);
 });
-// 🗺 지도는 데이터(Firebase 전체 로드)를 기다리지 말고 즉시 병렬로 띄운다 (늦게 뜨던 것 개선).
-// ⚠️ setTimeout(0) 필수 — 즉시 호출하면 SDK 캐시된 재방문 시 아래 let(pendingClickMode 등) 초기화 전에
-//    initMap→refreshAll이 실행돼 TDZ 에러로 스크립트 전체가 죽음(데이터·마커 안 뜸).
-setTimeout(loadKakaoMap, 0);
 
 let __kakaoLoadAttempt = 0;
 function loadKakaoMap() {
@@ -372,10 +362,9 @@ function loadKakaoMap() {
 
 function initMap() {
   const data = loadData();
-  const md = (data && data.mapDefault) || { lat: 35.3556, lng: 126.4730, level: 5 };   // 데이터 아직 없어도 즉시 뜨게 (법성포 기본좌표)
   map = new kakao.maps.Map(document.getElementById('map'), {
-    center: new kakao.maps.LatLng(md.lat, md.lng),
-    level: md.level || 5
+    center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
+    level: data.mapDefault.level || 5
   });
   map.relayout();
   // 확대/축소 컨트롤 (+/-)
@@ -397,7 +386,7 @@ function initMap() {
     const lng = e.latLng.getLng();
     handleMapClick(lat, lng);
   });
-  try { refreshAll(); } catch (e) { /* 데이터 아직이면 스킵 — onDataReady에서 다시 채움 */ }
+  refreshAll();
 }
 
 function setMapType(type) {
@@ -509,11 +498,8 @@ function addNoSprayAt(lat, lng, areaHint = '') {
       radius,
       createdAt: Date.now()
     });
-    // 🐘 문의(inquiries)는 지연로딩 → 쓰기 전에 반드시 불러와야 기존 글이 안 날아감
-    ensureInquiries().then(() => {
     if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'noSprayReq',categoryName:'방역금지구역',subCategory:'',content:r.name.trim()+(r.reason?' — '+r.reason.trim():'')+' (반경 '+radius+'m)',phone:'',writer:'관리자',writerUid:'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
     saveData(data); refreshAll();
-    });
     sendTelegram(`🚫 <b>방역불가 추가</b>\n이름: ${r.name.trim()}\n반경: ${radius}m`);
     { var __pt=pushTemplate('noSpray',{이름:r.name.trim(),반경:radius},'🚫 방역금지 추가','{이름} (반경 {반경}m)'); if(typeof sendAppPush==='function') sendAppPush(__pt.title,__pt.body,'all','noSpray'); }
   });
@@ -584,7 +570,7 @@ function handleMapClick(lat, lng) {
       const eventId = getCourseEventId(d, courseId);
       const anchorName = r.name.trim();
       d.anchors.push({ id: uid(), name: anchorName, lat, lng, memo: (r.memo || '').trim(), address: addr || '', eventId, courseId, order });
-      saveAnchors(); refreshAll();
+      saveData(d); refreshAll();
       const crs = getCourse(d, courseId);
       sendTelegram(`📍 <b>거점 추가</b>\n코스: ${crs?.name || ''}\n거점: ${anchorName}${addr ? '\n주소: ' + addr : ''}`);
     });
@@ -648,7 +634,7 @@ function saveDrawAnchors() {
   const eventId = getCourseEventId(d, courseId);
   const n = __drawAnchor.points.length;
   __drawAnchor.points.forEach(p => { order++; d.anchors.push({ id: uid(), name: '거점 ' + order, lat: p[0], lng: p[1], memo: '', eventId: eventId, courseId: courseId, order: order }); });
-  saveAnchors(); refreshAll();
+  saveData(d); refreshAll();
   cleanupDrawAnchor();
   alert('✅ ' + n + '개 거점 등록 완료!\n이름은 거점 목록에서 수정하세요.');
 }
@@ -1003,7 +989,7 @@ function pickSearchResult(r) {
     const eventId = getCourseEventId(data, courseId);
     const aName = res.name.trim();
     data.anchors.push({ id: uid(), name: aName, lat: r.lat, lng: r.lng, memo: (res.memo || '').trim(), eventId, courseId, order });
-    saveAnchors();
+    saveData(data);
     document.getElementById('searchInput').value = '';
     refreshAll();
     const crs = getCourse(data, courseId);
@@ -1048,15 +1034,12 @@ function refreshAll() {
   renderEvtAssign();
   renderSchedules();
   renderTelegramConfig();
+  renderMap();
   // 모드 버튼 시각 동기화 (현재 모드 표시)
   document.querySelectorAll('.mode-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.mode === pendingClickMode);
   });
-  // 🗺 무거운 지도 마커 렌더(수백~천 개)는 다음 프레임으로 미룬다 → 드롭다운·목록이 먼저 즉시 뜨고 화면이 안 멈춤
-  if (__mapRenderTimer) clearTimeout(__mapRenderTimer);
-  __mapRenderTimer = setTimeout(() => { try { renderMap(); } catch (e) { console.warn('renderMap', e); } }, 0);
 }
-let __mapRenderTimer = null;
 
 function renderTelegramConfig() {
   const data = loadData();
@@ -1706,7 +1689,6 @@ function renderAnchorCourseSelect() {
   }
   sel.innerHTML = html;
   if (cur) sel.value = cur;
-  try { if (sel.options.length > 1 && !window.__ddFilledAt) window.__ddFilledAt = Math.round(performance.now()); } catch (e) {}  // 진단용: 코스 드롭다운이 실제로 채워진 시각
 }
 function renderAnchors() {
   const data = loadData();
@@ -1750,7 +1732,7 @@ function renderAnchors() {
         reordered.splice(evt.oldIndex, 1);
         reordered.splice(evt.newIndex, 0, moved);
         reordered.forEach((a, i) => { a.order = i + 1; });
-        saveAnchors(); refreshAll();
+        saveData(data); refreshAll();
       }
     });
   }
@@ -1810,7 +1792,7 @@ function finishReorderMode() {
     const a = data.anchors.find(x => x.id === id);
     if (a) a.order = i + 1;
   });
-  saveAnchors();
+  saveData(data);
   cancelReorderMode();
 }
 
@@ -1841,7 +1823,7 @@ function moveAnchorTo(id, total) {
   reordered.splice(curIdx, 1);
   reordered.splice(newIdx, 0, anchor);
   reordered.forEach((a, i) => { a.order = i + 1; });
-  saveAnchors(); refreshAll();
+  saveData(data); refreshAll();
 }
 
 function toggleFeaturedAnchor(id) {
@@ -1849,7 +1831,7 @@ function toggleFeaturedAnchor(id) {
   const a = data.anchors.find(x => x.id === id);
   if (!a) return;
   a.featured = !a.featured;
-  saveAnchors(); refreshAll();
+  saveData(data); refreshAll();
 }
 function moveAnchor(id, dir) {
   const data = loadData();
@@ -1859,7 +1841,7 @@ function moveAnchor(id, dir) {
   const target = list[idx + dir];
   if (!target) return;
   [anchor.order, target.order] = [target.order, anchor.order];
-  saveAnchors(); refreshAll();
+  saveData(data); refreshAll();
 }
 function editAnchor(id) {
   const data = loadData();
@@ -1886,7 +1868,7 @@ function editAnchor(id) {
     a.name = newName;
     a.memo = (r.memo || '').trim();
     a.villageHeadIds = headIds;
-    saveAnchors(); refreshAll();
+    saveData(data); refreshAll();
     sendTelegram(`✏️ <b>거점 수정</b>\n거점: ${newName}`);
   });
 }
@@ -1897,7 +1879,7 @@ function deleteAnchor(id) {
   const data = loadData();
   const aName = (data.anchors || []).find(a => a.id === id)?.name || id;
   data.anchors = data.anchors.filter(a => a.id !== id);
-  saveAnchors(); refreshAll();
+  saveData(data); refreshAll();
   sendTelegram(`🗑 <b>거점 삭제</b>\n거점: ${aName}`);
 }
 
@@ -1989,12 +1971,8 @@ function addComplaintAt(lat, lng, areaHint = '') {
       createdBy: uInfo?.name || u?.email || '',
       inquiryId: __iqid
     });
-    if(typeof sendAppPush==='function'){var __mp=pushTemplate('field',{유형:'주민민원',코스:'',내용:(r.content||'').slice(0,60)},'📞 주민민원 추가','{내용}'); sendAppPush(__mp.title,__mp.body,'all','complaint');}
-    // 🐘 문의(inquiries)는 지연로딩 → 쓰기 전에 반드시 불러와야 기존 글이 안 날아감
-    ensureInquiries().then(() => {
-    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:__iqid,category:'resident',categoryName:'주민민원',subCategory:'',content:(r.content||'').trim(),phone:(r.phone||'').trim(),writer:(uInfo&&uInfo.name)||(u&&u.email)||'관리자',writerUid:(u&&u.uid)||'',status:'pending',adminMemo:'',comments:[],lat:lat,lng:lng,complaintId:__cid,createdAt:Date.now()});
+    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:__iqid,category:'resident',categoryName:'주민민원',subCategory:'',content:(r.content||'').trim(),phone:(r.phone||'').trim(),writer:(uInfo&&uInfo.name)||(u&&u.email)||'관리자',writerUid:(u&&u.uid)||'',status:'pending',adminMemo:'',comments:[],lat:lat,lng:lng,complaintId:__cid,createdAt:Date.now()}); if(typeof sendAppPush==='function'){var __mp=pushTemplate('field',{유형:'주민민원',코스:'',내용:(r.content||'').slice(0,60)},'📞 주민민원 추가','{내용}'); sendAppPush(__mp.title,__mp.body,'all','complaint');}
     saveData(data); refreshAll();
-    });
     sendTelegram(`📞 <b>민원 추가</b> (관리자)\n연락처: ${(r.phone || '-')}\n내용: ${(r.content || '-').slice(0, 50)}`);
   });
 }

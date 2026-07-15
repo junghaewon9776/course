@@ -96,13 +96,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260703e"></script>
+<script src="common.js?v=20260715a"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
-// 🐘 통계는 운행기록·문의·사진을 모두 집계 → 이 화면에서만 불러온다
-function __loadHeavyForStats() { try { ensureLogs(); ensureInquiries(); ensurePhotos(); } catch (e) {} }
-window.onAuthSuccess = () => onDataReady(() => { __loadHeavyForStats(); render(); });
+window.onAuthSuccess = () => onDataReady(render);
 let __statsSig = null, __statsTimer = null;
 function __statsSignature() {
   const d = loadData() || {};
@@ -117,7 +115,7 @@ window.onDataChanged = () => {
   clearTimeout(__statsTimer);
   __statsTimer = setTimeout(render, 250);    // 연속 변경은 묶어서 한 번만 그림
 };
-checkAdminAuth().then(ok => { if (ok) onDataReady(() => { __loadHeavyForStats(); render(); }); });
+checkAdminAuth().then(ok => { if (ok) onDataReady(render); });
 
 // 관리자 👁 토글로 숨긴 행사는 통계에서도 제외
 function isEventVisibleForViewer(eventId, data) {

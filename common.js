@@ -1266,94 +1266,8 @@ let _cache = null;
 let _cacheReady = false;
 const _readyCallbacks = [];
 
-// 캐시 준비완료 1회 처리 — 빠른 부트스트랩/전체동기화 중 먼저 도착한 쪽이 호출
-function _fireCacheReady() {
-  if (_cacheReady) return;
-  _cacheReady = true;
-  try { window.__syncReadyAt = Math.round(performance.now()); } catch (e) {}   // 진단용: 데이터 준비까지 걸린 ms
-  try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
-  try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
-  try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
-  try { renderNotifBell(); } catch (e) {}        // 🔔 알림 벨 표시(미확인 수)
-  _readyCallbacks.forEach(cb => cb());
-  _readyCallbacks.length = 0;
-}
-
 let _syncInitialized = false;
 let _signingOut = false;   // 로그아웃 중 flag — DB 에러 무시용
-// 🐘 무겁고 특정 화면에서만 쓰는 노드 — 처음엔 안 받고, 필요한 화면에서 ensureNode()로 그때 받는다.
-//    (실측: logs 975KB + inquiries 513KB + photos 240KB = 전체 2MB의 약 87%)
-const _HEAVY_KEYS = ['logs', 'inquiries', 'photos'];
-// 키 자동발견이 실패했을 때만 쓰는 예비 목록
-const _FALLBACK_KEYS = ['events','anchors','complaints','requests','teams','members','vehicles',
-  'noSprayZones','visibility','config','users','pushLog','pushPrefs','pushTemplates','pushWebhook',
-  'mapDefault','access','accessGate','memberPinFlags','rankOverride','publicMonitor','telegram',
-  'naverSms','sheetSync','eventConfig','deviceNames','savedTeams','memberAuth','expenses','live',
-  'rankIcons','rankTiers','quests','layout','inquiryCategories','rankState','xpConfig','pushTokens'];
-
-// 화면을 그리는 데 꼭 필요한 노드 — 이것만 오면 바로 렌더하고, 나머지는 도착하는 대로 채운다
-const _CORE_KEYS = ['events', 'anchors', 'visibility', 'mapDefault'];
-const _subscribed = {};   // 이미 구독 중인 노드
-let _changedTimer = null;
-// 여러 노드가 동시에 도착해도 화면 갱신은 한 번만 (마커 수백~천 개 재렌더 폭주 방지)
-function _scheduleChanged() {
-  if (_changedTimer) clearTimeout(_changedTimer);
-  _changedTimer = setTimeout(() => {
-    try { checkAccessGate(); } catch (e) {}
-    try { maybeResavePushToken(); } catch (e) {}
-    try { renderNotifBell(); } catch (e) {}
-    if (window.onDataChanged) window.onDataChanged();
-  }, 120);
-}
-
-// 최상위 키를 실행 중에 자동 발견 — 코드에 목록을 박아두면 새로 생긴 노드를 놓침
-function _discoverTopKeys() {
-  try {
-    const url = ((firebase.app().options || {}).databaseURL || '').replace(/\/$/, '');
-    if (!url) return Promise.resolve(null);
-    const user = (typeof fbAuth !== 'undefined' && fbAuth.currentUser) ? fbAuth.currentUser : null;
-    const p = user ? user.getIdToken() : Promise.resolve(null);
-    return p.then(token =>
-      fetch(url + '/.json?shallow=true' + (token ? '&auth=' + token : ''))
-        .then(r => r.ok ? r.json() : null)
-        .then(o => (o && typeof o === 'object') ? Object.keys(o) : null)
-    ).catch(() => null);
-  } catch (e) { return Promise.resolve(null); }
-}
-
-// 노드 하나 구독 (첫 도착 시 resolve, 이후 변경은 화면 갱신 예약)
-function _subscribeNode(k) {
-  return new Promise((resolve) => {
-    if (_subscribed[k]) return resolve();
-    _subscribed[k] = true;
-    let first = true;
-    fbDb.ref('/' + k).on('value', (snap) => {
-      if (!_cache) _cache = {};
-      _cache[k] = snap.val();
-      if (first) { first = false; resolve(); }
-      else _scheduleChanged();
-    }, (err) => {
-      if (!_signingOut) console.warn('노드 읽기 오류 /' + k + ':', err.message);
-      if (first) { first = false; resolve(); }
-    });
-  });
-}
-
-// 🐘 무거운 노드를 필요할 때 불러오기 — 모니터링/통계(logs), 게시판(inquiries), 사진(photos)에서 호출
-function ensureNode(key) {
-  if (typeof fbDb === 'undefined') return Promise.resolve(null);
-  if (_subscribed[key]) return Promise.resolve(_cache ? _cache[key] : null);
-  return _subscribeNode(key).then(() => {
-    _scheduleChanged();
-    return _cache ? _cache[key] : null;
-  });
-}
-// 노드를 이미 불러왔는지 — 값이 비어있을 수도 있으므로 값이 아니라 구독 여부로 판단(무한 재시도 방지)
-function isNodeLoaded(key) { return !!_subscribed[key]; }
-function ensureLogs() { return ensureNode('logs'); }
-function ensureInquiries() { return ensureNode('inquiries'); }
-function ensurePhotos() { return ensureNode('photos'); }
-
 function initFirebaseSync() {
   if (_syncInitialized) return;
   if (typeof fbDb === 'undefined') {
@@ -1361,57 +1275,45 @@ function initFirebaseSync() {
     return;
   }
   _syncInitialized = true;
-  try { window.__syncStartAt = Math.round(performance.now()); } catch (e) {}   // 진단용: 동기화 시작 시각
-
-  if (!_cache) _cache = {};
-  // ⚡ 핵심 노드(행사·거점)는 키 발견 REST 왕복(약 260ms)을 기다리지 않고 곧바로 구독 → 화면이 그만큼 빨리 뜸
-  let _coreLeft = _CORE_KEYS.length;
-  const _finishReady = () => {
-    if (_cache && _cache.mapDefault === undefined && isNodeLoaded('mapDefault')) {
-      _cache.mapDefault = defaultData.mapDefault;
-      fbDb.ref('/mapDefault').set(_cache.mapDefault);
+  fbDb.ref('/').on('value', (snapshot) => {
+    const data = snapshot.val();
+    if (!data) {
+      // 진짜 최초 (DB 완전 비어있음): 기본 데이터 업로드
+      _cache = JSON.parse(JSON.stringify(defaultData));
+      fbDb.ref('/').set(_cache);
+    } else {
+      _cache = data;
+      // mapDefault만 복원 (배열은 사용자가 비웠을 수 있으니 손대지 않음)
+      if (_cache.mapDefault === undefined) {
+        _cache.mapDefault = defaultData.mapDefault;
+        fbDb.ref('/mapDefault').set(_cache.mapDefault);
+      }
     }
-    _fireCacheReady();
-    _scheduleChanged();
-  };
-  _CORE_KEYS.forEach(k => {
-    _subscribeNode(k).then(() => {
-      try { (window.__nodeMs = window.__nodeMs || {})[k] = Math.round(performance.now()); } catch (e) {}
-      if (--_coreLeft <= 0) _finishReady();
-    });
-  });
-  setTimeout(_finishReady, 3000);   // 안전망: 핵심 노드가 안 와도 3초 뒤엔 무조건 렌더
 
-  _discoverTopKeys().then((found) => {
-    try { window.__discoverDoneAt = Math.round(performance.now()); } catch (e) {}   // 진단용: 키 발견 완료 시각
-    // DB가 완전히 비어있을 때만 기본 데이터 업로드 (최초 1회)
-    // 🛡 키 목록이 비어 보인다는 이유만으로 set('/')하면 DB 전체가 날아감 → 실제 읽기로 한 번 더 확인
-    if (found && found.length === 0) {
-      fbDb.ref('/').once('value').then(s => {
-        if (!s.exists()) {
-          _cache = JSON.parse(JSON.stringify(defaultData));
-          fbDb.ref('/').set(_cache);
-        }
-      }).catch(() => {});
+    if (!_cacheReady) {
+      _cacheReady = true;
+      try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
+      try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
+      try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
+      try { renderNotifBell(); } catch (e) {}        // 🔔 알림 벨 표시(미확인 수)
+      _readyCallbacks.forEach(cb => cb());
+      _readyCallbacks.length = 0;
     }
-    const keys = Array.from(new Set(
-      (found && found.length ? found : _FALLBACK_KEYS).concat(Object.keys(defaultData))
-    )).filter(k => _HEAVY_KEYS.indexOf(k) < 0);
-
-    // 핵심 노드는 위에서 이미 구독 중 → _subscribeNode가 중복을 걸러줌. 나머지만 붙는다.
-    keys.forEach(k => {
-      _subscribeNode(k).then(() => {
-        try { (window.__nodeMs = window.__nodeMs || {})[k] = Math.round(performance.now()); } catch (e) {}
-        if (_cacheReady) _scheduleChanged();   // 나머지는 도착하는 대로 화면 갱신
-      });
-    });
+    try { checkAccessGate(); } catch (e) {}
+    try { maybeResavePushToken(); } catch (e) {}
+    try { renderNotifBell(); } catch (e) {}   // 🔔 알림 벨 미확인 수 갱신
+    if (window.onDataChanged) window.onDataChanged();
+  }, (err) => {
+    // 로그아웃 중이면 무시 (signOut → signInAnonymously 사이에 발생)
+    if (_signingOut) return;
+    console.error('Firebase 읽기 오류:', err);
+    alert('Firebase 연결 실패: ' + err.message);
   });
 }
 function stopFirebaseSync() {
-  if (typeof fbDb !== 'undefined') {
-    Object.keys(_subscribed).forEach(k => { try { fbDb.ref('/' + k).off('value'); } catch (e) {} });
+  if (_syncInitialized && typeof fbDb !== 'undefined') {
+    fbDb.ref('/').off('value');
   }
-  Object.keys(_subscribed).forEach(k => delete _subscribed[k]);
   _syncInitialized = false;
   _cacheReady = false;
 }
@@ -1462,24 +1364,6 @@ function submitAccessGate() {
   }
 }
 
-// GPS 궤적 점 솎기 — 최소 간격(m) 이상 떨어진 점만 남김(첫·끝점 보존). 용량↓, 지도·거리·재생 사실상 동일
-function __thinTrack(track, minGap) {
-  if (!Array.isArray(track) || track.length <= 2) return track || [];
-  minGap = minGap || 10;
-  var out = [track[0]], last = track[0];
-  for (var i = 1; i < track.length - 1; i++) {
-    var p = track[i]; if (!p) continue;
-    if (distance(last[0], last[1], p[0], p[1]) >= minGap) { out.push(p); last = p; }
-  }
-  out.push(track[track.length - 1]);
-  return out;
-}
-// 거점만 타깃 저장 — 전체 트리(수 MB, 사진 base64 포함) 업로드 없이 /anchors만 써서 빠름
-function saveAnchors() {
-  const d = loadData();
-  if (typeof fbDb === 'undefined') return;
-  fbDb.ref('/anchors').set(d.anchors || []).catch(err => { console.error('거점 저장 실패:', err); alert('거점 저장 실패: ' + err.message); });
-}
 function loadData() {
   const data = _cache || JSON.parse(JSON.stringify(defaultData));
   // Firebase가 array를 object로 변환했을 수 있음 → 다시 array로
@@ -1506,6 +1390,18 @@ function loadData() {
   return data;
 }
 
+// GPS 궤적 점 솎기 — 최소 간격(m) 이상 떨어진 점만 남김(첫·끝점 보존). 용량↓, 지도·거리·재생 사실상 동일
+function __thinTrack(track, minGap) {
+  if (!Array.isArray(track) || track.length <= 2) return track || [];
+  minGap = minGap || 10;
+  var out = [track[0]], last = track[0];
+  for (var i = 1; i < track.length - 1; i++) {
+    var p = track[i]; if (!p) continue;
+    if (distance(last[0], last[1], p[0], p[1]) >= minGap) { out.push(p); last = p; }
+  }
+  out.push(track[track.length - 1]);
+  return out;
+}
 function saveData(data, force) {
   // 동기화 전 저장 차단: 캐시가 비어있는데 set('/')를 부르면 기존 DB가 통째로 날아감
   if (!force && !_cacheReady) {
@@ -1529,14 +1425,6 @@ function saveData(data, force) {
     const payload = { ...data };
     delete payload.live;    // driver 가 직접 ref('/live/...').set 으로 관리
     delete payload.photos;  // 현장사진은 별도 노드, saveData가 안 건드림
-    // 🛡 무거운 노드(logs/inquiries)는 "불러온 적 없으면" 저장에서 제외 —
-    //    안 불러온 상태에서 빈 배열에 1건만 넣고 저장하면 DB 전체가 그 1건으로 덮여 사라짐
-    _HEAVY_KEYS.forEach(k => {
-      if (payload[k] !== undefined && !_subscribed[k]) {
-        console.warn('saveData: /' + k + ' 미로딩 → 저장 제외(데이터 보호). 쓰기 전에 ensureNode(\'' + k + '\') 필요');
-        delete payload[k];
-      }
-    });
     fbDb.ref('/').update(payload).catch(err => {
       console.error('저장 실패:', err);
       alert('저장 실패: ' + err.message);
@@ -2112,11 +2000,7 @@ function scaledCircleMarkerImage(svgContent, scale) {
 //                     | { type:'pin', svg, baseW, baseH }
 function setupMarkerZoomScale(map, getMarkers) {
   let lastScale = getMarkerScale(map.getLevel());
-  let __zoomTimer = null;
   kakao.maps.event.addListener(map, 'zoom_changed', () => {
-    // 줌 애니메이션 중엔 무거운 마커 재생성 금지 → 줌 멈춘 뒤 한 번만 (확대/축소 부드럽게)
-    if (__zoomTimer) clearTimeout(__zoomTimer);
-    __zoomTimer = setTimeout(() => {
     const scale = getMarkerScale(map.getLevel());
     if (scale === lastScale) return;
     lastScale = scale;
@@ -2138,7 +2022,6 @@ function setupMarkerZoomScale(map, getMarkers) {
         ));
       }
     });
-    }, 180);
   });
 }
 
@@ -2185,25 +2068,3 @@ function openKakaoNavi(name, lat, lng) {
     window.open(webUrl);
   }
 }
-
-// 🔄 페이지 이동 링크에 common.js 버전을 자동으로 붙임 → 앱 웹뷰 캐시 때문에 예전 화면이 뜨는 문제 방지
-(function __versionLinks() {
-  try {
-    var me = document.currentScript;
-    if (!me) { var ss = document.getElementsByTagName('script'); for (var i = 0; i < ss.length; i++) { if (/common\.js/.test(ss[i].src)) me = ss[i]; } }
-    var ver = '';
-    if (me && me.src) { var q = me.src.split('?')[1] || ''; var mm = q.match(/(?:^|&)v=([^&]+)/); ver = mm ? mm[1] : ''; }
-    if (!ver) return;
-    var apply = function () {
-      var as = document.querySelectorAll('a[href$=".html"]');
-      for (var j = 0; j < as.length; j++) {
-        var h = as[j].getAttribute('href');
-        if (h && h.indexOf('v=') < 0 && !/^https?:/.test(h) && h.indexOf('//') !== 0) {
-          as[j].setAttribute('href', h + (h.indexOf('?') < 0 ? '?' : '&') + 'v=' + ver);
-        }
-      }
-    };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
-    else apply();
-  } catch (e) {}
-})();

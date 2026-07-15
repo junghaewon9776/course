@@ -104,7 +104,7 @@
         <div id="anchorRows"></div>
         <div id="pinRows" style="display:none;"></div>
       </div>
-      <button id="btnAnchorExpand" onclick="toggleAnchorExpand()" style="width:100%;margin-top:6px;background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:8px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;">▼ 거점 전체 펼치기</button>
+      <button id="btnAnchorExpand" onclick="toggleAnchorExpand()" style="width:100%;margin-top:6px;background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:8px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;display:none;">▼ 거점 전체 펼치기</button>
       <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
         <button class="success" onclick="finishCourse()" style="flex:1;min-width:120px;">✅ 코스완료</button>
         <button id="btnReqAnchor2" onclick="requestNewAnchor()" style="background:#e67e22;">📌 거점 추가 요청</button>
@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260703e"></script>
+<script src="common.js?v=20260715a"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1355,20 +1355,15 @@ function resumeSession(s) {
   if (watchId === null) setTimeout(() => toggleGPS(), 500);
 }
 
+// 거점 목록 스크롤 박스 펼치기/접기 — 거점이 수백 개여도 아래 코스완료 버튼에 바로 닿게
 function toggleAnchorExpand() {
   const box = document.getElementById('anchorScroll');
   const btn = document.getElementById('btnAnchorExpand');
   if (!box) return;
   const open = box.dataset.open === '1';
-  if (open) {
-    box.style.maxHeight = '340px';
-    box.dataset.open = '0';
-    if (btn) btn.textContent = '▼ 거점 전체 펼치기';
-  } else {
-    box.style.maxHeight = 'none';
-    box.dataset.open = '1';
-    if (btn) btn.textContent = '▲ 접기';
-  }
+  box.style.maxHeight = open ? '340px' : 'none';
+  box.dataset.open = open ? '0' : '1';
+  if (btn) btn.textContent = open ? '▼ 거점 전체 펼치기' : '▲ 접기';
 }
 
 function renderAnchorRows() {
@@ -1391,16 +1386,14 @@ function renderAnchorRows() {
       </div>
     `;
   }).join('');
-  // 거점이 많아 스크롤 박스를 넘칠 때만 펼치기 버튼 표시 (적으면 숨김)
+  // 거점이 많아 스크롤 박스를 넘칠 때만 펼치기 버튼 표시
   try {
     const box = document.getElementById('anchorScroll');
     const btn = document.getElementById('btnAnchorExpand');
-    if (box && btn) {
-      setTimeout(() => {
-        const overflowing = box.dataset.open !== '1' && box.scrollHeight > box.clientHeight + 4;
-        btn.style.display = (overflowing || box.dataset.open === '1') ? '' : 'none';
-      }, 0);
-    }
+    if (box && btn) setTimeout(() => {
+      const over = box.dataset.open === '1' || box.scrollHeight > box.clientHeight + 4;
+      btn.style.display = over ? '' : 'none';
+    }, 0);
   } catch (e) {}
 }
 
@@ -1593,8 +1586,6 @@ function renderPastPins() {
   __pastPinMarkers.forEach(m => { try { m.setMap(null); } catch(e){} });
   __pastPinMarkers = [];
   if (!__showPastPins || !isPinCourse()) { updatePastPinBtn(0); return; }
-  // 🐘 이전 핑은 운행기록(logs)이 필요 → 켤 때만 불러온 뒤 다시 그린다
-  if (!isNodeLoaded('logs')) { ensureLogs().then(renderPastPins); return; }
   const past = getPastPinsForCourse();
   past.forEach(p => {
     const pos = new kakao.maps.LatLng(p.lat, p.lng);
@@ -1780,7 +1771,6 @@ function renderMapForSession() {
         ${headInfoHtml}
         <div style="display:flex;gap:4px;margin-top:6px;">
           <a href="#" onclick="navTo('${aId}');return false;" style="flex:1;background:#3498db;color:#fff;padding:6px;border-radius:5px;text-align:center;font-weight:700;text-decoration:none;font-size:11px;">🧭 내비</a>
-          <a href="#" onclick="openRoadview(${a.lat},${a.lng},'${(a.name||'거점').replace(/'/g,'').replace(/</g,'')}');return false;" style="flex:1;background:#16a085;color:#fff;padding:6px;border-radius:5px;text-align:center;font-weight:700;text-decoration:none;font-size:11px;">🗺 로드뷰</a>
           ${villageHeads.length ? `<a href="#" onclick="shareAnchorInfoToVillageHead('${aId}');return false;" style="flex:1;background:#f39c12;color:#fff;padding:6px;border-radius:5px;text-align:center;font-weight:700;text-decoration:none;font-size:11px;">📤 공유</a>` : ''}
         </div>
       </div>`
@@ -2273,11 +2263,7 @@ function showMapSettings() {
 // ───────── 🛤 이전 행적(지난 운행 경로) 표시 ─────────
 let __pastTrackMap = {};  // logKey -> kakao Polyline
 window.__pastTrackFilter = window.__pastTrackFilter || 'all';
-// 🐘 이전 행적은 운행기록(logs)이 필요 → 열 때만 불러온다 (평소 오늘운영은 로그를 안 받아 빠름)
 function showPastTracks() {
-  ensureLogs().then(__showPastTracksAfterLoad);
-}
-function __showPastTracksAfterLoad() {
   const ms = document.getElementById('mapSettingsOverlay'); if (ms) ms.remove();
   const data = loadData();
   const curCourseId = currentSession && currentSession.courseId;
@@ -2395,7 +2381,7 @@ function saveDrawnRoute() {
   };
   try {
     fbDb.ref('/logs').push(log);
-    if (_cache && Array.isArray(_cache.logs)) _cache.logs.push(log);
+    if (_cache) { if (!Array.isArray(_cache.logs)) _cache.logs = _cache.logs ? Object.values(_cache.logs) : []; _cache.logs.push(log); }
     alert('✅ 경로 저장됨!\n운행기록·이전 행적에서 볼 수 있어요.');
   } catch (e) { alert('저장 실패: ' + e.message); }
   exitDrawRoute();
@@ -2697,31 +2683,21 @@ function formatDist(m) {
 }
 
 // 🔧 날아간 운행로그 복구 — 이 기기 localStorage에 남은 "완료된" 세션을 /logs로 다시 저장
-// 이 기기 localStorage의 "완료된" 세션 후보 (DB 로그 없이도 확인 가능 → 로그를 안 받아도 됨)
-function __localFinishedSessions() {
+function scanRecoverableLogs() {
+  const data = loadData();
+  const existingKeys = new Set((data.logs || []).map(l => l && l.key).filter(Boolean));
   const out = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (!k || k.indexOf('session_') !== 0) continue;
     try {
       const s = JSON.parse(localStorage.getItem(k));
-      if (s && s.finishedAt && s.key) out.push(s);
+      if (s && s.finishedAt && s.key && !existingKeys.has(s.key)) out.push(s);
     } catch (e) {}
   }
-  return out;
-}
-// ⚠️ DB 로그와 대조하므로 반드시 ensureLogs() 이후에 호출할 것
-function scanRecoverableLogs() {
-  const data = loadData();
-  const existingKeys = new Set((data.logs || []).map(l => l && l.key).filter(Boolean));
-  return __localFinishedSessions()
-    .filter(s => !existingKeys.has(s.key))
-    .sort((a, b) => (a.finishedAt || 0) - (b.finishedAt || 0));
+  return out.sort((a, b) => (a.finishedAt || 0) - (b.finishedAt || 0));
 }
 function recoverLocalLogs() {
-  ensureLogs().then(__recoverLocalLogsAfterLoad);
-}
-function __recoverLocalLogsAfterLoad() {
   const list = scanRecoverableLogs();
   if (!list.length) { alert('이 기기에 복구할 로그가 없습니다.\n(운행을 했던 바로 그 폰에서 실행해야 해요)'); return; }
   const data = loadData();
@@ -2734,7 +2710,7 @@ function __recoverLocalLogsAfterLoad() {
   list.forEach(s => {
     try {
       fbDb.ref('/logs').push(s);
-      if (_cache && Array.isArray(_cache.logs)) _cache.logs.push(s);
+      if (_cache) { if (!Array.isArray(_cache.logs)) _cache.logs = _cache.logs ? Object.values(_cache.logs) : []; _cache.logs.push(s); }
       n++;
     } catch (e) { console.warn('복구 실패', e); }
   });
@@ -2742,14 +2718,7 @@ function __recoverLocalLogsAfterLoad() {
   const b = document.getElementById('__logRecoverBanner'); if (b) b.remove();
 }
 // 복구할 로그가 있으면 상단에 배너 표시
-// 🐘 이 기기에 완료 세션이 하나도 없으면(대부분의 경우) 로그를 아예 안 받고 끝 → 오늘운영 로딩이 빠름
 function maybeShowLogRecovery() {
-  try {
-    if (!__localFinishedSessions().length) return;
-    ensureLogs().then(__maybeShowLogRecoveryAfterLoad);
-  } catch (e) {}
-}
-function __maybeShowLogRecoveryAfterLoad() {
   try {
     const list = scanRecoverableLogs();
     if (!list.length) return;
@@ -2772,58 +2741,17 @@ function finishCourse() {
   const done = new Set(currentSession.completions);
   const unchecked = anchors.filter(a => !done.has(a.id));
 
-  if (!unchecked.length) {
+  if (unchecked.length) {
+    const list = unchecked.map((a, i) => `${i+1}. ${a.name}`).join('\n');
+    const choice = confirm(`체크 안 된 거점 ${unchecked.length}개:\n\n${list}\n\n[확인] = 모두 체크 완료 처리\n[취소] = 미완료 상태로 보고`);
+    if (choice) {
+      unchecked.forEach(a => done.add(a.id));
+      currentSession.completions = [...done];
+    }
+  } else {
     if (!confirm('코스를 완료 보고할까요?')) return;
-    __doFinishCourse();
-    return;
   }
-  // 체크 안 된 거점이 있으면 → ✅완료(돌았던 곳만) / 모두완료(작게) / 취소(계속 진행) 3갈래
-  __showFinishChoice(unchecked);
-}
 
-function __showFinishChoice(unchecked) {
-  const listHtml = unchecked.map((a, i) => `${i + 1}. ${a.name}`).join('<br>');
-  const many = unchecked.length > 15;
-  const toggleBtn = many
-    ? '<button id="__fcMore" style="width:100%;background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:8px;padding:8px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:14px;">▼ 전체 ' + unchecked.length + '곳 펼쳐보기</button>'
-    : '';
-  const ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;z-index:100003;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto;';
-  ov.innerHTML =
-    '<div style="background:#fff;border-radius:14px;max-width:360px;width:100%;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,.3);max-height:92vh;display:flex;flex-direction:column;">'
-    + '<div style="font-size:16px;font-weight:800;color:#2c3e50;margin-bottom:6px;">코스 완료 보고</div>'
-    + '<div style="font-size:13px;color:#e67e22;margin-bottom:6px;">아직 체크 안 한 거점 ' + unchecked.length + '곳:</div>'
-    + '<div id="__fcBox" style="font-size:12px;color:#777;max-height:' + (many ? '18vh' : '30vh') + ';overflow:auto;background:#faf7f0;border-radius:8px;padding:8px 10px;margin-bottom:' + (many ? '8px' : '14px') + ';line-height:1.7;">' + listHtml + '</div>'
-    + toggleBtn
-    + '<button id="__fcDone" style="width:100%;background:#27ae60;color:#fff;border:none;padding:15px;border-radius:10px;font-size:17px;font-weight:800;cursor:pointer;margin-bottom:8px;">✅ 코스 완료 (돌았던 곳만)</button>'
-    + '<button id="__fcCancel" style="width:100%;background:#eee;color:#555;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">취소 (계속 진행)</button>'
-    + '<div style="text-align:center;margin-top:12px;"><span id="__fcAll" style="font-size:11px;color:#c8c8c8;cursor:pointer;text-decoration:underline;">모두 완료 처리</span></div>'
-    + '</div>';
-  document.body.appendChild(ov);
-  const close = () => ov.remove();
-  ov.onclick = e => { if (e.target === ov) close(); };
-  const moreEl = ov.querySelector('#__fcMore');
-  if (moreEl) {
-    let open = false;
-    moreEl.onclick = () => {
-      open = !open;
-      const box = ov.querySelector('#__fcBox');
-      box.style.maxHeight = open ? '55vh' : '18vh';
-      moreEl.textContent = open ? '▲ 접기' : ('▼ 전체 ' + unchecked.length + '곳 펼쳐보기');
-    };
-  }
-  ov.querySelector('#__fcCancel').onclick = close;
-  ov.querySelector('#__fcDone').onclick = () => { close(); __doFinishCourse(); };
-  ov.querySelector('#__fcAll').onclick = () => {
-    const d = loadData();
-    const done2 = new Set(currentSession.completions);
-    getCourseAnchors(d, currentSession.courseId).forEach(a => done2.add(a.id));
-    currentSession.completions = [...done2];
-    close(); __doFinishCourse();
-  };
-}
-
-function __doFinishCourse() {
   currentSession.finishedAt = Date.now();
   saveSession();
 
@@ -2842,9 +2770,7 @@ function __doFinishCourse() {
   if (typeof fbDb !== 'undefined') {
     try {
       fbDb.ref('/logs').push(logEntry);          // 타깃 저장: 다른 데이터 안 건드림, 덮어쓰기 없음
-      // ⚠️ 로그는 지연로딩(이 화면은 안 받음) — 안 받은 상태에서 캐시에 배열을 만들면
-      //    이후 저장 때 그 1건으로 전체 로그가 덮여 사라짐. 이미 불러온 경우에만 캐시에 반영.
-      if (_cache && Array.isArray(_cache.logs)) _cache.logs.push(logEntry);
+      if (_cache) { if (!Array.isArray(_cache.logs)) _cache.logs = _cache.logs ? Object.values(_cache.logs) : []; _cache.logs.push(logEntry); }
     } catch (e) { console.warn('로그 저장 오류', e); fresh.logs = fresh.logs || []; fresh.logs.push(logEntry); saveData(fresh); }
   } else {
     if (!fresh.logs) fresh.logs = [];
@@ -3331,19 +3257,16 @@ function submitAnchorRequest() {
     status: 'pending'
   });
   // 민원게시판에도 쌓이게 — 거점요청을 게시판 항목으로 추가
-  // 🐘 문의(inquiries)는 지연로딩 → 쓰기 전에 반드시 불러와야 기존 글이 안 날아감
-  ensureInquiries().then(() => {
-    if (!Array.isArray(data.inquiries)) data.inquiries = [];
-    data.inquiries.push({
-      id: uid(), category: 'anchorReq', categoryName: '거점추가요청', subCategory: '',
-      content: '거점 추가 요청: ' + (name || '(이름 미정)') + (reason ? ' — ' + reason : '') + (address ? ' (' + address + ')' : ''),
-      phone: '', writer: currentSession.crew?.driver || '운영자',
-      writerUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || '',
-      status: 'pending', adminMemo: '', comments: [], createdAt: Date.now()
-    });
-    try { saveData(data); }
-    catch (e) { alert('저장 실패: ' + (e.message || e)); }
+  if (!Array.isArray(data.inquiries)) data.inquiries = [];
+  data.inquiries.push({
+    id: uid(), category: 'anchorReq', categoryName: '거점추가요청', subCategory: '',
+    content: '거점 추가 요청: ' + (name || '(이름 미정)') + (reason ? ' — ' + reason : '') + (address ? ' (' + address + ')' : ''),
+    phone: '', writer: currentSession.crew?.driver || '운영자',
+    writerUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || '',
+    status: 'pending', adminMemo: '', comments: [], createdAt: Date.now()
   });
+  try { saveData(data); }
+  catch (e) { alert('저장 실패: ' + (e.message || e)); return; }
 
   document.getElementById('anchorReqModal').remove();
   __arqMap = null; __arqMarker = null;
@@ -3613,12 +3536,9 @@ function submitComplaint() {
     reportedAssist: currentSession.crew?.assist || '',
     createdAt: Date.now()
   });
-  // 🐘 문의(inquiries)는 지연로딩 → 쓰기 전에 반드시 불러와야 기존 글이 안 날아감
-  ensureInquiries().then(() => {
-    if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:fullContent,phone:phone,writer:(currentSession.crew&&currentSession.crew.driver)||'운영자',writerUid:'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
-    try { saveData(data); }
-    catch (e) { alert('저장 실패: ' + (e.message || e)); }
-  });
+  if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:fullContent,phone:phone,writer:(currentSession.crew&&currentSession.crew.driver)||'운영자',writerUid:'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
+  try { saveData(data); }
+  catch (e) { alert('저장 실패: ' + (e.message || e)); return; }
 
   document.getElementById('complaintModal').remove();
   __cmpMap = null; __cmpMarker = null;
