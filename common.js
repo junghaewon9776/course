@@ -1270,6 +1270,7 @@ const _readyCallbacks = [];
 function _fireCacheReady() {
   if (_cacheReady) return;
   _cacheReady = true;
+  try { window.__syncReadyAt = Math.round(performance.now()); } catch (e) {}   // 진단용: 데이터 준비까지 걸린 ms
   try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
   try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
   try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
@@ -1358,8 +1359,10 @@ function initFirebaseSync() {
     return;
   }
   _syncInitialized = true;
+  try { window.__syncStartAt = Math.round(performance.now()); } catch (e) {}   // 진단용: 동기화 시작 시각
 
   _discoverTopKeys().then((found) => {
+    try { window.__discoverDoneAt = Math.round(performance.now()); } catch (e) {}   // 진단용: 키 발견 완료 시각
     // DB가 완전히 비어있을 때만 기본 데이터 업로드 (최초 1회)
     // 🛡 키 목록이 비어 보인다는 이유만으로 set('/')하면 DB 전체가 날아감 → 실제 읽기로 한 번 더 확인
     if (found && found.length === 0) {
