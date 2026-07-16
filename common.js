@@ -1972,18 +1972,61 @@ function getMarkerScale(level) {
   return 0.3;                   // 멀리: 훨씬 작게
 }
 
-function numberedMarkerImage(num, color, dim, scale) {
+// 거점의 특별 표시(후진·유턴·위험 등) — 켜져 있으면 {color, text}, 아니면 null
+function anchorMark(a) {
+  if (!a || !a.mark) return null;
+  return { color: a.markColor || '#FFD400', text: a.markText || '' };
+}
+
+// 특별 표시된 거점 → 다음 거점 구간 라인을 지정 색·모양으로 덧그림.
+// anchors[i]와 path[i]는 같은 순서여야 함. 만든 선은 out 배열에 담아 나중에 지울 수 있게 한다.
+function drawMarkSegments(map, anchors, path, out) {
+  try {
+    if (!map || !Array.isArray(anchors) || !Array.isArray(path)) return;
+    for (let i = 0; i < anchors.length - 1 && i < path.length - 1; i++) {
+      const mk = anchorMark(anchors[i]);
+      if (!mk) continue;
+      const line = new kakao.maps.Polyline({
+        path: [path[i], path[i + 1]],
+        strokeWeight: 7,
+        strokeColor: mk.color,
+        strokeOpacity: 0.95,
+        strokeStyle: (anchors[i].markDash === false) ? 'solid' : 'shortdash',
+        zIndex: 5,
+        map
+      });
+      if (out) out.push(line);   // setMap(null)로 정리 가능 (마커와 동일 인터페이스)
+    }
+  } catch (e) { console.warn('drawMarkSegments', e); }
+}
+
+// mark = { color, text } 이면 지하철 환승표시처럼 굵은 테두리 링 + 글자 뱃지를 덧그림 (후진·유턴·위험 등)
+function numberedMarkerImage(num, color, dim, scale, mark) {
   const s = scale || 1.0;
-  const w = Math.round(22 * s), h = Math.round(28 * s);
+  const marked = !!(mark && mark.color);
+  // 테두리·뱃지가 잘리지 않게 표시가 있으면 캔버스를 넓힘
+  const vbW = marked ? 34 : 22, vbH = marked ? 34 : 28;
+  const dx = marked ? 6 : 0, dy = marked ? 4 : 0;      // 핀을 캔버스 안쪽으로 밀기
+  const w = Math.round(vbW * s), h = Math.round(vbH * s);
   const fill = dim ? '#ccc' : color;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 22 28">
-    <path d="M11 0 C5 0 0 5 0 11 C0 18 11 28 11 28 C11 28 22 18 22 11 C22 5 17 0 11 0 Z" fill="${fill}" stroke="white" stroke-width="1.5"/>
-    <text x="11" y="15" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="white" text-anchor="middle">${num}</text>
+  const ring = marked
+    ? `<path d="M${11+dx} ${0+dy} C${5+dx} ${0+dy} ${0+dx} ${5+dy} ${0+dx} ${11+dy} C${0+dx} ${18+dy} ${11+dx} ${28+dy} ${11+dx} ${28+dy} C${11+dx} ${28+dy} ${22+dx} ${18+dy} ${22+dx} ${11+dy} C${22+dx} ${5+dy} ${17+dx} ${0+dy} ${11+dx} ${0+dy} Z" fill="none" stroke="${mark.color}" stroke-width="5" stroke-linejoin="round"/>`
+    : '';
+  const txt = (marked && mark.text) ? String(mark.text).slice(0, 4) : '';
+  const badge = txt
+    ? `<rect x="${vbW - 15}" y="0" rx="3" ry="3" width="15" height="10" fill="${mark.color}" stroke="#fff" stroke-width="1"/>`
+      + `<text x="${vbW - 7.5}" y="8" font-family="Arial,AppleGothic,sans-serif" font-size="${txt.length > 2 ? 5 : 7}" font-weight="bold" fill="#000" text-anchor="middle">${txt.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</text>`
+    : '';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${vbW} ${vbH}">
+    ${ring}
+    <path d="M${11+dx} ${0+dy} C${5+dx} ${0+dy} ${0+dx} ${5+dy} ${0+dx} ${11+dy} C${0+dx} ${18+dy} ${11+dx} ${28+dy} ${11+dx} ${28+dy} C${11+dx} ${28+dy} ${22+dx} ${18+dy} ${22+dx} ${11+dy} C${22+dx} ${5+dy} ${17+dx} ${0+dy} ${11+dx} ${0+dy} Z" fill="${fill}" stroke="white" stroke-width="1.5"/>
+    <text x="${11+dx}" y="${15+dy}" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="white" text-anchor="middle">${num}</text>
+    ${badge}
   </svg>`;
   return new kakao.maps.MarkerImage(
     'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
     new kakao.maps.Size(w, h),
-    { offset: new kakao.maps.Point(Math.round(w/2), h) }
+    { offset: new kakao.maps.Point(Math.round((11 + dx) * s), Math.round((28 + dy) * s)) }
   );
 }
 
@@ -2014,7 +2057,7 @@ function setupMarkerZoomScale(map, getMarkers) {
       if (!m || !m.__markerMeta) return;
       const meta = m.__markerMeta;
       if (meta.type === 'numbered') {
-        m.setImage(numberedMarkerImage(meta.num, meta.color, meta.dim, scale));
+        m.setImage(numberedMarkerImage(meta.num, meta.color, meta.dim, scale, meta.mark));
       } else if (meta.type === 'circle') {
         m.setImage(scaledCircleMarkerImage(meta.svg, scale));
       } else if (meta.type === 'pin') {
