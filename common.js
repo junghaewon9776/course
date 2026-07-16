@@ -2007,11 +2007,13 @@ function noticeMarkerImage(color, label, scale) {
   );
 }
 
-// 📢 안내 핑 전체를 지도에 그림 (마커 + 연한 반경 원). onClickInfo가 있으면 클릭 시 정보창.
-function drawNotices(map, notices, out, scale, infoHtml) {
+// 📢 안내 핑 전체를 지도에 그림 (마커 + 연한 반경 원).
+// infoHtml(n) 주면 클릭 시 정보창. opts.draggable 켜면 드래그 이동(관리 전용), opts.onDragEnd(n, lat, lng, marker, circle) 호출.
+function drawNotices(map, notices, out, scale, infoHtml, opts) {
   try {
     if (!map || !Array.isArray(notices)) return;
     const s = scale || 1.0;
+    const o = opts || {};
     for (const n of notices) {
       if (!n || n.lat == null || n.lng == null) continue;
       const pos = new kakao.maps.LatLng(n.lat, n.lng);
@@ -2024,13 +2026,22 @@ function drawNotices(map, notices, out, scale, infoHtml) {
       if (out) out.push(circle);
       const marker = new kakao.maps.Marker({
         position: pos, map, title: n.name || '안내',
-        image: noticeMarkerImage(col, n.label, s), zIndex: 8
+        image: noticeMarkerImage(col, n.label, s), zIndex: 8,
+        draggable: !!o.draggable
       });
       marker.__markerMeta = { type: 'notice', color: col, label: n.label };
       if (out) out.push(marker);
       if (typeof infoHtml === 'function') {
         const iw = new kakao.maps.InfoWindow({ zIndex: 999, removable: true, content: infoHtml(n) });
         kakao.maps.event.addListener(marker, 'click', () => toggleInfoWindow(iw, marker, map));
+      }
+      if (o.draggable) {
+        // 끄는 동안 반경 원도 같이 따라오게 (범위를 보면서 옮길 수 있음)
+        kakao.maps.event.addListener(marker, 'drag', () => { try { circle.setPosition(marker.getPosition()); } catch (e) {} });
+        kakao.maps.event.addListener(marker, 'dragend', () => {
+          const p = marker.getPosition();
+          if (typeof o.onDragEnd === 'function') o.onDragEnd(n, p.getLat(), p.getLng(), marker, circle);
+        });
       }
     }
   } catch (e) { console.warn('drawNotices', e); }
