@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260715m"></script>
+<script src="common.js?v=20260715n"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2617,6 +2617,15 @@ function testAlarmHW() {
     else lines.push('음성: ✅ 목소리 ' + vs.length + '개 (한국어 ' + ko.length + '개)' + (ko.length ? '' : ' ⚠️ 한국어 없음 — 한국어 TTS 설치 권장'));
   }
   lines.push('알림 소리 설정: ' + (alarmSoundOn() ? '✅ ON' : '❌ OFF ← 이게 꺼져 있으면 음성이 안 나옵니다'));
+  // 화면 꺼짐 방지 — 이게 안 되면 운행 중 화면이 꺼지고 앱이 백그라운드로 내려감
+  if (!('wakeLock' in navigator)) {
+    lines.push('화면 꺼짐 방지: ❌ 이 앱/기기가 지원 안 함 → 폰 설정에서 화면 자동꺼짐을 길게 하세요');
+  } else {
+    lines.push('화면 꺼짐 방지: ' + (wakeLock ? '✅ 켜져 있음 (운행 중)' : '⚠️ 지원되지만 지금은 꺼짐 (코스 시작하면 켜짐)'));
+  }
+  // 백그라운드 GPS 플러그인 (앱이 내려가도 기록 계속)
+  const BG = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.BackgroundGeolocation;
+  lines.push('백그라운드 GPS: ' + (BG ? '✅ 있음' : (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform() ? '❌ 없음 (앱 업데이트 필요)' : '— 브라우저라 해당 없음')));
   speakKo('음성 테스트입니다. 이 말이 들리면 정상입니다.');
   setTimeout(() => alert('🔧 진동·음성 점검\n\n' + lines.join('\n') + '\n\n(음성이 안 들렸다면 위 결과를 확인하세요)'), 500);
 }
