@@ -73,6 +73,9 @@
           <button class="small mode-btn" data-mode="noSpray" style="flex:1;min-width:90px;" onclick="toggleMode('noSpray')">
             <span class="mode-dot noSpray-dot"></span>방역불가
           </button>
+          <button class="small mode-btn" data-mode="notice" style="flex:1;min-width:90px;" onclick="toggleMode('notice')">
+            <span class="mode-dot notice-dot"></span>안내
+          </button>
         </div>
         <style>
           .mode-btn {
@@ -88,9 +91,11 @@
           .mode-btn.active .anchor-dot { background: #27ae60; border-color: #1e8449; }
           .mode-btn.active .complaint-dot { background: #f1c40f; border-color: #b7950b; }
           .mode-btn.active .noSpray-dot { background: #e74c3c; border-color: #a93226; }
+          .mode-btn.active .notice-dot { background: #2980b9; border-color: #1f618d; }
           .mode-btn.active[data-mode="anchor"] { background: #d4efdf; border-color: #27ae60; }
           .mode-btn.active[data-mode="complaint"] { background: #fcf3cf; border-color: #f1c40f; }
           .mode-btn.active[data-mode="noSpray"] { background: #fadbd8; border-color: #e74c3c; }
+          .mode-btn.active[data-mode="notice"] { background: #d6eaf8; border-color: #2980b9; }
         </style>
         <div style="display:flex;gap:6px;margin-bottom:8px;">
           <input id="searchInput" type="text" placeholder="주소 또는 장소 검색 (예: 영광읍사무소, 영광로 123)" onkeydown="if(event.key==='Enter')searchPlace()">
@@ -179,6 +184,16 @@
         </div>
         <div id="complaintList" style="margin-top:8px;"></div>
         <p class="muted" style="margin-top:6px;font-size:11px;">💡 민원은 운영(today) 지도에 빨간 핀으로 표시되고 클릭하면 전화걸기 가능</p>
+      </div>
+
+      <!-- 안내 핑 -->
+      <div class="card" style="border-left:4px solid #1f618d;">
+        <div class="flex-between">
+          <h2>📢 안내 핑</h2>
+          <button class="small" style="background:#2980b9;" onclick="toggleMode('notice')">+ 안내 추가</button>
+        </div>
+        <div id="noticeList" style="margin-top:8px;"></div>
+        <p class="muted" style="margin-top:6px;font-size:11px;">💡 코스 순번·완료체크와 무관합니다. 반경 안에 들어가면 운영자에게 배너·진동·음성으로 알려만 줍니다.<br>예) 마을 안내 “장수촌 지역입니다”(반경 250m) · 위험 “또랑 조심하세요”(반경 20m) · 후진은 음성 비우고 배너만</p>
       </div>
 
       <!-- 방역금지구역 현황 -->
@@ -326,7 +341,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260715i"></script>
+<script src="common.js?v=20260715j"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -419,9 +434,9 @@ function setMode(mode) {
   // 지도 위 모드 안내 배너
   const banner = document.getElementById('mapModeBanner');
   if (banner) {
-    const modeLabel = mode === 'complaint' ? '민원' : mode === 'noSpray' ? '방역불가' : '';
-    const colorMap = { complaint: 'background:#fcf3cf;color:#7d6608;border:2px solid #f1c40f;', noSpray: 'background:#fadbd8;color:#922b21;border:2px solid #e74c3c;' };
-    const borderMap = { complaint: '#f1c40f', noSpray: '#e74c3c' };
+    const modeLabel = mode === 'complaint' ? '민원' : mode === 'noSpray' ? '방역불가' : mode === 'notice' ? '안내' : '';
+    const colorMap = { complaint: 'background:#fcf3cf;color:#7d6608;border:2px solid #f1c40f;', noSpray: 'background:#fadbd8;color:#922b21;border:2px solid #e74c3c;', notice: 'background:#d6eaf8;color:#1b4f72;border:2px solid #2980b9;' };
+    const borderMap = { complaint: '#f1c40f', noSpray: '#e74c3c', notice: '#2980b9' };
     if (modeLabel) {
       banner.innerHTML = `🔍 위 검색창에 <b>주소 입력</b> 또는 <b>지도 클릭</b>으로 ${modeLabel} 위치를 선택하세요`;
       banner.style.cssText = 'display:block;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;' + colorMap[mode];
@@ -502,6 +517,93 @@ function openFormModal(title, fields, onSave) {
   });
 }
 
+// 📢 안내 핑 — 코스 순번·완료체크와 무관. 반경 안에 들어오면 배너·음성으로 알려주기만 함
+//    (마을 안내 "장수촌 지역입니다", 위험 "또랑 조심" 등)
+function addNoticeAt(lat, lng, areaHint = '') {
+  const def = __revDefaults();
+  __reverseGeocode(lat, lng, addr => {
+    openFormModal('📢 안내 핑 추가', [
+      { key: 'name', label: '이름', placeholder: '예: 장수촌, 또랑 앞', value: areaHint || '' },
+      { key: 'say', label: '음성 문구 (현장에서 읽어줌)', placeholder: '예: 장수촌 지역입니다', hint: '⭐ 빈칸이면 음성 없이 배너·진동만' },
+      { key: 'label', label: '표시 글자 (핀에 보임)', placeholder: '예: 장수, 위험', hint: '1~3자 권장 · 빈칸이면 📢 아이콘만' },
+      { key: 'radius', label: '알림 범위 (m)', type: 'number', value: '150', placeholder: '150', hint: '마을 안내는 크게(200~300), 지점 경고는 좁게(20~30)' },
+      { key: 'color', label: '색', type: 'color', value: def.color },
+      { key: 'memo', label: '메모 (선택)', value: addr || '', placeholder: '주소·설명' }
+    ], r => {
+      if (!r.name.trim()) { alert('이름을 입력하세요'); return; }
+      const data = loadData();
+      if (!Array.isArray(data.notices)) data.notices = [];
+      data.notices.push({
+        id: uid(), lat, lng,
+        name: r.name.trim(),
+        say: (r.say || '').trim(),
+        label: (r.label || '').trim().slice(0, 4),
+        radius: Math.max(5, Math.min(2000, parseInt(r.radius, 10) || 150)),
+        color: r.color || '#2980b9',
+        memo: (r.memo || '').trim(),
+        createdAt: Date.now()
+      });
+      saveData(data); refreshAll();
+      sendTelegram(`📢 <b>안내 핑 추가</b>\n${r.name.trim()}${r.say ? '\n멘트: ' + r.say.trim() : ''}\n반경: ${r.radius || 150}m`);
+    });
+  });
+}
+function editNotice(id) {
+  const data = loadData();
+  const n = (data.notices || []).find(x => x.id === id);
+  if (!n) return;
+  openFormModal('📢 안내 핑 수정', [
+    { key: 'name', label: '이름', value: n.name },
+    { key: 'say', label: '음성 문구', value: n.say || '', hint: '⭐ 빈칸이면 음성 없이 배너·진동만' },
+    { key: 'label', label: '표시 글자', value: n.label || '' },
+    { key: 'radius', label: '알림 범위 (m)', type: 'number', value: String(n.radius || 150) },
+    { key: 'color', label: '색', type: 'color', value: n.color || '#2980b9' },
+    { key: 'memo', label: '메모 (선택)', value: n.memo || '' }
+  ], r => {
+    if (!r.name.trim()) { alert('이름을 입력하세요'); return; }
+    n.name = r.name.trim();
+    n.say = (r.say || '').trim();
+    n.label = (r.label || '').trim().slice(0, 4);
+    n.radius = Math.max(5, Math.min(2000, parseInt(r.radius, 10) || 150));
+    n.color = r.color || '#2980b9';
+    n.memo = (r.memo || '').trim();
+    saveData(data); refreshAll();
+  });
+}
+function deleteNotice(id) {
+  if (!confirm('이 안내 핑을 삭제할까요?')) return;
+  if (window.__openIw) { try { window.__openIw.close(); } catch (e) {} window.__openIw = null; }
+  const data = loadData();
+  data.notices = (data.notices || []).filter(x => x.id !== id);
+  saveData(data); refreshAll();
+}
+function renderNotices() {
+  const el = document.getElementById('noticeList');
+  if (!el) return;
+  const list = (loadData().notices || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  if (!list.length) { el.innerHTML = '<div class="empty">안내 핑 없음 — 지도에서 “안내” 모드로 찍으세요</div>'; return; }
+  el.innerHTML = list.map(n => `
+    <div class="list-item" style="padding:9px;">
+      <span style="width:12px;height:12px;border-radius:50%;background:${n.color || '#2980b9'};flex:none;margin-right:8px;"></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;color:#2c3e50;">${(n.label ? '[' + n.label.replace(/</g, '&lt;') + '] ' : '')}${n.name.replace(/</g, '&lt;')}
+          <span style="font-size:11px;color:#888;font-weight:600;">· ${n.radius || 150}m</span></div>
+        <div style="font-size:11px;color:${n.say ? '#2980b9' : '#aaa'};">${n.say ? '🔊 ' + n.say.replace(/</g, '&lt;') : '🔇 음성 없음 (배너·진동만)'}</div>
+        ${n.memo ? `<div style="font-size:11px;color:#95a5a6;">${n.memo.replace(/</g, '&lt;')}</div>` : ''}
+      </div>
+      <button class="small" onclick="focusNotice('${n.id}')" title="지도에서 보기">📍</button>
+      <button class="small" style="background:#3498db;color:#fff;" onclick="editNotice('${n.id}')">✎</button>
+      <button class="small danger" onclick="deleteNotice('${n.id}')">🗑</button>
+    </div>`).join('');
+}
+function focusNotice(id) {
+  const n = (loadData().notices || []).find(x => x.id === id);
+  if (!n || !map) return;
+  map.setLevel(3);
+  map.setCenter(new kakao.maps.LatLng(n.lat, n.lng));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function addNoSprayAt(lat, lng, areaHint = '') {
   openFormModal('🚫 방역불가 지역 추가', [
     { key: 'name', label: '지역 이름', placeholder: '예: 장어 양식장, 양봉장', value: areaHint },
@@ -569,6 +671,11 @@ function handleMapClick(lat, lng) {
   }
   if (pendingClickMode === 'noSpray') {
     addNoSprayAt(lat, lng);
+    setMode('anchor');
+    return;
+  }
+  if (pendingClickMode === 'notice') {
+    addNoticeAt(lat, lng);
     setMode('anchor');
     return;
   }
@@ -1050,6 +1157,7 @@ function refreshAll() {
   renderAnchors();
   renderComplaints();
   renderNoSprayZones();
+  renderNotices();
   renderTeams();
   renderEventSelect('evtAssignSel');
   renderEvtAssign();
@@ -2468,6 +2576,19 @@ function renderMap() {
       }
     }
   }
+
+  // ─── 📢 안내 핑 (지정 색 원 + 반경) ───
+  drawNotices(map, data.notices || [], kakaoMarkers, getMarkerScale(map.getLevel()), n => `
+    <div style="padding:9px 11px;font-size:12px;width:190px;box-sizing:border-box;">
+      <div style="font-weight:700;color:${n.color || '#2980b9'};margin-bottom:4px;">📢 ${(n.name || '').replace(/</g, '&lt;')}
+        <span style="font-size:10px;color:#888;">· ${n.radius || 150}m</span></div>
+      <div style="font-size:11px;color:${n.say ? '#2c3e50' : '#aaa'};margin-bottom:6px;">${n.say ? '🔊 ' + n.say.replace(/</g, '&lt;') : '🔇 음성 없음'}</div>
+      ${n.memo ? `<div style="font-size:11px;color:#7f8c8d;margin-bottom:6px;">${n.memo.replace(/</g, '&lt;')}</div>` : ''}
+      <div style="display:flex;gap:4px;">
+        <button onclick="editNotice('${n.id}')" style="flex:1;background:#3498db;color:#fff;padding:6px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">✎수정</button>
+        <button onclick="deleteNotice('${n.id}')" style="flex:none;background:#e74c3c;color:#fff;padding:6px 9px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>
+      </div>
+    </div>`);
 
   // ─── 방역불가 핀 (빨간 ⛔ 아이콘 + 반경 원) ───
   const noSprayZones = data.noSprayZones || [];

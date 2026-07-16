@@ -1978,6 +1978,54 @@ function anchorMark(a) {
   return { color: a.markColor || '#FFD400', text: a.markText || '' };
 }
 
+// 📢 안내 핑 마커 이미지 — 지정 색 원 + 표시 글자(없으면 📢)
+function noticeMarkerImage(color, label, scale) {
+  const s = scale || 1.0;
+  const sz = Math.round(30 * s);
+  const txt = (label || '').slice(0, 3);
+  const inner = txt
+    ? `<text x="15" y="19" font-family="Arial,AppleGothic,sans-serif" font-size="${txt.length > 2 ? 8 : 11}" font-weight="bold" fill="#fff" text-anchor="middle">${txt.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`
+    : `<text x="15" y="20" font-size="13" text-anchor="middle">📢</text>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 30 30">
+    <circle cx="15" cy="15" r="13" fill="${color || '#2980b9'}" stroke="#fff" stroke-width="2.5"/>
+    ${inner}
+  </svg>`;
+  return new kakao.maps.MarkerImage(
+    'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+    new kakao.maps.Size(sz, sz),
+    { offset: new kakao.maps.Point(sz / 2, sz / 2) }
+  );
+}
+
+// 📢 안내 핑 전체를 지도에 그림 (마커 + 연한 반경 원). onClickInfo가 있으면 클릭 시 정보창.
+function drawNotices(map, notices, out, scale, infoHtml) {
+  try {
+    if (!map || !Array.isArray(notices)) return;
+    const s = scale || 1.0;
+    for (const n of notices) {
+      if (!n || n.lat == null || n.lng == null) continue;
+      const pos = new kakao.maps.LatLng(n.lat, n.lng);
+      const col = n.color || '#2980b9';
+      const circle = new kakao.maps.Circle({
+        center: pos, radius: n.radius || 150,
+        strokeWeight: 1, strokeColor: col, strokeOpacity: 0.5, strokeStyle: 'shortdash',
+        fillColor: col, fillOpacity: 0.12, zIndex: 1, map
+      });
+      if (out) out.push(circle);
+      const marker = new kakao.maps.Marker({
+        position: pos, map, title: n.name || '안내',
+        image: noticeMarkerImage(col, n.label, s), zIndex: 8
+      });
+      marker.__markerMeta = { type: 'notice', color: col, label: n.label };
+      if (out) out.push(marker);
+      if (typeof infoHtml === 'function') {
+        const iw = new kakao.maps.InfoWindow({ zIndex: 999, removable: true, content: infoHtml(n) });
+        kakao.maps.event.addListener(marker, 'click', () => toggleInfoWindow(iw, marker, map));
+      }
+    }
+  } catch (e) { console.warn('drawNotices', e); }
+}
+
 // 특별 표시된 거점의 알림 범위를 연한 원으로 표시 (범위를 눈으로 보고 잡을 수 있게)
 function drawMarkRadius(map, anchors, out) {
   try {
