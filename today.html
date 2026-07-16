@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260715k"></script>
+<script src="common.js?v=20260715m"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -547,7 +547,6 @@ function previewCourse(eventId, courseId) {
       anchorMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
     }
   }
-
   map.setBounds(bounds);
 
   // 민원 핑 (미처리)
@@ -1871,14 +1870,8 @@ function renderMapForSession() {
   });
 
   // 방역불가 핀 (빨간 ⛔ 아이콘 + 반경 원) — 방역행사에서만
-  // 📢 안내 핑 — 코스와 무관하게 항상 표시 (마을 안내·위험 지점 등)
-  drawNotices(map, data.notices || [], anchorMarkers, getMarkerScale(map.getLevel()), n => `
-    <div style="padding:8px 10px;font-size:12px;max-width:200px;">
-      <div style="font-weight:700;color:${n.color || '#2980b9'};margin-bottom:3px;">📢 ${(n.name || '').replace(/</g, '&lt;')}</div>
-      ${n.say ? `<div style="color:#2c3e50;font-size:11px;">🔊 ${n.say.replace(/</g, '&lt;')}</div>` : ''}
-      ${n.memo ? `<div style="color:#7f8c8d;font-size:11px;margin-top:3px;">${n.memo.replace(/</g, '&lt;')}</div>` : ''}
-    </div>`);
-
+  // 📢 안내 핑은 오늘운영 지도에 안 그림 (현장 지도가 지저분해지지 않게).
+  //    범위 안에 들어가면 배너·진동·음성으로만 알려줌 → checkNoticeProximity()
   const noSprayZones = isDisinfectEvent ? (data.noSprayZones || []) : [];
   noSprayZones.forEach(z => {
     const radius = z.radius || 50;
