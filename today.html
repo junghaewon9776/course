@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260715g"></script>
+<script src="common.js?v=20260715h"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2499,27 +2499,30 @@ function triggerNoSprayAlert(zone) {
 
 // ───────── ⚠️ 특별 표시 거점 근접 알람 (후진·유턴·위험 — 방역금지와 동일 방식) ─────────
 let __markState = {};            // 거점id -> 진입 여부
-const MARK_NEAR_RADIUS = 60;     // 근접 반경(m) — 미리 알려줘야 하니 조금 넉넉하게
+const MARK_DEFAULT_RADIUS = 30;  // 거점에 범위가 없을 때 기본 반경(m)
 function checkMarkProximity(lat, lng) {
   if (!currentSession) return;
   const data = loadData();
   for (const a of getCourseAnchors(data, currentSession.courseId)) {
     if (!a.mark || a.lat == null || a.lng == null) continue;
+    const r = a.markRadius || MARK_DEFAULT_RADIUS;   // 거점마다 범위 지정 (마을은 크게, 후진 지점은 좁게)
     const d = distance(lat, lng, a.lat, a.lng);
-    if (d <= MARK_NEAR_RADIUS) {
+    if (d <= r) {
       if (!__markState[a.id]) { __markState[a.id] = true; triggerMarkAlert(a); }
-    } else if (d > MARK_NEAR_RADIUS + 20) {
+    } else if (d > r + 20) {
       __markState[a.id] = false;   // 벗어나면 리셋 (경계 깜빡임 방지)
     }
   }
 }
 function testMarkAlert() {
-  triggerMarkAlert({ name: '테스트 지점', markText: '위험', markColor: '#e74c3c' });
+  triggerMarkAlert({ name: '테스트 지점', markText: '위험', markSay: '테스트입니다. 조심하세요', markColor: '#e74c3c', markRadius: 30 });
 }
 function triggerMarkAlert(a) {
   if (navigator.vibrate) navigator.vibrate([400, 150, 400]);
   const label = (a.markText || '').trim();
-  speakKo((label ? label + ' 구간입니다. ' : '') + '조심하세요.' + (a.name ? ' ' + String(a.name).slice(0, 20) : ''));
+  // 🔊 음성 문구가 비어 있으면 말 안 함 (후진처럼 배너·진동만 필요한 경우)
+  const say = (a.markSay || '').trim();
+  if (say) speakKo(say);
   let b = document.getElementById('markAlertBanner');
   if (!b) {
     b = document.createElement('div'); b.id = 'markAlertBanner';
@@ -2527,8 +2530,8 @@ function triggerMarkAlert(a) {
   }
   const col = a.markColor || '#e67e22';
   b.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:99999;background:${col};color:#fff;padding:18px 16px;text-align:center;font-weight:800;font-size:17px;box-shadow:0 3px 14px rgba(0,0,0,0.45);animation:nspFlash 0.5s ease-in-out infinite;cursor:pointer;text-shadow:0 1px 3px rgba(0,0,0,0.5);`;
-  b.innerHTML = `⚠️ ${label ? label.replace(/</g, '&lt;') + ' 구간' : '주의 구간'} — <b>${(a.name || '').replace(/</g, '&lt;')}</b>`
-    + `<br><span style="font-size:13px;font-weight:600;">조심해서 진입하세요 (${MARK_NEAR_RADIUS}m 이내)</span>`;
+  b.innerHTML = `⚠️ ${label ? label.replace(/</g, '&lt;') : '주의'} — <b>${(a.name || '').replace(/</g, '&lt;')}</b>`
+    + (say ? `<br><span style="font-size:13px;font-weight:600;">${say.replace(/</g, '&lt;')}</span>` : '');
   b.onclick = () => { b.style.display = 'none'; };
   b.style.display = 'block';
   clearTimeout(window.__markBannerTimer);

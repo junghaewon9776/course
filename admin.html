@@ -326,7 +326,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260715g"></script>
+<script src="common.js?v=20260715h"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -1869,9 +1869,9 @@ function __revDefaults(set) {
   try {
     if (set) { localStorage.setItem('__revDefaults', JSON.stringify(set)); return set; }
     const s = JSON.parse(localStorage.getItem('__revDefaults') || 'null');
-    if (s) return { color: s.color || '#FFD400', dash: (s.dash === '0' ? '0' : '1') };
+    if (s) return { color: s.color || '#FFD400', dash: (s.dash === '0' ? '0' : '1'), radius: s.radius || 30 };
   } catch (e) {}
-  return { color: '#FFD400', dash: '1' };
+  return { color: '#FFD400', dash: '1', radius: 30 };
 }
 
 function editAnchor(id) {
@@ -1890,7 +1890,9 @@ function editAnchor(id) {
     { key: 'memo', label: '메모', value: a.memo || '' },
     { key: 'heads', label: '담당 이장님', value: villageHeads, placeholder: '콤마로 여러 명 (예: 김이장, 박이장)', hint: '빈칸 = 없음 · 회원에 등록된 이름만 가능' },
     { key: 'mark', label: '⚠️ 특별 표시 켜기 (후진 · 유턴 · 위험 등)', type: 'checkbox', value: !!a.mark, hint: '켜면 마커에 테두리가 생기고, 이 거점 → 다음 거점 구간 라인이 아래 설정대로 표시됩니다' },
-    { key: 'markText', label: '표시 글자', type: 'text', value: a.markText || '', placeholder: '예: 후, 유턴, 위험, 또랑', hint: '짧을수록 잘 보입니다 (1~3자 권장) · 빈칸이면 테두리만' },
+    { key: 'markText', label: '표시 글자 (마커에 보임)', type: 'text', value: a.markText || '', placeholder: '예: 후, 유턴, 위험, 또랑', hint: '짧을수록 잘 보입니다 (1~3자 권장) · 빈칸이면 테두리만' },
+    { key: 'markSay', label: '음성 문구 (현장에서 읽어줌)', type: 'text', value: a.markSay || '', placeholder: '예: 또랑 있습니다. 조심하세요', hint: '⭐ 빈칸이면 음성 안 나감 (배너·진동만) · 후진처럼 말 필요 없으면 비워두세요' },
+    { key: 'markRadius', label: '알림 범위 (m)', type: 'number', value: String(a.markRadius || revDef.radius), placeholder: '30', hint: '이 거리 안에 들어오면 경고 · 작게 할수록 그 핑에 딱 붙어야 뜸 (기본 30m)' },
     { key: 'markColor', label: '테두리·라인 색', type: 'color', value: a.markColor || revDef.color, hint: '코스 색과 잘 구분되는 색으로 (예: 위험=빨강, 후진=노랑)' },
     { key: 'markDash', label: '라인 모양', type: 'select', value: (a.markDash === undefined ? revDef.dash : (a.markDash ? '1' : '0')), options: [{ value: '1', label: '점선' }, { value: '0', label: '실선' }] }
   ], r => {
@@ -1907,9 +1909,11 @@ function editAnchor(id) {
     a.villageHeadIds = headIds;
     a.mark = !!r.mark;
     a.markText = (r.markText || '').trim().slice(0, 4);
+    a.markSay = (r.markSay || '').trim();          // 빈칸이면 음성 안 나감
+    a.markRadius = Math.max(5, Math.min(500, parseInt(r.markRadius, 10) || 30));
     a.markColor = r.markColor;
     a.markDash = (r.markDash === '1');
-    __revDefaults({ color: r.markColor, dash: r.markDash });   // 다음 거점 기본값으로 기억
+    __revDefaults({ color: r.markColor, dash: r.markDash, radius: a.markRadius });   // 다음 거점 기본값으로 기억
     saveData(data); refreshAll();
     sendTelegram(`✏️ <b>거점 수정</b>\n거점: ${newName}${a.mark ? `\n⚠️ 특별 표시${a.markText ? ' · ' + a.markText : ''}` : ''}`);
   });
