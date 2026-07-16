@@ -1978,6 +1978,16 @@ function anchorMark(a) {
   return { color: a.markColor || '#FFD400', text: a.markText || '' };
 }
 
+// 🔔 알림 범위 설정 (관리에서 지정, 없으면 기본값) — 거점 자동완료·민원 근접
+function getAlertConfig() {
+  const c = (typeof _cache !== 'undefined' && _cache && _cache.alertConfig) || {};
+  return {
+    anchorRadius: Number(c.anchorRadius) > 0 ? Number(c.anchorRadius) : 70,     // 거점 자동완료 반경(m)
+    anchorDwellSec: Number(c.anchorDwellSec) >= 0 ? Number(c.anchorDwellSec) : 1, // 머무는 시간(초)
+    complaintRadius: Number(c.complaintRadius) > 0 ? Number(c.complaintRadius) : 50 // 민원 알림 반경(m)
+  };
+}
+
 // 📢 안내 핑 마커 이미지 — 지정 색 원 + 표시 글자(없으면 📢)
 function noticeMarkerImage(color, label, scale) {
   const s = scale || 1.0;

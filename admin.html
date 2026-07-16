@@ -186,6 +186,16 @@
         <p class="muted" style="margin-top:6px;font-size:11px;">💡 민원은 운영(today) 지도에 빨간 핀으로 표시되고 클릭하면 전화걸기 가능</p>
       </div>
 
+      <!-- 알림 범위 설정 (admin 이상 — 모든 운영자에게 공통 적용) -->
+      <div class="card" style="border-left:4px solid #16a085;">
+        <div class="flex-between">
+          <h2>🔔 알림 범위 설정</h2>
+          <button class="small" style="background:#16a085;" onclick="editAlertConfig()">✎ 수정</button>
+        </div>
+        <div id="alertConfigView" style="margin-top:8px;"></div>
+        <p class="muted" style="margin-top:6px;font-size:11px;">💡 모든 운영자에게 공통 적용됩니다. 거점 자동완료가 너무 일찍/늦게 되면 여기서 조절하세요.</p>
+      </div>
+
       <!-- 안내 핑 -->
       <div class="card" style="border-left:4px solid #1f618d;">
         <div class="flex-between">
@@ -577,6 +587,39 @@ function deleteNotice(id) {
   data.notices = (data.notices || []).filter(x => x.id !== id);
   saveData(data); refreshAll();
 }
+// 🔔 알림 범위 설정 — 모든 운영자 공통 (거점 자동완료·민원 근접)
+function renderAlertConfig() {
+  const el = document.getElementById('alertConfigView');
+  if (!el) return;
+  const c = getAlertConfig();
+  const row = (label, val, hint) => `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-bottom:1px solid #f0f0f0;">
+      <span style="font-size:13px;color:#2c3e50;">${label}</span>
+      <span><b style="font-size:14px;color:#16a085;">${val}</b> <span style="font-size:11px;color:#95a5a6;">${hint}</span></span>
+    </div>`;
+  el.innerHTML =
+    row('거점 자동완료 반경', c.anchorRadius + 'm', '이 안에 들어가면 체크')
+    + row('거점 자동완료 머묾', c.anchorDwellSec + '초', '이만큼 머물러야 체크')
+    + row('민원 알림 반경', c.complaintRadius + 'm', '이 안에 들어가면 경고');
+}
+function editAlertConfig() {
+  const c = getAlertConfig();
+  openFormModal('🔔 알림 범위 설정', [
+    { key: 'anchorRadius', label: '거점 자동완료 반경 (m)', type: 'number', value: String(c.anchorRadius), hint: '기본 70 · 좁히면 거점에 더 가까이 가야 체크됨 (지나가다 잘못 체크되면 줄이세요)' },
+    { key: 'anchorDwellSec', label: '거점 자동완료 머무는 시간 (초)', type: 'number', value: String(c.anchorDwellSec), hint: '기본 1 · 늘리면 그만큼 머물러야 체크됨 (그냥 지나가는데 체크되면 늘리세요)' },
+    { key: 'complaintRadius', label: '민원 알림 반경 (m)', type: 'number', value: String(c.complaintRadius), hint: '기본 50 · 민원 위치에 이만큼 접근하면 경고' }
+  ], r => {
+    const data = loadData();
+    data.alertConfig = {
+      anchorRadius: Math.max(5, Math.min(500, parseInt(r.anchorRadius, 10) || 70)),
+      anchorDwellSec: Math.max(0, Math.min(60, parseInt(r.anchorDwellSec, 10) || 0)),
+      complaintRadius: Math.max(5, Math.min(500, parseInt(r.complaintRadius, 10) || 50))
+    };
+    saveData(data); refreshAll();
+    alert('✅ 저장됐습니다.\n운영자 폰은 새로고침(앱 재실행) 후 적용됩니다.');
+  });
+}
+
 function renderNotices() {
   const el = document.getElementById('noticeList');
   if (!el) return;
@@ -1158,6 +1201,7 @@ function refreshAll() {
   renderComplaints();
   renderNoSprayZones();
   renderNotices();
+  renderAlertConfig();
   renderTeams();
   renderEventSelect('evtAssignSel');
   renderEvtAssign();

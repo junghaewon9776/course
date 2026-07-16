@@ -2581,16 +2581,17 @@ function triggerNoticeAlert(n) {
 
 // ───────── 📞 민원지역 근접 알람 (방역금지와 동일 방식) ─────────
 let __cmpState = {};            // 민원id -> 진입 여부
-const CMP_NEAR_RADIUS = 50;     // 민원 근접 반경(m) — 적당히 (방역금지 기본값과 동일)
+// 민원 근접 반경(m) — 관리 > 알림 범위 설정에서 조절
 function checkComplaintProximity(lat, lng) {
   const data = loadData();
+  const r = getAlertConfig().complaintRadius;
   for (const c of (data.complaints || [])) {
     if (c.status === 'resolved') continue;          // 처리된 민원은 알람 X
     if (c.lat == null || c.lng == null) continue;
     const d = distance(lat, lng, c.lat, c.lng);
-    if (d <= CMP_NEAR_RADIUS) {
+    if (d <= r) {
       if (!__cmpState[c.id]) { __cmpState[c.id] = true; triggerComplaintAlert(c); }
-    } else if (d > CMP_NEAR_RADIUS + 20) {
+    } else if (d > r + 20) {
       __cmpState[c.id] = false;                      // 벗어나면 리셋
     }
   }
@@ -2752,14 +2753,15 @@ function onGpsUpdate(pos) {
     const done = new Set(currentSession.completions);
     if (!currentSession.nearTimers) currentSession.nearTimers = {};
     const now = Date.now();
+    const __ac = getAlertConfig();   // 🔔 관리에서 지정한 자동완료 반경·머묾 시간
     for (const a of anchors) {
       if (done.has(a.id)) { delete currentSession.nearTimers[a.id]; continue; }
-      const isNear = distance(lat, lng, a.lat, a.lng) < 70;
+      const isNear = distance(lat, lng, a.lat, a.lng) < __ac.anchorRadius;
       if (isNear) {
         if (!currentSession.nearTimers[a.id]) {
           currentSession.nearTimers[a.id] = now;
-        } else if (now - currentSession.nearTimers[a.id] >= 1000) {
-          // 1초 머묾 → 자동 체크 (텔레그램 안 보냄)
+        } else if (now - currentSession.nearTimers[a.id] >= __ac.anchorDwellSec * 1000) {
+          // 설정한 시간만큼 머묾 → 자동 체크 (텔레그램 안 보냄)
           toggleDone(a.id, false);
           delete currentSession.nearTimers[a.id];
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
