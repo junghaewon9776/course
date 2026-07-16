@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260715f"></script>
+<script src="common.js?v=20260715g"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2446,11 +2446,21 @@ function toggleAlarmSound() {
 function speakKo(text) {
   try {
     if (!alarmSoundOn()) return;   // 🔇 소리 꺼짐
-    if (!window.speechSynthesis || !text) return;
+    if (!text) return;
+    // 📱 앱(안드로이드 웹뷰)엔 speechSynthesis가 아예 없다 → Capacitor TTS 플러그인 사용
+    const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+    if (P) {
+      try { P.stop(); } catch (e) {}
+      P.speak({ text: String(text), lang: 'ko-KR', rate: 1.0, volume: 1.0 })
+        .catch(err => console.warn('TTS 실패:', err && err.message));
+      return;
+    }
+    // 💻 브라우저(크롬 등)는 기존 웹 음성 사용
+    if (!window.speechSynthesis) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
-    speechSynthesis.speak(u);   // 보이스는 시스템 기본에 맡김 (웹뷰 호환)
+    speechSynthesis.speak(u);   // 보이스는 시스템 기본에 맡김
   } catch (e) {}
 }
 
@@ -2554,8 +2564,13 @@ function testAlarmHW() {
     const ok = navigator.vibrate([300, 120, 300]);
     lines.push('진동: ' + (ok ? '✅ 방금 울렸어야 합니다' : '❌ 차단됨 (폰 설정에서 진동 꺼짐이거나 앱 권한 없음)'));
   }
-  // 음성
-  if (!window.speechSynthesis) {
+  // 음성 — 앱이면 TTS 플러그인, 브라우저면 웹 음성
+  const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+  if (P) {
+    lines.push('음성: ✅ 앱 TTS 플러그인 사용');
+  } else if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
+    lines.push('음성: ❌ 앱에 TTS 플러그인 없음 → 앱을 최신으로 업데이트하세요');
+  } else if (!window.speechSynthesis) {
     lines.push('음성: ❌ 이 기기/브라우저가 지원 안 함');
   } else {
     const vs = speechSynthesis.getVoices() || [];
