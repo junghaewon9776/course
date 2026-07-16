@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260715e"></script>
+<script src="common.js?v=20260715f"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2257,10 +2257,13 @@ function showMapSettings() {
       <p style="font-size:11px;color:#888;margin:0 0 10px;">방역금지·민원 근접 시 음성 멘트</p>
       <button onclick="showPastTracks()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#8e44ad;color:#fff;">🛤 이전 행적 보기</button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">지난 운행 경로를 오늘 지도에 표시</p>
-      <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
         <button onclick="testNspAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#e74c3c;color:#fff;">🔔 금지 테스트</button>
         <button onclick="testCmpAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#f39c12;color:#fff;">📞 민원 테스트</button>
+        <button onclick="testMarkAlert()" style="flex:1;padding:8px;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;background:#e67e22;color:#fff;">⚠️ 위험 테스트</button>
       </div>
+      <button onclick="testAlarmHW()" style="width:100%;padding:10px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:#2c3e50;color:#fff;margin-bottom:4px;">🔧 진동·음성 점검</button>
+      <p style="font-size:11px;color:#888;margin:0 0 12px;">이 폰에서 진동·음성이 실제로 되는지 확인</p>
       <button onclick="this.closest('#mapSettingsOverlay').remove()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#34495e;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">닫기</button>
     </div>
   `;
@@ -2540,6 +2543,29 @@ function checkComplaintProximity(lat, lng) {
 }
 function testCmpAlert() {
   triggerComplaintAlert({ content: '테스트 민원', phone: '' });
+}
+// 🔧 이 폰에서 진동·음성이 실제로 되는지 점검 (되는지 안 되는지 글자로 알려줌)
+function testAlarmHW() {
+  const lines = [];
+  // 진동 — vibrate()는 실제로 울렸으면 true를 돌려줌
+  if (!navigator.vibrate) {
+    lines.push('진동: ❌ 이 기기/브라우저가 지원 안 함');
+  } else {
+    const ok = navigator.vibrate([300, 120, 300]);
+    lines.push('진동: ' + (ok ? '✅ 방금 울렸어야 합니다' : '❌ 차단됨 (폰 설정에서 진동 꺼짐이거나 앱 권한 없음)'));
+  }
+  // 음성
+  if (!window.speechSynthesis) {
+    lines.push('음성: ❌ 이 기기/브라우저가 지원 안 함');
+  } else {
+    const vs = speechSynthesis.getVoices() || [];
+    const ko = vs.filter(v => /ko/i.test(v.lang || ''));
+    if (!vs.length) lines.push('음성: ❌ 폰에 목소리(TTS 엔진)가 없음 → 설정 > 음성 > TTS 설치 필요');
+    else lines.push('음성: ✅ 목소리 ' + vs.length + '개 (한국어 ' + ko.length + '개)' + (ko.length ? '' : ' ⚠️ 한국어 없음 — 한국어 TTS 설치 권장'));
+  }
+  lines.push('알림 소리 설정: ' + (alarmSoundOn() ? '✅ ON' : '❌ OFF ← 이게 꺼져 있으면 음성이 안 나옵니다'));
+  speakKo('음성 테스트입니다. 이 말이 들리면 정상입니다.');
+  setTimeout(() => alert('🔧 진동·음성 점검\n\n' + lines.join('\n') + '\n\n(음성이 안 들렸다면 위 결과를 확인하세요)'), 500);
 }
 function triggerComplaintAlert(c) {
   if (navigator.vibrate) navigator.vibrate([300, 120, 300]);
