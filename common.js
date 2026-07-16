@@ -1978,6 +1978,30 @@ function anchorMark(a) {
   return { color: a.markColor || '#FFD400', text: a.markText || '' };
 }
 
+// 특별 표시된 거점의 알림 범위를 연한 원으로 표시 (범위를 눈으로 보고 잡을 수 있게)
+function drawMarkRadius(map, anchors, out) {
+  try {
+    if (!map || !Array.isArray(anchors)) return;
+    for (const a of anchors) {
+      const mk = anchorMark(a);
+      if (!mk || a.lat == null || a.lng == null) continue;
+      const circle = new kakao.maps.Circle({
+        center: new kakao.maps.LatLng(a.lat, a.lng),
+        radius: a.markRadius || 30,
+        strokeWeight: 1,
+        strokeColor: mk.color,
+        strokeOpacity: 0.5,
+        strokeStyle: 'shortdash',
+        fillColor: mk.color,
+        fillOpacity: 0.12,     // 아주 연하게 — 지도 가리지 않게
+        zIndex: 1,
+        map
+      });
+      if (out) out.push(circle);
+    }
+  } catch (e) { console.warn('drawMarkRadius', e); }
+}
+
 // 특별 표시된 거점 → 다음 거점 구간 라인을 지정 색·모양으로 덧그림.
 // anchors[i]와 path[i]는 같은 순서여야 함. 만든 선은 out 배열에 담아 나중에 지울 수 있게 한다.
 function drawMarkSegments(map, anchors, path, out) {
