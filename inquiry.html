@@ -625,18 +625,14 @@ function renderMyInquiries() {
     el.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:#aaa;">접수 내역이 없습니다</div>';
     return;
   }
-  // 접수 내역이 많으면 최근 3건만 보이고 나머지는 펼치기 (같은 내용이 여러 건이면 보기 힘들어서)
-  const N = 3;
-  const head = mine.slice(0, N).map(q => renderInquiryCard(q, isAdmin, true)).join('');
-  const rest = mine.slice(N);
-  if (!rest.length) { el.innerHTML = head; return; }
-  el.innerHTML = head
-    + `<div id="myInqRest" style="display:${window.__myInqOpen ? 'block' : 'none'};">`
-    + rest.map(q => renderInquiryCard(q, isAdmin, true)).join('')
-    + '</div>'
-    + `<button id="myInqMore" onclick="toggleMyInquiries()" style="width:100%;margin-top:6px;background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">`
-    + (window.__myInqOpen ? '▲ 접기' : `▼ 이전 접수 ${rest.length}건 더보기`)
-    + '</button>';
+  // 아래 전체 목록에도 같은 글이 나오므로, 내 접수 내역은 기본으로 접어둔다 (펼쳐야만 보임)
+  el.innerHTML =
+    `<button id="myInqMore" onclick="toggleMyInquiries()" style="width:100%;background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:8px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;">`
+    + (window.__myInqOpen ? '▲ 접기' : `▼ 내 접수 내역 ${mine.length}건 보기`)
+    + '</button>'
+    + `<div id="myInqRest" style="display:${window.__myInqOpen ? 'block' : 'none'};margin-top:8px;">`
+    + mine.map(q => renderInquiryCard(q, isAdmin, true)).join('')
+    + '</div>';
 }
 function toggleMyInquiries() {
   window.__myInqOpen = !window.__myInqOpen;
@@ -645,7 +641,7 @@ function toggleMyInquiries() {
   if (!box || !btn) return;
   const n = box.children.length;
   box.style.display = window.__myInqOpen ? 'block' : 'none';
-  btn.textContent = window.__myInqOpen ? '▲ 접기' : `▼ 이전 접수 ${n}건 더보기`;
+  btn.textContent = window.__myInqOpen ? '▲ 접기' : `▼ 내 접수 내역 ${n}건 보기`;
 }
 
 // ────── 회원 게시판 (로그인 회원용 — 전체 문의 조회 + 답변) ──────
