@@ -351,7 +351,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260716d"></script>
+<script src="common.js?v=20260716e"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -1614,8 +1614,11 @@ function toggleCourseVisible(id) {
   renderCourses(); renderVisSaveBar();
 }
 // 보류된 표시 변경을 실제로 저장
+let __visSaving = false;
 function saveVisibility() {
+  if (__visSaving) return;                       // 중복 클릭/중복 호출 방지 (완료 알림이 두 번 뜨던 문제)
   if (!__visDirty()) { alert('바뀐 내용이 없습니다.'); return; }
+  __visSaving = true;
   const data = loadData();
   if (!data.visibility) data.visibility = {};
   if (!data.visibility.events) data.visibility.events = {};
@@ -1626,17 +1629,19 @@ function saveVisibility() {
   const upd = {};
   for (const k in __visPending.events) { data.visibility.events[k] = __visPending.events[k]; upd['events/' + k] = __visPending.events[k]; }
   for (const k in __visPending.courses) { data.visibility.courses[k] = __visPending.courses[k]; upd['courses/' + k] = __visPending.courses[k]; }
-  if (typeof fbDb === 'undefined') { refreshAll(); return; }
+  if (typeof fbDb === 'undefined') { __visSaving = false; refreshAll(); return; }
   // 저장 중 표시 — 서버가 받았다고 확인해줄 때까지 기다린다 (예전엔 요청만 보내고 바로 "저장됨"이라 떴음)
   const bar = document.getElementById('__visSaveBar');
   if (bar) bar.innerHTML = '<span style="font-weight:800;font-size:14px;">💾 저장 중… 잠시만요</span>';
   fbDb.ref('/visibility').update(upd)
     .then(() => {
       __visPending = { events: {}, courses: {} };   // 저장 성공한 뒤에만 보류 해제
+      __visSaving = false;
       refreshAll();
       alert(`✅ 표시 설정 ${n}건 저장 완료.\n운영자 화면에도 반영됩니다.`);
     })
     .catch(err => {
+      __visSaving = false;
       renderVisSaveBar();                            // 실패하면 보류 유지 → 다시 저장 가능
       alert('❌ 저장 실패: ' + err.message + '\n다시 시도해주세요.');
     });
