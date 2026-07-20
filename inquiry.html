@@ -165,7 +165,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260715s"></script>
+<script src="common.js?v=20260715t"></script>
 <script>
 // ────── 기본 분류 데이터 ──────
 const DEFAULT_CATEGORIES = [
@@ -625,7 +625,27 @@ function renderMyInquiries() {
     el.innerHTML = '<div class="empty" style="padding:20px;text-align:center;color:#aaa;">접수 내역이 없습니다</div>';
     return;
   }
-  el.innerHTML = mine.map(q => renderInquiryCard(q, isAdmin, true)).join('');
+  // 접수 내역이 많으면 최근 3건만 보이고 나머지는 펼치기 (같은 내용이 여러 건이면 보기 힘들어서)
+  const N = 3;
+  const head = mine.slice(0, N).map(q => renderInquiryCard(q, isAdmin, true)).join('');
+  const rest = mine.slice(N);
+  if (!rest.length) { el.innerHTML = head; return; }
+  el.innerHTML = head
+    + `<div id="myInqRest" style="display:${window.__myInqOpen ? 'block' : 'none'};">`
+    + rest.map(q => renderInquiryCard(q, isAdmin, true)).join('')
+    + '</div>'
+    + `<button id="myInqMore" onclick="toggleMyInquiries()" style="width:100%;margin-top:6px;background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer;">`
+    + (window.__myInqOpen ? '▲ 접기' : `▼ 이전 접수 ${rest.length}건 더보기`)
+    + '</button>';
+}
+function toggleMyInquiries() {
+  window.__myInqOpen = !window.__myInqOpen;
+  const box = document.getElementById('myInqRest');
+  const btn = document.getElementById('myInqMore');
+  if (!box || !btn) return;
+  const n = box.children.length;
+  box.style.display = window.__myInqOpen ? 'block' : 'none';
+  btn.textContent = window.__myInqOpen ? '▲ 접기' : `▼ 이전 접수 ${n}건 더보기`;
 }
 
 // ────── 회원 게시판 (로그인 회원용 — 전체 문의 조회 + 답변) ──────
