@@ -2016,17 +2016,19 @@ function getAlertConfig() {
     var mm = q.match(/(?:^|&)v=([^&]+)/);
     var ver = mm ? mm[1] : '';
     if (!ver) return;
-    var apply = function () {
-      var as = document.querySelectorAll('a[href$=".html"]');
-      for (var j = 0; j < as.length; j++) {
-        var h = as[j].getAttribute('href');
-        if (h && h.indexOf('v=') < 0 && !/^https?:/i.test(h) && h.indexOf('//') !== 0) {
-          as[j].setAttribute('href', h + (h.indexOf('?') < 0 ? '?' : '&') + 'v=' + ver);
-        }
-      }
-    };
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
-    else apply();
+    // 링크는 화면이 다시 그려질 때 원래대로 돌아가므로, 미리 붙이지 않고 "누르는 순간" 버전을 붙인다
+    document.addEventListener('click', function (e) {
+      try {
+        var a = e.target && e.target.closest && e.target.closest('a[href]');
+        if (!a) return;
+        var h = a.getAttribute('href') || '';
+        if (h.indexOf('.html') < 0) return;                 // 페이지 이동 링크만
+        if (h.indexOf('v=') >= 0) return;                    // 이미 붙어 있으면 그대로
+        if (/^https?:/i.test(h) || h.indexOf('//') === 0) return;  // 외부 링크 제외
+        if (a.target === '_blank') return;
+        a.setAttribute('href', h + (h.indexOf('?') < 0 ? '?' : '&') + 'v=' + ver);
+      } catch (err) {}
+    }, true);   // capture 단계 — 다른 핸들러보다 먼저
   } catch (e) {}
 })();
 

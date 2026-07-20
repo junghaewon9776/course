@@ -351,7 +351,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260716b"></script>
+<script src="common.js?v=20260716c"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -578,6 +578,7 @@ function editNotice(id) {
     n.color = r.color || '#2980b9';
     n.memo = (r.memo || '').trim();
     saveData(data); refreshAll();
+    alert('✅ 안내 핑 수정됨: ' + n.name);
   });
 }
 function deleteNotice(id) {
@@ -696,6 +697,7 @@ function editNoSprayZone(id) {
     const radius = parseInt(r.radius, 10);
     if (!isNaN(radius) && radius > 0) z.radius = radius;
     saveData(data); refreshAll();
+    alert('✅ 방역금지구역 수정됨: ' + z.name);
     sendTelegram(`✏️ <b>방역불가 수정</b>\n이름: ${z.name}`);
   });
 }
@@ -1203,6 +1205,7 @@ function refreshAll() {
   renderNoSprayZones();
   renderNotices();
   renderAlertConfig();
+  renderVisSaveBar();   // 👁 저장 안 된 표시 변경이 있으면 하단 저장 바 유지
   renderTeams();
   renderEventSelect('evtAssignSel');
   renderEvtAssign();
@@ -1586,27 +1589,64 @@ function moveRequestCourse(id) {
 }
 
 // 지도 표시 토글 (Firebase 저장 → 새로고침해도 유지)
+// 👁 표시 켜기/끄기는 누를 때마다 저장하면 매번 전체 저장+재렌더라 느리다.
+//    → 화면에서만 바꿔두고(보류), [표시 저장] 버튼을 눌러야 실제로 반영된다.
+let __visPending = { events: {}, courses: {} };
+function __visDirty() {
+  return Object.keys(__visPending.events).length > 0 || Object.keys(__visPending.courses).length > 0;
+}
 function isEventVisible(id) {
+  if (id in __visPending.events) return __visPending.events[id];      // 보류 중이면 그 값으로 보여줌
   const v = (loadData().visibility || {}).events || {};
   return v[id] !== false;
 }
 function isCourseVisible(id) {
+  if (id in __visPending.courses) return __visPending.courses[id];
   const v = (loadData().visibility || {}).courses || {};
   return v[id] !== false;
 }
 function toggleEventVisible(id) {
+  __visPending.events[id] = !isEventVisible(id);
+  renderEvents(); renderCourses(); renderVisSaveBar();   // 저장 없이 화면만 갱신 (가볍게)
+}
+function toggleCourseVisible(id) {
+  __visPending.courses[id] = !isCourseVisible(id);
+  renderCourses(); renderVisSaveBar();
+}
+// 보류된 표시 변경을 실제로 저장
+function saveVisibility() {
+  if (!__visDirty()) { alert('바뀐 내용이 없습니다.'); return; }
   const data = loadData();
   if (!data.visibility) data.visibility = {};
   if (!data.visibility.events) data.visibility.events = {};
-  data.visibility.events[id] = !isEventVisible(id);
-  saveData(data); refreshAll();   // 즉시 화면 갱신 — 없으면 버튼이 그대로라 또 눌러서 도로 꺼짐
-}
-function toggleCourseVisible(id) {
-  const data = loadData();
-  if (!data.visibility) data.visibility = {};
   if (!data.visibility.courses) data.visibility.courses = {};
-  data.visibility.courses[id] = !isCourseVisible(id);
-  saveData(data); refreshAll();   // 즉시 화면 갱신 — 없으면 버튼이 그대로라 또 눌러서 도로 꺼짐
+  const n = Object.keys(__visPending.events).length + Object.keys(__visPending.courses).length;
+  for (const k in __visPending.events) data.visibility.events[k] = __visPending.events[k];
+  for (const k in __visPending.courses) data.visibility.courses[k] = __visPending.courses[k];
+  __visPending = { events: {}, courses: {} };
+  saveData(data); refreshAll();
+  alert(`✅ 표시 설정 ${n}건 저장했습니다.\n운영자 화면에도 반영됩니다.`);
+}
+function cancelVisibility() {
+  __visPending = { events: {}, courses: {} };
+  renderEvents(); renderCourses(); renderVisSaveBar();
+}
+// 저장 안 된 표시 변경이 있으면 상단에 저장 바를 띄운다
+function renderVisSaveBar() {
+  let bar = document.getElementById('__visSaveBar');
+  if (!__visDirty()) { if (bar) bar.remove(); return; }
+  const n = Object.keys(__visPending.events).length + Object.keys(__visPending.courses).length;
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = '__visSaveBar';
+    bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:99997;background:#e67e22;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 -3px 14px rgba(0,0,0,.3);';
+    document.body.appendChild(bar);
+  }
+  bar.innerHTML = `<span style="font-weight:800;font-size:14px;">👁 표시 변경 ${n}건 (아직 저장 안 됨)</span>`
+    + `<span style="display:flex;gap:6px;flex:none;">`
+    + `<button onclick="cancelVisibility()" style="background:#7f8c8d;color:#fff;border:none;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer;">취소</button>`
+    + `<button onclick="saveVisibility()" style="background:#27ae60;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-weight:800;cursor:pointer;">💾 표시 저장</button>`
+    + `</span>`;
 }
 
 function renderEvents() {
@@ -1644,7 +1684,7 @@ function renameEvent(id) {
   const e = (data.events || []).find(x => x.id === id);
   if (!e) return;
   const name = prompt('행사 이름', e.name);
-  if (name) { const old = e.name; e.name = name; saveData(data); refreshAll(); sendTelegram(`✏️ <b>행사 수정</b>\n${old} → ${name}`); }
+  if (name) { const old = e.name; e.name = name; saveData(data); refreshAll(); alert('✅ 행사 수정됨: ' + name); sendTelegram(`✏️ <b>행사 수정</b>\n${old} → ${name}`); }
 }
 function deleteEvent(id) {
   if (!confirm('행사 + 소속 코스/거점이 모두 삭제됩니다')) return;
@@ -1850,6 +1890,7 @@ function saveCourseEdit(id) {
   saveData(data);
   document.getElementById('__courseEditOv')?.remove();
   refreshAll();
+  alert('✅ 코스 수정됨: ' + name);
   if (oldName !== name) sendTelegram(`✏️ <b>코스 수정</b>\n${oldName} → ${name}${c.detail ? '\n상세: '+c.detail : ''}`);
 }
 
@@ -2072,6 +2113,7 @@ function editAnchor(id) {
     a.markDash = (r.markDash === '1');
     __revDefaults({ color: r.markColor, dash: r.markDash, radius: a.markRadius });   // 다음 거점 기본값으로 기억
     saveData(data); refreshAll();
+    alert('✅ 거점 수정됨: ' + newName);
     sendTelegram(`✏️ <b>거점 수정</b>\n거점: ${newName}${a.mark ? `\n⚠️ 특별 표시${a.markText ? ' · ' + a.markText : ''}` : ''}`);
   });
 }
@@ -2297,6 +2339,7 @@ function editComplaint(id) {
     c.phone = (r.phone || '').trim();
     c.content = (r.content || '').trim();
     saveData(data); refreshAll();
+    alert('✅ 민원 수정됨');
     sendTelegram(`✏️ <b>민원 수정</b>\n내용: ${(c.content || '-').slice(0, 50)}`);
   });
 }
