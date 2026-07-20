@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260715r"></script>
+<script src="common.js?v=20260715s"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1992,6 +1992,17 @@ ${a.name} 거점 픽업 알림
   location.href = smsUrl;
 }
 
+// 현재 세션에 같이 탄 사람 전원(운전자+보조) — 글 작성 점수를 다 같이 받게 하려고 저장
+function __sessionCrewNames() {
+  const out = [];
+  try {
+    const c = (currentSession && currentSession.crew) || {};
+    if (c.driver) out.push(String(c.driver).trim());
+    if (c.assist) String(c.assist).split(',').map(s => s.trim()).filter(Boolean).forEach(n => out.push(n));
+  } catch (e) {}
+  return out.filter((n, i) => n && out.indexOf(n) === i);
+}
+
 function toggleDone(anchorId, manual) {
   if (!currentSession) return;
   const set = new Set(currentSession.completions);
@@ -3401,10 +3412,13 @@ function submitAnchorRequest() {
     content: '거점 추가 요청: ' + (name || '(이름 미정)') + (reason ? ' — ' + reason : '') + (address ? ' (' + address + ')' : ''),
     phone: '', writer: currentSession.crew?.driver || '운영자',
     writerUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || '',
+    crewNames: __sessionCrewNames(),   // 같이 탄 사람 전원 — 보조도 같은 점수 받게
     status: 'pending', adminMemo: '', comments: [], createdAt: Date.now()
   });
   try { saveData(data); }
   catch (e) { alert('저장 실패: ' + (e.message || e)); return; }
+  // 같이 탄 사람 전원 진급 확인 (글 점수를 다 같이 받으므로)
+  try { const __cn = __sessionCrewNames(); if (typeof checkPromotionForNames === 'function' && __cn.length) checkPromotionForNames(__cn); } catch (e) {}
 
   document.getElementById('anchorReqModal').remove();
   __arqMap = null; __arqMarker = null;
@@ -3674,9 +3688,12 @@ function submitComplaint() {
     reportedAssist: currentSession.crew?.assist || '',
     createdAt: Date.now()
   });
-  if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:fullContent,phone:phone,writer:(currentSession.crew&&currentSession.crew.driver)||'운영자',writerUid:'',status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
+  if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:fullContent,phone:phone,writer:(currentSession.crew&&currentSession.crew.driver)||'운영자',writerUid:'',crewNames:__sessionCrewNames(),status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
   try { saveData(data); }
   catch (e) { alert('저장 실패: ' + (e.message || e)); return; }
+
+  // 같이 탄 사람 전원 진급 확인 (글 점수를 다 같이 받으므로)
+  try { const __cn = __sessionCrewNames(); if (typeof checkPromotionForNames === 'function' && __cn.length) checkPromotionForNames(__cn); } catch (e) {}
 
   document.getElementById('complaintModal').remove();
   __cmpMap = null; __cmpMarker = null;

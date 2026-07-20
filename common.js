@@ -1081,7 +1081,12 @@ function cmTotalXp(data, name) {
     vaxTotal += counts.reduce((s, v) => s + v, 0);
     setTotal += counts.length ? Math.min.apply(null, counts) : 0;
   });
-  function inqCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; if ((q.writer || '').trim() === name && __inYr(q.createdAt)) n++; }); return n; }
+  // 글 작성 점수는 같이 탄 사람 전원에게 (crewNames가 있으면 그 안에 들어도 인정)
+  function __isCredited(q, nm) {
+    if ((q.writer || '').trim() === nm) return true;
+    return Array.isArray(q.crewNames) && q.crewNames.some(x => String(x).trim() === nm);
+  }
+  function inqCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; if (__isCredited(q, name) && __inYr(q.createdAt)) n++; }); return n; }
   function cmtCount(cat) { let n = 0; (data.inquiries || []).forEach(q => { if (!q || (cat && q.category !== cat)) return; (q.comments || []).forEach(c => { if (c && (c.writer || '').trim() === name && __inYr(c.createdAt || q.createdAt)) n++; }); }); return n; }
   // 세션키→조원 맵 (예전 사진 소급 반영)
   const __sessCrew = {};

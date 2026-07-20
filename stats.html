@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260715r"></script>
+<script src="common.js?v=20260715s"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -767,12 +767,17 @@ function computeXpForName(name) {
     setTotal += counts.length ? Math.min.apply(null, counts) : 0;
   });
   // 민원/댓글 카운트 (작성자 이름 매칭, 년도 필터)
+  // 글 점수는 같이 탄 사람 전원 인정 (crewNames) — XP 계산과 동일 기준
+  function __credited(q) {
+    if ((q.writer || '').trim() === name) return true;
+    return Array.isArray(q.crewNames) && q.crewNames.some(x => String(x).trim() === name);
+  }
   function inquiryCount(catId) {
     let n = 0;
     (data.inquiries || []).forEach(q => {
       if (!q) return;
       if (catId && q.category !== catId) return;
-      if ((q.writer || '').trim() === name && __inYear(q.createdAt)) n++;
+      if (__credited(q) && __inYear(q.createdAt)) n++;
     });
     return n;
   }
@@ -846,7 +851,7 @@ function computeXpForName(name) {
   const doubleDayCnt = Object.keys(__days).filter(k => __days[k] >= 2).length;
   function inqResolvedCount(catId) {
     let n = 0;
-    (data.inquiries || []).forEach(q => { if (!q || (catId && q.category !== catId)) return; if ((q.writer || '').trim() === name && q.status === 'resolved' && __inYear(q.createdAt)) n++; });
+    (data.inquiries || []).forEach(q => { if (!q || (catId && q.category !== catId)) return; if (__credited(q) && q.status === 'resolved' && __inYear(q.createdAt)) n++; });
     return n;
   }
   let xp = 0; const items = [];
