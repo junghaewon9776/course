@@ -165,7 +165,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260716f"></script>
+<script src="common.js?v=20260716g"></script>
 <script>
 // ────── 기본 분류 데이터 ──────
 const DEFAULT_CATEGORIES = [
@@ -764,7 +764,8 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
         <span>🕐 ${when}</span>
         <span>👤 ${writerLabel(q.writerUid, q.writer).replace(/</g,'&lt;')}</span>
         ${q.phone ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;" onclick="event.stopPropagation()">📞 ${q.phone}</a>` : ''}
-        ${(q.lat && q.lng) ? `<a href="#" onclick="event.stopPropagation();openLocationMap(${q.lat},${q.lng},'${(q.locName||'위치').replace(/'/g,'').replace(/</g,'')}');return false;" style="color:#e67e22;text-decoration:none;font-weight:700;" title="지도에서 보기">📍</a>
+        ${(q.lat && q.lng) ? `<a href="#" onclick="event.stopPropagation();openLocationMap(${q.lat},${q.lng},'${(q.locName||'위치').replace(/'/g,'').replace(/</g,'')}');return false;" style="display:inline-flex;align-items:center;gap:4px;background:#e67e22;color:#fff;padding:7px 12px;border-radius:8px;text-decoration:none;font-weight:800;font-size:13px;">📍 지도</a>
+        <a href="#" onclick="event.stopPropagation();openRoadview(${q.lat},${q.lng},'${(q.locName||'위치').replace(/'/g,'').replace(/</g,'')}');return false;" style="display:inline-flex;align-items:center;gap:4px;background:#16a085;color:#fff;padding:7px 12px;border-radius:8px;text-decoration:none;font-weight:800;font-size:13px;">${RV_ICON} 로드뷰</a>
         <a href="https://map.kakao.com/link/map/${encodeURIComponent(q.locName||'민원위치')},${q.lat},${q.lng}" target="_blank" style="color:#e67e22;text-decoration:none;font-weight:700;" onclick="event.stopPropagation()">${(q.locName||'위치 보기').replace(/</g,'&lt;')}</a>` : ''}
         ${q.deviceName ? `<span>📱 ${q.deviceName}</span>` : ''}
       </div>
