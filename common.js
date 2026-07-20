@@ -2006,6 +2006,17 @@ function getAlertConfig() {
   };
 }
 
+// 주소를 짧게 — 시/도·시군구를 떼고 읍면동부터 (목록에서 서로 구분되게)
+// 예) "전남광주통합특별시 영광군 법성면 용성리 830-10" → "법성면 용성리 830-10"
+function __shortAddr(addr) {
+  var s = String(addr || '').trim();
+  if (!s) return '';
+  var m = s.match(/(\S*[읍면동리])\s.*$/);        // 읍/면/동/리가 나오는 지점부터
+  if (m) { var i = s.indexOf(m[1]); if (i >= 0) return s.slice(i); }
+  var parts = s.split(/\s+/);
+  return parts.length > 2 ? parts.slice(-3).join(' ') : s;   // 못 찾으면 뒤 3토막
+}
+
 // 📢 안내 핑 마커 이미지 — 지정 색 원 + 표시 글자(없으면 📢)
 function noticeMarkerImage(color, label, scale) {
   const s = scale || 1.0;

@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260715t"></script>
+<script src="common.js?v=20260715u"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3409,10 +3409,14 @@ function submitAnchorRequest() {
   if (!Array.isArray(data.inquiries)) data.inquiries = [];
   data.inquiries.push({
     id: uid(), category: 'anchorReq', categoryName: '거점추가요청', subCategory: '',
-    content: '거점 추가 요청: ' + (name || '(이름 미정)') + (reason ? ' — ' + reason : '') + (address ? ' (' + address + ')' : ''),
+    // 📍 위치를 맨 앞에 — 이름을 안 넣으면 앞부분이 다 똑같아 목록에서 구분이 안 됨
+    content: '📍 ' + (__shortAddr(address) || (name || '위치 미상'))
+             + (name ? ' · ' + name : '')
+             + (reason ? ' — ' + reason : ''),
     phone: '', writer: currentSession.crew?.driver || '운영자',
     writerUid: (typeof fbAuth !== 'undefined' && fbAuth.currentUser && fbAuth.currentUser.uid) || '',
     crewNames: __sessionCrewNames(),   // 같이 탄 사람 전원 — 보조도 같은 점수 받게
+    lat, lng, address,                 // 좌표·전체주소도 같이 저장 (지도에서 찾기·중복 확인용)
     status: 'pending', adminMemo: '', comments: [], createdAt: Date.now()
   });
   try { saveData(data); }
@@ -3688,7 +3692,9 @@ function submitComplaint() {
     reportedAssist: currentSession.crew?.assist || '',
     createdAt: Date.now()
   });
-  if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:fullContent,phone:phone,writer:(currentSession.crew&&currentSession.crew.driver)||'운영자',writerUid:'',crewNames:__sessionCrewNames(),status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
+  // 📍 위치를 앞에 붙여 목록에서 서로 구분되게 (같은 유형이면 내용이 똑같아 보임)
+  const __cmpTitle = (typeof __shortAddr === 'function' && address ? '📍 ' + __shortAddr(address) + ' · ' : '') + fullContent;
+  if(!Array.isArray(data.inquiries))data.inquiries=[]; data.inquiries.push({id:uid(),category:'resident',categoryName:'주민민원',subCategory:'',content:__cmpTitle,phone:phone,writer:(currentSession.crew&&currentSession.crew.driver)||'운영자',writerUid:'',crewNames:__sessionCrewNames(),lat,lng,address,status:'pending',adminMemo:'',comments:[],createdAt:Date.now()});
   try { saveData(data); }
   catch (e) { alert('저장 실패: ' + (e.message || e)); return; }
 
