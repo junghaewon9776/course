@@ -1448,6 +1448,9 @@ function saveData(data, force) {
     const payload = { ...data };
     delete payload.live;    // driver 가 직접 ref('/live/...').set 으로 관리
     delete payload.photos;  // 현장사진은 별도 노드, saveData가 안 건드림
+    // 👁 표시 설정은 관리에서 /visibility 로만 저장한다.
+    //    여기 포함시키면, 예전 데이터를 들고 있던 화면이 저장할 때 관리자가 켜고 끈 게 되돌아감.
+    delete payload.visibility;
     fbDb.ref('/').update(payload).catch(err => {
       console.error('저장 실패:', err);
       alert('저장 실패: ' + err.message);
