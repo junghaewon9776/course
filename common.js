@@ -2006,6 +2006,30 @@ function getAlertConfig() {
   };
 }
 
+// 🔄 페이지 이동 링크에 현재 버전을 붙인다 — HTML 파일은 브라우저가 캐시해서
+//    관리/오늘운영을 오가면 예전 화면이 뜨고, 방금 고친 게 반영 안 된 것처럼 보이는 문제 방지
+(function __bustNavLinks() {
+  try {
+    var me = document.currentScript;
+    if (!me) { var ss = document.getElementsByTagName('script'); for (var i = 0; i < ss.length; i++) if (/common\.js/.test(ss[i].src)) me = ss[i]; }
+    var q = (me && me.src && me.src.split('?')[1]) || '';
+    var mm = q.match(/(?:^|&)v=([^&]+)/);
+    var ver = mm ? mm[1] : '';
+    if (!ver) return;
+    var apply = function () {
+      var as = document.querySelectorAll('a[href$=".html"]');
+      for (var j = 0; j < as.length; j++) {
+        var h = as[j].getAttribute('href');
+        if (h && h.indexOf('v=') < 0 && !/^https?:/i.test(h) && h.indexOf('//') !== 0) {
+          as[j].setAttribute('href', h + (h.indexOf('?') < 0 ? '?' : '&') + 'v=' + ver);
+        }
+      }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+    else apply();
+  } catch (e) {}
+})();
+
 // 카카오 지도 SDK가 없으면 그때 불러온다 (게시판처럼 평소엔 지도를 안 쓰는 화면용)
 function ensureKakaoMaps(cb) {
   if (window.kakao && kakao.maps && kakao.maps.Map) { cb(); return; }
