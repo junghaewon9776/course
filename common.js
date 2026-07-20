@@ -193,7 +193,7 @@ function openRoadview(lat, lng, title) {
   lat = Number(lat); lng = Number(lng);
   if (!lat || !lng) { alert('위치 정보가 없습니다.'); return; }
   if (!(window.kakao && kakao.maps && kakao.maps.Roadview && kakao.maps.RoadviewClient)) {
-    alert('지도가 아직 준비 중입니다. 잠시 후 다시 눌러주세요.'); return;
+    ensureKakaoMaps(function () { openRoadview(lat, lng, title); }); return;   // 지도 안 쓰던 화면이면 SDK부터 로드
   }
   var ov = document.getElementById('__rvModal'); if (ov) ov.remove();
   ov = document.createElement('div'); ov.id = '__rvModal';
@@ -2004,6 +2004,55 @@ function getAlertConfig() {
     anchorDwellSec: Number(c.anchorDwellSec) >= 0 ? Number(c.anchorDwellSec) : 1, // 머무는 시간(초)
     complaintRadius: Number(c.complaintRadius) > 0 ? Number(c.complaintRadius) : 50 // 민원 알림 반경(m)
   };
+}
+
+// 카카오 지도 SDK가 없으면 그때 불러온다 (게시판처럼 평소엔 지도를 안 쓰는 화면용)
+function ensureKakaoMaps(cb) {
+  if (window.kakao && kakao.maps && kakao.maps.Map) { cb(); return; }
+  var ex = document.querySelector('script[data-kakao-sdk-common]');
+  if (ex) { ex.addEventListener('load', function () { kakao.maps.load(cb); }); return; }
+  var s = document.createElement('script');
+  s.dataset.kakaoSdkCommon = '1';
+  s.src = 'https://dapi.kakao.com/v2/maps/sdk.js?appkey=' + KAKAO_KEY + '&autoload=false&libraries=services';
+  s.onload = function () { kakao.maps.load(cb); };
+  s.onerror = function () { alert('지도를 불러오지 못했습니다. 인터넷 연결을 확인해주세요.'); };
+  document.head.appendChild(s);
+}
+
+// 📍 위치 미리보기 지도 모달 — 그 자리에 핑을 찍어 보여주고, 로드뷰·카카오맵 길찾기 버튼 제공
+function openLocationMap(lat, lng, title) {
+  lat = Number(lat); lng = Number(lng);
+  if (!lat || !lng) { alert('위치 정보가 없습니다.'); return; }
+  if (!(window.kakao && kakao.maps && kakao.maps.Map)) { ensureKakaoMaps(function () { openLocationMap(lat, lng, title); }); return; }
+  var name = String(title || '위치');
+  var ov = document.getElementById('__locModal'); if (ov) ov.remove();
+  ov = document.createElement('div'); ov.id = '__locModal';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:14px;';
+  ov.innerHTML =
+    '<div style="background:#fff;border-radius:14px;width:100%;max-width:460px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4);display:flex;flex-direction:column;max-height:92vh;">'
+    + '<div style="background:#2c3e50;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+    +   '<span style="font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📍 ' + name.replace(/</g, '&lt;') + '</span>'
+    +   '<button id="__locX" style="flex:none;background:#e74c3c;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer;">✕ 닫기</button>'
+    + '</div>'
+    + '<div id="__locMap" style="width:100%;height:320px;flex:1;"></div>'
+    + '<div style="display:flex;gap:6px;padding:10px;">'
+    +   '<button id="__locRv" style="flex:1;background:#16a085;color:#fff;border:none;border-radius:8px;padding:11px;font-weight:700;font-size:13px;cursor:pointer;">' + RV_ICON + ' 로드뷰</button>'
+    +   '<a href="https://map.kakao.com/link/to/' + encodeURIComponent(name) + ',' + lat + ',' + lng + '" target="_blank" rel="noopener" style="flex:1;background:#fee500;color:#000;border-radius:8px;padding:11px;font-weight:700;font-size:13px;text-align:center;text-decoration:none;">🚗 길찾기</a>'
+    + '</div></div>';
+  document.body.appendChild(ov);
+  var close = function () { ov.remove(); };
+  ov.onclick = function (e) { if (e.target === ov) close(); };
+  ov.querySelector('#__locX').onclick = close;
+  ov.querySelector('#__locRv').onclick = function () { close(); openRoadview(lat, lng, name); };
+  // 지도 그리기 (모달이 붙은 뒤에)
+  setTimeout(function () {
+    try {
+      var pos = new kakao.maps.LatLng(lat, lng);
+      var m = new kakao.maps.Map(document.getElementById('__locMap'), { center: pos, level: 3 });
+      new kakao.maps.Marker({ position: pos, map: m });
+      m.relayout(); m.setCenter(pos);
+    } catch (e) { console.warn('위치 지도 오류', e); }
+  }, 60);
 }
 
 // 주소를 짧게 — 시/도·시군구를 떼고 읍면동부터 (목록에서 서로 구분되게)
