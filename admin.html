@@ -1626,12 +1626,20 @@ function saveVisibility() {
   const upd = {};
   for (const k in __visPending.events) { data.visibility.events[k] = __visPending.events[k]; upd['events/' + k] = __visPending.events[k]; }
   for (const k in __visPending.courses) { data.visibility.courses[k] = __visPending.courses[k]; upd['courses/' + k] = __visPending.courses[k]; }
-  __visPending = { events: {}, courses: {} };
-  if (typeof fbDb !== 'undefined') {
-    fbDb.ref('/visibility').update(upd)
-      .then(() => { refreshAll(); alert(`✅ 표시 설정 ${n}건 저장했습니다.\n운영자 화면에도 반영됩니다.`); })
-      .catch(err => alert('저장 실패: ' + err.message));
-  } else { refreshAll(); }
+  if (typeof fbDb === 'undefined') { refreshAll(); return; }
+  // 저장 중 표시 — 서버가 받았다고 확인해줄 때까지 기다린다 (예전엔 요청만 보내고 바로 "저장됨"이라 떴음)
+  const bar = document.getElementById('__visSaveBar');
+  if (bar) bar.innerHTML = '<span style="font-weight:800;font-size:14px;">💾 저장 중… 잠시만요</span>';
+  fbDb.ref('/visibility').update(upd)
+    .then(() => {
+      __visPending = { events: {}, courses: {} };   // 저장 성공한 뒤에만 보류 해제
+      refreshAll();
+      alert(`✅ 표시 설정 ${n}건 저장 완료.\n운영자 화면에도 반영됩니다.`);
+    })
+    .catch(err => {
+      renderVisSaveBar();                            // 실패하면 보류 유지 → 다시 저장 가능
+      alert('❌ 저장 실패: ' + err.message + '\n다시 시도해주세요.');
+    });
 }
 function cancelVisibility() {
   __visPending = { events: {}, courses: {} };
