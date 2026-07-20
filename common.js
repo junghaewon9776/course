@@ -2034,7 +2034,7 @@ function openLocationMap(lat, lng, title) {
     +   '<span style="font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📍 ' + name.replace(/</g, '&lt;') + '</span>'
     +   '<button id="__locX" style="flex:none;background:#e74c3c;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer;">✕ 닫기</button>'
     + '</div>'
-    + '<div id="__locMap" style="width:100%;height:320px;flex:1;"></div>'
+    + '<div id="__locMap" style="width:100%;height:340px;flex:none;"></div>'
     + '<div style="display:flex;gap:6px;padding:10px;">'
     +   '<button id="__locRv" style="flex:1;background:#16a085;color:#fff;border:none;border-radius:8px;padding:11px;font-weight:700;font-size:13px;cursor:pointer;">' + RV_ICON + ' 로드뷰</button>'
     +   '<a href="https://map.kakao.com/link/to/' + encodeURIComponent(name) + ',' + lat + ',' + lng + '" target="_blank" rel="noopener" style="flex:1;background:#fee500;color:#000;border-radius:8px;padding:11px;font-weight:700;font-size:13px;text-align:center;text-decoration:none;">🚗 길찾기</a>'
