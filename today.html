@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260715y"></script>
+<script src="common.js?v=20260715z"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3382,10 +3382,20 @@ function arqUpdateAddr(lat, lng) {
 }
 
 function submitAnchorRequest() {
+  const customReason0 = (document.getElementById('arqReasonCustom').value || '').trim();
+  if (!(__arqReason || customReason0)) { alert('거점 추가 이유를 선택해주세요'); return; }
+  const p0 = __arqMarker.getPosition();
+  // 📍 핑을 찍자마자 제출하면 주소 조회(비동기)가 아직 안 끝나 주소가 빈 채로 저장된다 → 여기서 한 번 더 채움
+  if (!__arqAddr) {
+    reverseGeocode(p0.getLat(), p0.getLng()).then(a => { __arqAddr = a || ''; __submitAnchorRequestNow(); });
+    return;
+  }
+  __submitAnchorRequestNow();
+}
+function __submitAnchorRequestNow() {
   const name = (document.getElementById('arqName').value || '').trim();
   const customReason = (document.getElementById('arqReasonCustom').value || '').trim();
   const reason = __arqReason || customReason;
-  if (!reason) { alert('거점 추가 이유를 선택해주세요'); return; }
 
   const p = __arqMarker.getPosition();
   const lat = p.getLat(), lng = p.getLng();
@@ -3669,7 +3679,17 @@ function submitComplaint() {
   const customType = (document.getElementById('cmpTypeCustom').value || '').trim();
   const type = __cmpType || customType;
   if (!type) { alert('민원 유형을 선택해주세요'); return; }
-
+  const p0 = __cmpMarker.getPosition();
+  // 📍 핑을 찍자마자 제출하면 주소 조회(비동기)가 아직 안 끝나 주소가 빈 채로 저장된다 → 여기서 한 번 더 채움
+  if (!__cmpAddr) {
+    reverseGeocode(p0.getLat(), p0.getLng()).then(a => { __cmpAddr = a || ''; __submitComplaintNow(); });
+    return;
+  }
+  __submitComplaintNow();
+}
+function __submitComplaintNow() {
+  const customType = (document.getElementById('cmpTypeCustom').value || '').trim();
+  const type = __cmpType || customType;
   const content = (document.getElementById('cmpContent').value || '').trim();
   const phone = (document.getElementById('cmpPhone').value || '').trim();
   const assignedCourseId = document.getElementById('cmpCourse').value || '';

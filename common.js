@@ -2055,6 +2055,25 @@ function openLocationMap(lat, lng, title) {
   } catch (e) { console.warn('위치 지도 오류', e); }
 }
 
+// 좌표 → 주소 (Promise). 핑을 찍자마자 제출하면 역지오코딩이 아직 안 끝나 주소가 비는데, 그때 저장 직전에 한 번 더 채우는 용도.
+function reverseGeocode(lat, lng, timeoutMs) {
+  return new Promise(function (resolve) {
+    var done = false;
+    var finish = function (v) { if (!done) { done = true; resolve(v || ''); } };
+    setTimeout(function () { finish(''); }, timeoutMs || 2500);   // 오래 걸리면 주소 없이 진행
+    ensureKakaoMaps(function () {
+      try {
+        new kakao.maps.services.Geocoder().coord2Address(Number(lng), Number(lat), function (res, st) {
+          if (st === kakao.maps.services.Status.OK && res && res[0]) {
+            var a = res[0];
+            finish((a.road_address && a.road_address.address_name) || (a.address && a.address.address_name) || '');
+          } else finish('');
+        });
+      } catch (e) { finish(''); }
+    });
+  });
+}
+
 // 주소를 짧게 — 시/도·시군구를 떼고 읍면동부터 (목록에서 서로 구분되게)
 // 예) "전남광주통합특별시 영광군 법성면 용성리 830-10" → "법성면 용성리 830-10"
 function __shortAddr(addr) {
