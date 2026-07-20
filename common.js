@@ -2044,15 +2044,15 @@ function openLocationMap(lat, lng, title) {
   ov.onclick = function (e) { if (e.target === ov) close(); };
   ov.querySelector('#__locX').onclick = close;
   ov.querySelector('#__locRv').onclick = function () { close(); openRoadview(lat, lng, name); };
-  // 지도 그리기 (모달이 붙은 뒤에)
-  setTimeout(function () {
-    try {
-      var pos = new kakao.maps.LatLng(lat, lng);
-      var m = new kakao.maps.Map(document.getElementById('__locMap'), { center: pos, level: 3 });
-      new kakao.maps.Marker({ position: pos, map: m });
-      m.relayout(); m.setCenter(pos);
-    } catch (e) { console.warn('위치 지도 오류', e); }
-  }, 60);
+  // 지도 그리기 — 화면이 바쁠 때 setTimeout이 밀려 안 그려지던 문제가 있어 즉시 생성
+  try {
+    var pos = new kakao.maps.LatLng(lat, lng);
+    var box = ov.querySelector('#__locMap');
+    var m = new kakao.maps.Map(box, { center: pos, level: 3 });
+    new kakao.maps.Marker({ position: pos, map: m });
+    // 모달이 막 붙어 크기 계산이 늦을 수 있으니 다음 프레임에 한 번 더 맞춤
+    requestAnimationFrame(function () { try { m.relayout(); m.setCenter(pos); } catch (e) {} });
+  } catch (e) { console.warn('위치 지도 오류', e); }
 }
 
 // 주소를 짧게 — 시/도·시군구를 떼고 읍면동부터 (목록에서 서로 구분되게)
