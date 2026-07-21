@@ -119,7 +119,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260716h"></script>
+<script src="common.js?v=20260716i"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1139,12 +1139,25 @@ function startSession(eventId, courseId, teamId, crew) {
     const __tpl = (getAlertConfig().startSay || '').trim();
     if (__tpl) {
       const __cnt = getCourseAnchors(__d, course && course.id).length;
+      // 인원: 조원 목록이 있으면 그걸로, 없으면 운전+보조
+      const __members = (crew && crew.members && crew.members.length)
+        ? crew.members.slice()
+        : [crew && crew.driver, crew && crew.assist].filter(Boolean);
+      const __people = __members.join(', ');
+      const __peopleNim = __members.length
+        ? (__members.length > 1
+            ? __members.slice(0, -1).join(', ') + ', ' + __members[__members.length - 1] + '님'
+            : __members[0] + '님')
+        : '';
       speakKo(__tpl
         .split('{코스}').join((course && course.name) || '')
         .split('{행사}').join((event && event.name) || '')
         .split('{거점수}').join(String(__cnt))
         .split('{운전}').join((crew && crew.driver) || '')
-        .split('{보조}').join((crew && crew.assist) || ''));
+        .split('{보조}').join((crew && crew.assist) || '')
+        .split('{조}').join((team && team.name) || '')
+        .split('{인원}').join(__people)
+        .split('{인원님}').join(__peopleNim));
     }
   } catch (e) {}
 

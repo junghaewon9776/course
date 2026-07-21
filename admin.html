@@ -351,7 +351,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260716h"></script>
+<script src="common.js?v=20260716i"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -605,15 +605,36 @@ function renderAlertConfig() {
     + `<div style="padding:7px 0;">
         <div style="font-size:13px;color:#2c3e50;margin-bottom:4px;">🔊 코스 시작 멘트</div>
         <div style="font-size:12px;color:${c.startSay ? '#16a085' : '#aaa'};background:#f7f9fa;border-radius:6px;padding:7px 9px;white-space:pre-wrap;">${c.startSay ? c.startSay.replace(/</g, '&lt;') : '(없음 — 음성 안 나감)'}</div>
-        ${c.startSay ? `<button class="small" style="background:#16a085;color:#fff;margin-top:5px;" onclick="testStartSay()">▶ 들어보기</button>` : ''}
+        ${c.startSay ? `<div style="font-size:11px;color:#888;margin-top:4px;">실제로는 이렇게 들립니다 → <b style="color:#2c3e50;">${__sampleSay(c.startSay).replace(/</g, '&lt;')}</b></div>
+        <button class="small" style="background:#16a085;color:#fff;margin-top:5px;" onclick="testStartSay()">▶ 들어보기</button>` : ''}
       </div>`;
 }
+// 멘트 입력칸에 치환값 넣기 (커서 위치에 삽입)
+function insertSayToken(token) {
+  const el = document.getElementById('fm_startSay');
+  if (!el) return;
+  const s = el.selectionStart != null ? el.selectionStart : el.value.length;
+  const e = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+  el.value = el.value.slice(0, s) + token + el.value.slice(e);
+  el.focus();
+  const p = s + token.length;
+  try { el.setSelectionRange(p, p); } catch (err) {}
+}
+
+// 멘트 안의 치환값을 예시 값으로 바꿔줌 (미리 들어보기용)
+function __sampleSay(t) {
+  return t.split('{조}').join('1조')
+    .split('{인원님}').join('홍길동, 김철수님')
+    .split('{인원}').join('홍길동, 김철수')
+    .split('{코스}').join('1코스').split('{행사}').join('방역행사')
+    .split('{거점수}').join('92').split('{운전}').join('홍길동').split('{보조}').join('김철수');
+}
+
 // 코스 시작 멘트 미리 들어보기 (실제 값 대신 예시로 채워서 읽음)
 function testStartSay() {
   const t = (getAlertConfig().startSay || '').trim();
   if (!t) { alert('멘트가 비어 있습니다.'); return; }
-  const say = t.split('{코스}').join('1코스').split('{행사}').join('방역행사')
-               .split('{거점수}').join('92').split('{운전}').join('홍길동').split('{보조}').join('김철수');
+  const say = __sampleSay(t);
   if (typeof speechSynthesis === 'undefined' && !(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech)) {
     alert('이 화면(브라우저)에서는 음성이 지원되지 않습니다.\n실제 앱에서는 나옵니다.\n\n내용: ' + say);
     return;
@@ -631,7 +652,18 @@ function editAlertConfig() {
     { key: 'anchorRadius', label: '거점 자동완료 반경 (m)', type: 'number', value: String(c.anchorRadius), hint: '기본 70 · 좁히면 거점에 더 가까이 가야 체크됨 (지나가다 잘못 체크되면 줄이세요)' },
     { key: 'anchorDwellSec', label: '거점 자동완료 머무는 시간 (초)', type: 'number', value: String(c.anchorDwellSec), hint: '기본 1 · 늘리면 그만큼 머물러야 체크됨 (그냥 지나가는데 체크되면 늘리세요)' },
     { key: 'complaintRadius', label: '민원 알림 반경 (m)', type: 'number', value: String(c.complaintRadius), hint: '기본 50 · 민원 위치에 이만큼 접근하면 경고' },
-    { key: 'startSay', label: '🔊 코스 시작 멘트', type: 'textarea', value: c.startSay, hint: '코스 시작할 때 읽어줍니다 · 빈칸이면 음성 없음<br>쓸 수 있는 말: {코스} {행사} {거점수} {운전} {보조}' }
+    { key: 'startSay', label: '🔊 코스 시작 멘트', type: 'textarea', value: c.startSay,
+      hint: '코스 시작할 때 읽어줍니다 · 빈칸이면 음성 없음<br>'
+        + '<b>아래를 눌러 넣으세요</b> (실제 값으로 바뀝니다)<br>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">'
+        + [['{조}','1조'],['{인원님}','홍길동, 김철수님'],['{인원}','홍길동, 김철수'],
+           ['{코스}','1코스'],['{행사}','방역행사'],['{거점수}','92'],['{운전}','홍길동'],['{보조}','김철수']]
+            .map(function (t) {
+              return '<button type="button" onclick="insertSayToken(\'' + t[0] + '\')" title="예: ' + t[1] + '"'
+                + ' style="background:#eef4fb;color:#2980b9;border:1px solid #cfe0f0;border-radius:6px;padding:4px 8px;font-size:12px;font-weight:700;cursor:pointer;">'
+                + t[0] + '</button>';
+            }).join('')
+        + '</div>' }
   ], r => {
     const data = loadData();
     data.alertConfig = {
