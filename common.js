@@ -2005,7 +2005,8 @@ function getAlertConfig() {
   return {
     anchorRadius: Number(c.anchorRadius) > 0 ? Number(c.anchorRadius) : 70,     // 거점 자동완료 반경(m)
     anchorDwellSec: Number(c.anchorDwellSec) >= 0 ? Number(c.anchorDwellSec) : 1, // 머무는 시간(초)
-    complaintRadius: Number(c.complaintRadius) > 0 ? Number(c.complaintRadius) : 50 // 민원 알림 반경(m)
+    complaintRadius: Number(c.complaintRadius) > 0 ? Number(c.complaintRadius) : 50, // 민원 알림 반경(m)
+    startSay: (c.startSay != null) ? String(c.startSay) : '{코스} 시작합니다. 거점 {거점수}곳입니다. 안전운전 하세요.'  // 코스 시작 멘트(빈칸이면 음성 없음)
   };
 }
 

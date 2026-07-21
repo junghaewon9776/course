@@ -351,7 +351,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260716g"></script>
+<script src="common.js?v=20260716h"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -601,20 +601,44 @@ function renderAlertConfig() {
   el.innerHTML =
     row('거점 자동완료 반경', c.anchorRadius + 'm', '이 안에 들어가면 체크')
     + row('거점 자동완료 머묾', c.anchorDwellSec + '초', '이만큼 머물러야 체크')
-    + row('민원 알림 반경', c.complaintRadius + 'm', '이 안에 들어가면 경고');
+    + row('민원 알림 반경', c.complaintRadius + 'm', '이 안에 들어가면 경고')
+    + `<div style="padding:7px 0;">
+        <div style="font-size:13px;color:#2c3e50;margin-bottom:4px;">🔊 코스 시작 멘트</div>
+        <div style="font-size:12px;color:${c.startSay ? '#16a085' : '#aaa'};background:#f7f9fa;border-radius:6px;padding:7px 9px;white-space:pre-wrap;">${c.startSay ? c.startSay.replace(/</g, '&lt;') : '(없음 — 음성 안 나감)'}</div>
+        ${c.startSay ? `<button class="small" style="background:#16a085;color:#fff;margin-top:5px;" onclick="testStartSay()">▶ 들어보기</button>` : ''}
+      </div>`;
 }
+// 코스 시작 멘트 미리 들어보기 (실제 값 대신 예시로 채워서 읽음)
+function testStartSay() {
+  const t = (getAlertConfig().startSay || '').trim();
+  if (!t) { alert('멘트가 비어 있습니다.'); return; }
+  const say = t.split('{코스}').join('1코스').split('{행사}').join('방역행사')
+               .split('{거점수}').join('92').split('{운전}').join('홍길동').split('{보조}').join('김철수');
+  if (typeof speechSynthesis === 'undefined' && !(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech)) {
+    alert('이 화면(브라우저)에서는 음성이 지원되지 않습니다.\n실제 앱에서는 나옵니다.\n\n내용: ' + say);
+    return;
+  }
+  try {
+    const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+    if (P) { P.stop(); P.speak({ text: say, lang: 'ko-KR', rate: 1.0, volume: 1.0 }); }
+    else { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(say); u.lang = 'ko-KR'; speechSynthesis.speak(u); }
+  } catch (e) { alert('음성 재생 실패: ' + e.message); }
+}
+
 function editAlertConfig() {
   const c = getAlertConfig();
   openFormModal('🔔 알림 범위 설정', [
     { key: 'anchorRadius', label: '거점 자동완료 반경 (m)', type: 'number', value: String(c.anchorRadius), hint: '기본 70 · 좁히면 거점에 더 가까이 가야 체크됨 (지나가다 잘못 체크되면 줄이세요)' },
     { key: 'anchorDwellSec', label: '거점 자동완료 머무는 시간 (초)', type: 'number', value: String(c.anchorDwellSec), hint: '기본 1 · 늘리면 그만큼 머물러야 체크됨 (그냥 지나가는데 체크되면 늘리세요)' },
-    { key: 'complaintRadius', label: '민원 알림 반경 (m)', type: 'number', value: String(c.complaintRadius), hint: '기본 50 · 민원 위치에 이만큼 접근하면 경고' }
+    { key: 'complaintRadius', label: '민원 알림 반경 (m)', type: 'number', value: String(c.complaintRadius), hint: '기본 50 · 민원 위치에 이만큼 접근하면 경고' },
+    { key: 'startSay', label: '🔊 코스 시작 멘트', type: 'textarea', value: c.startSay, hint: '코스 시작할 때 읽어줍니다 · 빈칸이면 음성 없음<br>쓸 수 있는 말: {코스} {행사} {거점수} {운전} {보조}' }
   ], r => {
     const data = loadData();
     data.alertConfig = {
       anchorRadius: Math.max(5, Math.min(500, parseInt(r.anchorRadius, 10) || 70)),
       anchorDwellSec: Math.max(0, Math.min(60, parseInt(r.anchorDwellSec, 10) || 0)),
-      complaintRadius: Math.max(5, Math.min(500, parseInt(r.complaintRadius, 10) || 50))
+      complaintRadius: Math.max(5, Math.min(500, parseInt(r.complaintRadius, 10) || 50)),
+      startSay: (r.startSay || '').trim()
     };
     saveData(data); refreshAll();
     alert('✅ 저장됐습니다.\n운영자 폰은 새로고침(앱 재실행) 후 적용됩니다.');
