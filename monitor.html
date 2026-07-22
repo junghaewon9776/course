@@ -193,7 +193,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260716p"></script>
+<script src="common.js?v=20260716q"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -1741,7 +1741,7 @@ function render() {
         + `<button class="small" style="background:#e67e22;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();addLogPhoto(${i},'receipt')">🧾 영수증</button>`
       : '';
     const mgmtBtns = (__isStaff
-      ? `<button class="small" style="background:#8e44ad;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();editLogCrew(${i})">✏ 운영자</button>`
+      ? `<button class="small" style="background:#8e44ad;font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();editLogCrew(${i})">✏ 수정</button>`
         + `<button class="small danger" style="font-size:12px;padding:6px 11px;" onclick="event.stopPropagation();hideLog('${(l.key||'').replace(/'/g,"\\'")}')">🗑 삭제</button>`
       : '') + photoBtns;
     return `
@@ -2299,18 +2299,55 @@ function editLogCrew(i) {
   const logs = getFilteredLogs();
   const l = logs[i];
   if (!l) { alert('기록을 찾지 못했습니다. 새로고침 후 다시 시도하세요.'); return; }
+  const data0 = loadData();
+  const event = getEvent(data0, l.eventId);
+  const course = getCourse(data0, l.courseId);
   const curDriver = (l.crew && l.crew.driver) || '';
   const curAssist = (l.crew && l.crew.assist) || '';
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
-  const nd = prompt('운전자 이름 (잘못 기입된 경우 바르게 수정)', curDriver);
-  if (nd == null) return;
-  const newDriver = nd.trim();
-  const na = prompt('보조자 이름 (여러 명이면 쉼표로 구분, 없으면 비워두기)', curAssist);
-  if (na == null) return;
-  const newAssist = na.split(',').map(s => s.trim()).filter(Boolean).join(', ');
+  // 한 창에서 운전/보조를 같이 수정 (앱 웹뷰에선 prompt 기본값이 안 채워져 빈칸으로 보이던 문제도 해결)
+  const oldM = document.getElementById('crewEditModal'); if (oldM) oldM.remove();
+  const modal = document.createElement('div');
+  modal.id = 'crewEditModal';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;width:100%;max-width:380px;padding:18px;">
+      <div style="font-weight:800;font-size:17px;margin-bottom:3px;">✏ 누가 운행했는지 수정</div>
+      <div style="font-size:12px;color:#777;margin-bottom:14px;">${esc(event && event.name)} · ${esc(course && course.name)} · ${esc(l.date)}</div>
+      <label style="display:block;font-size:13px;font-weight:700;margin-bottom:4px;">운전한 사람</label>
+      <input id="ceDriver" type="text" value="${esc(curDriver)}" placeholder="이름" autocomplete="off"
+             style="width:100%;padding:11px;border:1px solid #bbb;border-radius:8px;font-size:16px;box-sizing:border-box;margin-bottom:13px;">
+      <label style="display:block;font-size:13px;font-weight:700;margin-bottom:4px;">같이 탄 사람 (보조) <span style="font-weight:400;color:#888;">— 여러 명이면 쉼표로</span></label>
+      <input id="ceAssist" type="text" value="${esc(curAssist)}" placeholder="예: 홍길동, 김철수" autocomplete="off"
+             style="width:100%;padding:11px;border:1px solid #bbb;border-radius:8px;font-size:16px;box-sizing:border-box;margin-bottom:8px;">
+      <div style="font-size:12px;color:#888;margin-bottom:14px;">바꾸면 통계·계급에도 그대로 반영됩니다.</div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="saveLogCrew(${i})" style="flex:1;padding:13px;background:#27ae60;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;">저장</button>
+        <button onclick="document.getElementById('crewEditModal').remove()" style="flex:1;padding:13px;background:#34495e;color:#fff;border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;">취소</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => { const el = document.getElementById('ceDriver'); if (el) { el.focus(); el.select(); } }, 60);
+}
 
-  if (newDriver === curDriver && newAssist === curAssist) { alert('변경할 내용이 없습니다.'); return; }
-  if (!confirm('이 운행기록의 운영자를 바꿉니다.\n\n운전: ' + (curDriver || '-') + ' → ' + (newDriver || '-') + '\n보조: ' + (curAssist || '-') + ' → ' + (newAssist || '-') + '\n\n통계·계급에도 반영됩니다. 진행할까요?')) return;
+// 위 모달의 [저장]
+function saveLogCrew(i) {
+  const role = getMyRole();
+  if (!['super', 'admin'].includes(role)) { alert('운영자 수정은 관리자(admin) 이상만 가능합니다.'); return; }
+  const dEl = document.getElementById('ceDriver'), aEl = document.getElementById('ceAssist');
+  if (!dEl || !aEl) return;
+  const newDriver = dEl.value.trim();
+  const newAssist = aEl.value.split(',').map(s => s.trim()).filter(Boolean).join(', ');
+
+  const logs = getFilteredLogs();
+  const l = logs[i];
+  if (!l) { alert('기록을 찾지 못했습니다. 새로고침 후 다시 시도하세요.'); return; }
+  const curDriver = (l.crew && l.crew.driver) || '';
+  const curAssist = (l.crew && l.crew.assist) || '';
+  const closeM = () => { const m = document.getElementById('crewEditModal'); if (m) m.remove(); };
+  if (newDriver === curDriver && newAssist === curAssist) { closeM(); return; }   // 바뀐 게 없으면 그냥 닫기
 
   const data = loadData();
   const target = l.key
@@ -2331,8 +2368,8 @@ function editLogCrew(i) {
   if ('note' in target && (target.note || '').trim() === curDriver) target.note = newDriver;
 
   saveData(data);
+  closeM();
   render();
-  alert('✅ 운영자 수정 완료\n\n운전: ' + (newDriver || '-') + (newAssist ? '\n보조: ' + newAssist : ''));
 }
 
 function restoreAllLogs() {
