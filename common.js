@@ -1206,23 +1206,25 @@ function checkPromotionForNames(names) {
       fbDb.ref(path).once('value').then(snap => {
         const prev = snap.val();
         if (prev == null) { fbDb.ref(path).set(st.rankIndex); return; }   // 최초 기록은 기준만 저장(푸시 X)
-        if (st.rankIndex > prev) {
-          fbDb.ref(path).set(st.rankIndex);
-          // 같은 계급으로 이미 알림을 보냈으면 다시 안 보냄 (기준값이 오르내려도 스팸 안 되게)
-          fbDb.ref(pushedPath).once('value').then(ps => {
-            const pushedMax = (ps.val() == null) ? -1 : ps.val();
-            if (st.rankIndex <= pushedMax) return;
-            fbDb.ref(pushedPath).set(st.rankIndex);
-            let uid = ''; for (const k in users) { if (users[k] && (users[k].name || '').trim() === name) { uid = k; break; } }
-            const rk = st.rank || {};
-            const title = '🎖 진급을 축하합니다!';
-            const body = name + '님이 ' + (rk.name || '') + ' 계급으로 진급했습니다! (' + st.xp + ' XP)';
-            if (uid) sendAppPush(title, body, 'all', null, uid);   // 본인에게(uid로 좁힘)
-            sendAppPush('🎖 진급 소식', name + '님 → ' + (rk.name || '') + ' 진급!', 'all', null, '');  // 전체 축하
-          }).catch(() => {});
-        } else if (st.rankIndex < prev) {
-          fbDb.ref(path).set(st.rankIndex);   // 기준이 실제보다 높게 저장돼 있으면 조용히 보정 (과거 잘못된 계산/설정 변경 대응)
-        }
+        if (st.rankIndex < prev) { fbDb.ref(path).set(st.rankIndex); return; }   // 기준이 실제보다 높으면 조용히 보정(과거 잘못된 계산/설정 변경 대응)
+        if (st.rankIndex === prev) return;   // 변화 없음
+        // 여기부터 실제 상승 후보 → 기준 갱신
+        fbDb.ref(path).set(st.rankIndex);
+        // ⚛️ 원자적 중복 차단: 여러 폰·여러 저장이 거의 동시에 확인해도
+        //    pushedMax를 실제로 끌어올린 '단 하나'의 클라이언트만 알림을 쏜다.
+        //    (예전엔 once로 읽고 set 하는 사이에 다른 폰이 끼어들어 같은 진급이 여러 번 발송됨 → '진급 아닌데 막 뜸')
+        fbDb.ref(pushedPath).transaction(cur => {
+          if (cur != null && cur >= st.rankIndex) return;   // 이미 이 계급(이상)까지 알림함 → 중단
+          return st.rankIndex;
+        }, (err, committed) => {
+          if (err || !committed) return;   // 다른 폰이 먼저 쐈거나 중단됨 → 아무것도 안 함
+          let uid = ''; for (const k in users) { if (users[k] && (users[k].name || '').trim() === name) { uid = k; break; } }
+          const rk = st.rank || {};
+          const title = '🎖 진급을 축하합니다!';
+          const body = name + '님이 ' + (rk.name || '') + ' 계급으로 진급했습니다! (' + st.xp + ' XP)';
+          if (uid) sendAppPush(title, body, 'all', null, uid);   // 본인에게(uid로 좁힘)
+          sendAppPush('🎖 진급 소식', name + '님 → ' + (rk.name || '') + ' 진급!', 'all', null, '');  // 전체 축하
+        }, false);
       }).catch(() => {});
     });
   } catch (e) { console.warn('진급 확인 오류', e); }
