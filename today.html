@@ -120,7 +120,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260716l"></script>
+<script src="common.js?v=20260716m"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -176,6 +176,8 @@ dateLabel.textContent = todayStr() + ' (' + ['일','월','화','수','목','금'
 window.onDataChanged = () => { if (!currentSession) renderAssignments(); updateMeIndicator(); };
 
 let __mapInitialFitDone = false;
+let __startZoomApplied = false;   // 코스 시작/재진입 시 '최대 확대'를 딱 한 번만 적용 (이후 사용자 줌 유지)
+const MAP_MAX_ZOOM_LEVEL = 3;     // 카카오: 숫자 작을수록 확대. minLevel과 동일 = 가장 크게
 let _initStarted = false;
 
 // ────── 로테이션: 코스별 현재 배정 조 ──────
@@ -1096,6 +1098,7 @@ function startSession(eventId, courseId, teamId, crew) {
   const anchorRows = document.getElementById('anchorRows');
   if (anchorRows) anchorRows.parentElement.style.display = '';
   __mapInitialFitDone = false; // 새 세션 시작 → 첫 렌더링 때 줌/위치 초기화
+  __startZoomApplied = false;   // 최대 확대 다시 적용
 
   const event = getEvent(data, eventId);
   const course = getCourse(data, courseId);
@@ -1373,6 +1376,8 @@ function resumeSession(s) {
   const ar = document.getElementById('anchorRows');
   if (ar) ar.parentElement.style.display = '';
   __mapInitialFitDone = false;
+  __startZoomApplied = false;   // 재진입 → 최대 확대 + 따라가기 다시 적용
+  followMode = true;
   const data = loadData();
   const event = getEvent(data, s.eventId);
   const course = getCourse(data, s.courseId);
@@ -1869,8 +1874,10 @@ function renderMapForSession() {
   if (!__mapInitialFitDone) {
     if (currentPos) {
       map.setCenter(new kakao.maps.LatLng(currentPos.lat, currentPos.lng));
+      map.setLevel(MAP_MAX_ZOOM_LEVEL);   // 시작/재진입 → 최대 확대
+      __startZoomApplied = true;
     } else if (anchors.length) {
-      map.setBounds(bounds);
+      map.setBounds(bounds);   // 아직 GPS 없음 → 일단 코스 전체. GPS 잡히면 아래에서 최대 확대
     }
     __mapInitialFitDone = true;
   }
@@ -2786,6 +2793,8 @@ function onGpsUpdate(pos) {
     // 따라가기 모드 + 일시정지 아니면 지도 중심 이동
     if (followMode && Date.now() >= followPauseUntil) {
       map.setCenter(p);
+      // 시작/재진입 후 첫 GPS → 최대 확대를 딱 한 번만 (이후 사용자가 줄이면 그 상태 유지)
+      if (!__startZoomApplied) { map.setLevel(MAP_MAX_ZOOM_LEVEL); __startZoomApplied = true; }
     }
     // 내비모드면 진행방향 위로
     if (naviMode && heading !== null && !isNaN(heading)) {
@@ -3891,7 +3900,7 @@ function showHistoryModal(type) {
             <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
               ${phone ? '<a href="tel:' + phoneTel + '" style="display:inline-flex;align-items:center;gap:4px;background:#3498db;color:#fff;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;text-decoration:none;">📞 ' + phone.replace(/</g,'&lt;') + '</a>' : ''}
               ${typeof it.lat === 'number' ? '<a href="https://map.kakao.com/link/to/민원위치,' + it.lat + ',' + it.lng + '" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#e74c3c;color:#fff;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;text-decoration:none;">🧭 네비</a>' : ''}
-              ${typeof it.lat === 'number' ? '<button onclick="openLocationMap(' + it.lat + ',' + it.lng + ',\'민원 위치\')" style="display:inline-flex;align-items:center;gap:4px;background:#e67e22;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">📍 지도</button>' : ''}
+              ${typeof it.lat === 'number' ? '<button onclick="opMapGoTo(' + it.lat + ',' + it.lng + ',\'민원 위치\')" style="display:inline-flex;align-items:center;gap:4px;background:#e67e22;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">📍 지도</button>' : ''}
               ${typeof it.lat === 'number' ? '<button onclick="openRoadview(' + it.lat + ',' + it.lng + ',\'민원 위치\')" style="display:inline-flex;align-items:center;gap:4px;background:#16a085;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">' + RV_ICON + ' 로드뷰</button>' : ''}
             </div>
           </div>`;
@@ -3907,7 +3916,7 @@ function showHistoryModal(type) {
             ${it.requestedBy ? '<div style="font-size:11px;color:#888;">요청: ' + (it.requestedBy||'').replace(/</g,'&lt;') + '</div>' : ''}
             <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
               ${typeof it.lat === 'number' ? '<a href="https://map.kakao.com/link/to/요청위치,' + it.lat + ',' + it.lng + '" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#e74c3c;color:#fff;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;text-decoration:none;">🧭 네비</a>' : ''}
-              ${typeof it.lat === 'number' ? '<button onclick="openLocationMap(' + it.lat + ',' + it.lng + ',\'요청 위치\')" style="display:inline-flex;align-items:center;gap:4px;background:#e67e22;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">📍 지도</button>' : ''}
+              ${typeof it.lat === 'number' ? '<button onclick="opMapGoTo(' + it.lat + ',' + it.lng + ',\'요청 위치\')" style="display:inline-flex;align-items:center;gap:4px;background:#e67e22;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">📍 지도</button>' : ''}
               ${typeof it.lat === 'number' ? '<button onclick="openRoadview(' + it.lat + ',' + it.lng + ',\'요청 위치\')" style="display:inline-flex;align-items:center;gap:4px;background:#16a085;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;">' + RV_ICON + ' 로드뷰</button>' : ''}
             </div>
           </div>`;
@@ -3932,6 +3941,29 @@ function showHistoryModal(type) {
     </div>
   `;
   document.body.appendChild(modal);
+}
+
+// 민원/거점요청 '📍 지도' → 별도 지도 모달 대신 '오늘의운영 메인 지도'를 그 위치로 이동
+let __opTempMarker = null, __opTempIw = null;
+function opMapGoTo(lat, lng, title) {
+  const hm = document.getElementById('historyModal'); if (hm) hm.remove();   // 민원내역 닫고
+  if (!map) { openLocationMap(lat, lng, title); return; }   // 코스 시작 전 등 메인 지도가 없으면 기존 모달로
+  const pos = new kakao.maps.LatLng(lat, lng);
+  if (__opTempMarker) { try { __opTempMarker.setMap(null); } catch (e) {} __opTempMarker = null; }
+  if (__opTempIw) { try { __opTempIw.close(); } catch (e) {} __opTempIw = null; }
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 26 34"><path d="M13 0 C6 0 0 6 0 13 C0 22 13 34 13 34 C13 34 26 22 26 13 C26 6 20 0 13 0 Z" fill="#e67e22" stroke="white" stroke-width="2"/><circle cx="13" cy="13" r="5" fill="white"/></svg>';
+  __opTempMarker = new kakao.maps.Marker({
+    position: pos, map, zIndex: 30,
+    image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg), new kakao.maps.Size(34, 44), { offset: new kakao.maps.Point(17, 44) })
+  });
+  __opTempIw = new kakao.maps.InfoWindow({ zIndex: 1000, removable: true,
+    content: '<div style="padding:7px 10px;font-size:12px;font-weight:700;color:#e67e22;">📍 ' + String(title || '위치').replace(/</g, '&lt;') + '</div>' });
+  __opTempIw.open(map, __opTempMarker);
+  map.setLevel(3);
+  map.panTo(pos);
+  setTimeout(() => { try { map.relayout(); map.panTo(pos); map.panBy(0, -100); } catch (e) {} }, 250);
+  const mapEl = document.getElementById('map');
+  if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 </script>
 </body>
