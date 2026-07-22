@@ -99,7 +99,8 @@
     </div>
 
     <div class="card" id="progressCard">
-      <h2 id="progressTitle">거점 진행</h2>
+      <h2 id="progressTitle" style="margin-bottom:2px;">거점 진행</h2>
+      <div id="progressStat" style="display:none;font-size:14px;font-weight:800;color:#2c3e50;margin:0 0 8px;padding:8px 10px;background:#eef4fb;border:1px solid #cfe0f0;border-radius:8px;"></div>
       <div id="anchorScroll" style="max-height:340px;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #eee;border-radius:8px;" data-open="0">
         <div id="anchorRows"></div>
         <div id="pinRows" style="display:none;"></div>
@@ -119,7 +120,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260716k"></script>
+<script src="common.js?v=20260716l"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1401,6 +1402,39 @@ function toggleAnchorExpand() {
   if (btn) btn.textContent = open ? '▼ 거점 전체 펼치기' : '▲ 접기';
 }
 
+// 진행중: 지금까지 이동한 거리(km) 계산
+function currentTrackKm() {
+  if (!currentSession) return 0;
+  const t = currentSession.track || [];
+  let d = 0;
+  for (let i = 1; i < t.length; i++) d += distance(t[i-1][0], t[i-1][1], t[i][0], t[i][1]);
+  return d / 1000;
+}
+// 진행중 상태 한 줄: 거점 몇 개 · 몇 km · 몇 분
+function updateProgressStat() {
+  const el = document.getElementById('progressStat');
+  if (!el) return;
+  if (!currentSession || currentSession.finishedAt) { el.style.display = 'none'; return; }
+  const km = currentTrackKm();
+  const kmTxt = '🚗 ' + (km >= 10 ? Math.round(km) : km.toFixed(1)) + ' km';
+  let mainTxt;
+  if (isPinCourse()) {
+    const pinCnt = (currentSession.pins || []).length;
+    mainTxt = '📍 핑 ' + pinCnt + '개';
+  } else {
+    const data = loadData();
+    const total = getCourseAnchors(data, currentSession.courseId).length;
+    const done = (currentSession.completions || []).length;
+    mainTxt = '📍 거점 ' + done + ' / ' + total;
+  }
+  let minTxt = '';
+  if (currentSession.startedAt) {
+    const mins = Math.max(0, Math.round((Date.now() - currentSession.startedAt) / 60000));
+    minTxt = ' · ⏱ ' + mins + '분';
+  }
+  el.innerHTML = mainTxt + ' &nbsp;·&nbsp; ' + kmTxt + minTxt;
+  el.style.display = 'block';
+}
 function renderAnchorRows() {
   const data = loadData();
   const anchors = getCourseAnchors(data, currentSession.courseId);
@@ -1431,6 +1465,7 @@ function renderAnchorRows() {
       btn.style.display = over ? '' : 'none';
     }, 0);
   } catch (e) {}
+  updateProgressStat();
 }
 
 // ───────── 📍 전단지 핑 (현장에서 직접 찍는 마커) ─────────
@@ -1453,6 +1488,7 @@ function applyPinModeUI() {
   show('pinRows', on);
   const title = document.getElementById('progressTitle');
   if (title) title.textContent = on ? '📍 핑 기록' : '거점 진행';
+  updateProgressStat();
   if (on) renderPinRows();
   __pastPinsRendered = false;   // 시작/재개 시 이전 핑 새로 그리도록
 }
@@ -1540,6 +1576,7 @@ function renderPinRows() {
         <button class="small gray" onclick="deletePin('${p.id}')">🗑</button>
       </div>`;
   }).join('');
+  updateProgressStat();
 }
 // 핑 마커를 지도에 렌더 (pinMarkers 별도 관리)
 function renderPins() {
@@ -2763,6 +2800,7 @@ function onGpsUpdate(pos) {
       currentSession.track.push([lat, lng, Date.now()]);
       saveSession();
       renderMapForSession();
+      updateProgressStat();
     }
     // 라이브 publish (10초 throttle 내장)
     publishCurrentLive();

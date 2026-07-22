@@ -109,7 +109,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260716k"></script>
+<script src="common.js?v=20260716l"></script>
 <script>
 window.onAuthSuccess = () => onDataReady(refreshAll);
 window.onDataChanged = () => refreshAll();
@@ -815,6 +815,7 @@ function renderMembers() {
             ? `<button class="small gray" onclick="resetMemberPin('${m.id}')">PIN</button>`
             : `<button class="small success" onclick="makeMemberAccount('${m.id}')">계정</button>`}
           <button class="small" onclick="editMember('${m.id}')">수정</button>
+          <button class="small" style="background:#8e44ad;" onclick="correctMemberName('${m.id}')">이름정정</button>
           <button class="small danger" onclick="deleteMember('${m.id}')">삭제</button>
         </span>
       </div>
@@ -1320,6 +1321,89 @@ function saveMemberForm(id) {
   }
   saveData(data);
   document.getElementById('memberFormGate').remove();
+}
+
+// 이름 오타 정정 — 회원 이름뿐 아니라 과거 기록 전체("옛이름"→"새이름")를 함께 바꿈. 관리자 이상만.
+function correctMemberName(id) {
+  let role = 'admin'; try { role = getMyRole() || 'admin'; } catch (e) {}
+  if (role !== 'admin' && role !== 'super') { alert('이름 정정은 관리자(admin) 이상만 가능합니다.'); return; }
+
+  const data = loadData();
+  const m = (data.members || []).find(x => x.id === id);
+  if (!m) return;
+  const oldName = (m.name || '').trim();
+  const input = prompt('정확한 이름을 입력하세요.\n\n예전 운행기록·통계·계급 등에 남아있는\n"' + oldName + '" 을(를) 모두 새 이름으로 바꿉니다.', oldName);
+  if (input == null) return;
+  const newName = input.trim();
+  if (!newName) { alert('이름은 비울 수 없습니다.'); return; }
+  if (newName === oldName) { alert('이름이 같습니다. 변경할 내용이 없습니다.'); return; }
+
+  // 다른 회원이 같은(옛) 이름이면 그 사람 기록까지 함께 바뀌므로 경고
+  const dupOther = (data.members || []).some(x => x.id !== id && (x.name || '').trim() === oldName);
+  if (dupOther && !confirm('⚠️ "' + oldName + '" 이름을 가진 회원이 또 있습니다.\n\n그대로 진행하면 그 사람의 과거 기록까지 "' + newName + '" 으로 바뀝니다.\n\n정말 진행할까요?')) return;
+
+  const eq = s => String(s == null ? '' : s).trim() === oldName;
+  const swapList = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean)
+                        .map(x => x === oldName ? newName : x).join(', ');
+  const swapArr = arr => { let ch = false; const out = (arr || []).map(x => { if ((x == null ? '' : String(x)).trim() === oldName) { ch = true; return newName; } return x; }); return { ch, out }; };
+
+  let n = 0;
+  // ① 회원 본인
+  m.name = newName; n++;
+  // ② 운행기록(운전/보조/조원배열/기록메모)
+  (data.logs || []).forEach(l => {
+    if (!l) return;
+    if (l.crew) {
+      if (eq(l.crew.driver)) { l.crew.driver = newName; n++; }
+      if (l.crew.assist) { const after = swapList(l.crew.assist); if (after !== l.crew.assist) { l.crew.assist = after; n++; } }
+      if (Array.isArray(l.crew.members)) { const r = swapArr(l.crew.members); if (r.ch) { l.crew.members = r.out; n++; } }
+    }
+    if (Array.isArray(l.crewNames)) { const r = swapArr(l.crewNames); if (r.ch) { l.crewNames = r.out; n++; } }
+    if (eq(l.note)) { l.note = newName; n++; }
+    if (eq(l.driver)) { l.driver = newName; n++; }
+  });
+  // ③ 민원/게시글(작성자·같이 탄 사람·댓글 작성자)
+  (data.inquiries || []).forEach(q => {
+    if (!q) return;
+    if (eq(q.writer)) { q.writer = newName; n++; }
+    if (Array.isArray(q.crewNames)) { const r = swapArr(q.crewNames); if (r.ch) { q.crewNames = r.out; n++; } }
+    (q.comments || []).forEach(c => { if (c && eq(c.writer)) { c.writer = newName; n++; } });
+  });
+  // ④ 사진(같이 탄 사람·올린이·메모)
+  const ph = data.photos || {};
+  Object.keys(ph).forEach(k => {
+    const p = ph[k]; if (!p) return;
+    if (Array.isArray(p.crewNames)) { const r = swapArr(p.crewNames); if (r.ch) { p.crewNames = r.out; n++; } }
+    if (eq(p.uploader)) { p.uploader = newName; n++; }
+    if (eq(p.note)) { p.note = newName; n++; }
+  });
+  // ⑤ 차량 기본 운전/보조 이름(외부인원)
+  (data.vehicles || []).forEach(v => {
+    if (!v) return;
+    if (eq(v.defaultDriverName)) { v.defaultDriverName = newName; n++; }
+    if (eq(v.defaultAssistName)) { v.defaultAssistName = newName; n++; }
+  });
+
+  if (!confirm('"' + oldName + '" → "' + newName + '"\n\n총 ' + n + '곳을 바꿉니다. 진행할까요?')) return;
+
+  saveData(data);
+
+  // ⑥ Firebase 계급 기준키 이동(옛이름 키 → 새이름 키) — 진급 알림/기준 유지
+  try {
+    if (typeof fbDb !== 'undefined' && typeof cmRankKey === 'function') {
+      const oldK = cmRankKey(oldName), newK = cmRankKey(newName);
+      ['rankState2', 'rankPushed'].forEach(node => {
+        fbDb.ref('/' + node + '/' + oldK).once('value').then(s => {
+          const val = s.val();
+          if (val == null) return;
+          fbDb.ref('/' + node + '/' + newK).set(val);   // 새 키에 그대로
+          fbDb.ref('/' + node + '/' + oldK).remove();    // 옛 키 제거
+        }).catch(() => {});
+      });
+    }
+  } catch (e) {}
+
+  alert('✅ 이름 정정 완료\n\n"' + oldName + '" → "' + newName + '"\n' + n + '곳 변경.\n\n각 폰은 앱을 껐다 켜면 반영됩니다.');
 }
 
 function deleteMember(id) {
