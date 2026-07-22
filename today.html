@@ -120,7 +120,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260716m"></script>
+<script src="common.js?v=20260716n"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -173,7 +173,17 @@ const dateLabel = document.getElementById('dateLabel');
 dateLabel.textContent = todayStr() + ' (' + ['일','월','화','수','목','금','토'][new Date().getDay()] + ')';
 
 // Firebase 동기화
-window.onDataChanged = () => { if (!currentSession) renderAssignments(); updateMeIndicator(); };
+let __lastFullMapRender = 0;
+window.onDataChanged = () => {
+  if (!currentSession) {
+    renderAssignments();
+  } else {
+    // 운영 중 데이터(민원·요청 등) 변경 → 지도 마커 갱신. 단 15초에 한 번만(전체 DB가 자주 바뀌어 과도한 재렌더 방지)
+    const now = Date.now();
+    if (now - __lastFullMapRender > 15000) { __lastFullMapRender = now; try { renderMapForSession(); } catch (e) {} }
+  }
+  updateMeIndicator();
+};
 
 let __mapInitialFitDone = false;
 let __startZoomApplied = false;   // 코스 시작/재진입 시 '최대 확대'를 딱 한 번만 적용 (이후 사용자 줌 유지)
@@ -1996,6 +2006,17 @@ function renderMapForSession() {
   if (isPinCourse() && !__pastPinsRendered) { renderPastPins(); __pastPinsRendered = true; }
 }
 
+// 🪶 주행 중(5m 이동마다) '가벼운' 궤적선만 갱신 — 거점/민원/마커 통째 재생성 안 함(장시간 렉·강제종료 방지)
+function updateTrackLine() {
+  if (!map || !currentSession) return;
+  if (isPinCourse()) return;   // 핑 코스는 궤적선 안 그림
+  const t = currentSession.track || [];
+  if (t.length < 2) return;
+  const trackPath = t.map(p => new kakao.maps.LatLng(p[0], p[1]));
+  if (trackLine) trackLine.setPath(trackPath);
+  else trackLine = new kakao.maps.Polyline({ path: trackPath, strokeWeight: 3, strokeColor: '#666', strokeOpacity: 0.8, strokeStyle: 'shortdash', map });
+}
+
 // 거점 이름 클릭 → 지도에서 해당 위치로 이동 + InfoWindow 열기
 function focusAnchor(idx) {
   if (!map || !anchorMarkers[idx]) return;
@@ -2808,7 +2829,7 @@ function onGpsUpdate(pos) {
     if (!last || distance(last[0], last[1], lat, lng) > 5) {
       currentSession.track.push([lat, lng, Date.now()]);
       saveSession();
-      renderMapForSession();
+      updateTrackLine();   // 무거운 전체 재렌더 대신 궤적선만 갱신 (장시간 운영 시 멈춤/강제종료 방지)
       updateProgressStat();
     }
     // 라이브 publish (10초 throttle 내장)
