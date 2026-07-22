@@ -120,7 +120,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260716o"></script>
+<script src="common.js?v=20260716p"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2554,6 +2554,37 @@ function toggleAlarmSound() {
   const ov = document.getElementById('mapSettingsOverlay');
   if (ov) { ov.remove(); showMapSettings(); }  // 모달 새로고침
 }
+// 🔔 알림음(딩동) — 멘트 직전에 울려서 '이제 말 나온다' 준비시킴. Web Audio라 별도 음원 불필요.
+let __chimeCtx = null;
+function alertChime() {
+  if (!alarmSoundOn()) return 0;   // 🔇 소리 꺼짐이면 알림음도 없음
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return 0;
+    if (!__chimeCtx) __chimeCtx = new AC();
+    const ctx = __chimeCtx;
+    if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    const now = ctx.currentTime;
+    // 딩~동 (높은음 → 낮은음)
+    [[988, 0], [740, 0.2]].forEach(([freq, t]) => {
+      const osc = ctx.createOscillator(), g = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, now + t);
+      g.gain.exponentialRampToValueAtTime(0.55, now + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.34);
+      osc.connect(g); g.connect(ctx.destination);
+      osc.start(now + t); osc.stop(now + t + 0.36);
+    });
+    return 750;   // 이 시간(ms) 뒤에 멘트를 시작하면 알림음과 안 겹침
+  } catch (e) { return 0; }
+}
+// 알림음 먼저 → 잠깐 뒤 멘트 (앞부분 놓치지 않게). 소리 꺼짐/미지원이면 기존처럼 바로 말함.
+function chimeThenSpeak(text) {
+  if (!text) return;
+  const delay = alertChime();
+  if (delay > 0) setTimeout(() => speakKo(text), delay);
+  else speakKo(text);
+}
 // 한국어 음성 멘트 (네비처럼) — 음성 목록에서 한국어 보이스 선택
 function speakKo(text) {
   try {
@@ -2598,7 +2629,7 @@ function triggerNoSprayAlert(zone) {
   // 진동 (강하게)
   if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]);
   // 음성 멘트 (지역 이름 포함)
-  speakKo((zone.name ? zone.name + ', ' : '') + '방역 금지 구역입니다. 방역을 중단하세요.');
+  chimeThenSpeak((zone.name ? zone.name + ', ' : '') + '방역 금지 구역입니다. 방역을 중단하세요.');
   // 깜박이는 화면 경고 배너
   let b = document.getElementById('nspAlertBanner');
   if (!b) { b = document.createElement('div'); b.id = 'nspAlertBanner'; document.body.appendChild(b); }
@@ -2634,7 +2665,7 @@ function triggerMarkAlert(a) {
   const label = (a.markText || '').trim();
   // 🔊 음성 문구가 비어 있으면 말 안 함 (후진처럼 배너·진동만 필요한 경우)
   const say = (a.markSay || '').trim();
-  if (say) speakKo(say);
+  if (say) chimeThenSpeak(say);
   let b = document.getElementById('markAlertBanner');
   if (!b) {
     b = document.createElement('div'); b.id = 'markAlertBanner';
@@ -2668,7 +2699,7 @@ function checkNoticeProximity(lat, lng) {
 function triggerNoticeAlert(n) {
   if (navigator.vibrate) navigator.vibrate([300, 120, 300]);
   const say = (n.say || '').trim();
-  if (say) speakKo(say);          // 빈칸이면 음성 없이 배너·진동만
+  if (say) chimeThenSpeak(say);   // 빈칸이면 음성 없이 배너·진동만
   let b = document.getElementById('noticeAlertBanner');
   if (!b) { b = document.createElement('div'); b.id = 'noticeAlertBanner'; document.body.appendChild(b); }
   const col = n.color || '#2980b9';
@@ -2741,7 +2772,7 @@ function testAlarmHW() {
 function triggerComplaintAlert(c) {
   if (navigator.vibrate) navigator.vibrate([300, 120, 300]);
   // 음성 멘트 (민원 내용 포함)
-  { const _m = c.content ? String(c.content).slice(0, 30) : ''; speakKo('민원 지역입니다.' + (_m ? ' ' + _m : '')); }
+  { const _m = c.content ? String(c.content).slice(0, 30) : ''; chimeThenSpeak('민원 지역입니다.' + (_m ? ' ' + _m : '')); }
   let b = document.getElementById('cmpAlertBanner');
   if (!b) {
     b = document.createElement('div'); b.id = 'cmpAlertBanner';
