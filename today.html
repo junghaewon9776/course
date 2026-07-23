@@ -120,7 +120,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260716q"></script>
+<script src="common.js?v=20260716r"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3917,17 +3917,45 @@ function resetCourse() {
 }
 
 // ─── 민원/거점요청 내역 모달 ───
-function showHistoryModal(type) {
+function showHistoryModal(type, courseFilter) {
   const data = loadData();
   const isComplaint = type === 'complaints';
   const title = isComplaint ? '📞 민원 내역' : '📌 거점요청 내역';
-  const items = isComplaint
+  // 코스 필터 기본값: 지금 운영 중인 코스가 있으면 그 코스만 (없으면 전체)
+  // ('' 를 직접 넘기면 전체 = 사용자가 '전체 코스'를 고른 경우)
+  if (courseFilter === undefined) {
+    courseFilter = (isComplaint && currentSession && currentSession.courseId) ? currentSession.courseId : '';
+  }
+  let items = isComplaint
     ? (data.complaints || []).slice().sort((a,b) => (b.createdAt||0) - (a.createdAt||0))
     : (data.requests || []).slice().sort((a,b) => (b.requestedAt||0) - (a.requestedAt||0));
 
+  // 🔎 코스별 필터 (민원만)
+  let filterHtml = '';
+  if (isComplaint) {
+    const all = (data.complaints || []);
+    const counts = {};
+    all.forEach(c => { const k = c.courseId || ''; counts[k] = (counts[k] || 0) + 1; });
+    const opts = Object.keys(counts).sort().map(k => {
+      const c = k ? (getCourse(data, k) || {}) : null;
+      const nm = c ? ((c.name || '') + (c.detail ? ' (' + c.detail + ')' : '')) : '코스 없음';
+      return `<option value="${k}"${courseFilter === k ? ' selected' : ''}>${nm.replace(/</g,'&lt;')} · ${counts[k]}건</option>`;
+    }).join('');
+    filterHtml = `
+      <div style="padding:10px 16px 0;">
+        <select onchange="showHistoryModal('complaints', this.value)" style="width:100%;padding:10px;border:1px solid #bbb;border-radius:8px;font-size:14px;font-weight:700;color:#2c3e50;background:#fff;">
+          <option value=""${courseFilter === '' ? ' selected' : ''}>전체 코스 · ${all.length}건</option>
+          ${opts}
+        </select>
+      </div>`;
+    if (courseFilter) items = items.filter(it => (it.courseId || '') === courseFilter);
+  }
+
   let listHtml = '';
   if (!items.length) {
-    listHtml = '<div style="text-align:center;color:#aaa;padding:20px;">내역이 없습니다</div>';
+    listHtml = (isComplaint && courseFilter)
+      ? '<div style="text-align:center;color:#aaa;padding:20px;">이 코스에 접수된 민원이 없습니다<br><span style="font-size:12px;">위에서 <b>전체 코스</b>를 고르면 다 볼 수 있어요</span></div>'
+      : '<div style="text-align:center;color:#aaa;padding:20px;">내역이 없습니다</div>';
   } else {
     listHtml = items.map(it => {
       const ts = it.createdAt || it.requestedAt || 0;
@@ -3938,6 +3966,13 @@ function showHistoryModal(type) {
       if (isComplaint) {
         const phone = (it.phone || '').trim();
         const phoneTel = phone.replace(/[^0-9+]/g, '');
+        // 📍 주소 한 줄 따로 + 작은 복사 버튼
+        const addr = (it.address || '').trim();
+        const addrAttr = addr.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+        const addrHtml = addr ? `<div style="display:flex;align-items:center;gap:6px;margin:5px 0 3px;">
+              <span style="flex:1;min-width:0;font-size:12px;color:#2c3e50;word-break:break-all;">📍 ${addr.replace(/</g,'&lt;')}</span>
+              <button onclick="copyAddrFrom(this)" data-addr="${addrAttr}" style="flex:none;background:#34495e;color:#fff;border:none;padding:4px 9px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">복사</button>
+            </div>` : '';
         const crs = it.courseId ? (getCourse(data, it.courseId) || {}) : null;
         const courseTag = crs ? `<span style="background:${crs.color||'#888'};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${(crs.name||'').replace(/</g,'&lt;')}${crs.detail ? ' ('+crs.detail.replace(/</g,'&lt;')+')' : ''}</span>` : '';
         return `
@@ -3948,6 +3983,7 @@ function showHistoryModal(type) {
               <span style="font-size:11px;color:#888;">${timeStr}</span>
             </div>
             <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${(it.content || '내용 없음').replace(/</g,'&lt;')}</div>
+            ${addrHtml}
             ${it.reportedBy ? '<div style="font-size:11px;color:#888;">접수: ' + (it.reportedBy||'').replace(/</g,'&lt;') + '</div>' : ''}
             <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
               ${phone ? '<a href="tel:' + phoneTel + '" style="display:inline-flex;align-items:center;gap:4px;background:#3498db;color:#fff;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;text-decoration:none;">📞 ' + phone.replace(/</g,'&lt;') + '</a>' : ''}
@@ -3989,10 +4025,34 @@ function showHistoryModal(type) {
         <div style="font-weight:700;font-size:16px;">${title}</div>
         <button onclick="document.getElementById('historyModal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888;padding:0 4px;">✕</button>
       </div>
+      ${filterHtml}
       <div style="overflow-y:auto;padding:0 16px 16px;">${listHtml}</div>
     </div>
   `;
   document.body.appendChild(modal);
+}
+
+// 📋 주소 복사 (버튼의 data-addr 값을 클립보드로)
+function copyAddrFrom(btn) {
+  if (!btn) return;
+  const text = btn.getAttribute('data-addr') || '';
+  if (!text) return;
+  const done = () => { const o = btn.textContent; btn.textContent = '✓ 복사됨'; setTimeout(() => { btn.textContent = o; }, 1200); };
+  const fallback = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove(); done();
+    } catch (e) { alert('복사가 안 됩니다. 주소를 길게 눌러 복사하세요.\n\n' + text); }
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+      return;
+    }
+  } catch (e) {}
+  fallback();
 }
 
 // 민원/거점요청 '📍 지도' → 별도 지도 모달 대신 '오늘의운영 메인 지도'를 그 위치로 이동
