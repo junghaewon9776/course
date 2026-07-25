@@ -98,14 +98,16 @@
           .mode-btn.active[data-mode="notice"] { background: #d6eaf8; border-color: #2980b9; }
         </style>
         <div style="display:flex;gap:6px;margin-bottom:8px;">
-          <input id="searchInput" type="text" placeholder="주소 또는 장소 검색 (예: 영광읍사무소, 영광로 123)" onkeydown="if(event.key==='Enter')searchPlace()">
+          <input id="searchInput" type="text" placeholder="주소 또는 장소 검색 (예: 영광읍사무소, 영광로 123)" style="flex:1;" onkeydown="if(event.key==='Enter')searchPlace()">
           <button onclick="searchPlace()" style="white-space:nowrap;">🔍 검색</button>
-          <button onclick="fitAllAnchors()" style="white-space:nowrap;background:#2c3e50;color:#fff;">🗺 전체보기</button>
-          <button id="pastTrackBtn" onclick="togglePastTracks()" style="white-space:nowrap;background:#bdc3c7;color:#fff;">👣 이전 행적</button>
         </div>
         <div id="searchResults" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #ddd;border-radius:5px;margin-bottom:8px;background:#fff;"></div>
         <div class="map-wrap">
           <div id="map" class="map"></div>
+          <div id="mapCtrlBtns" style="position:absolute;top:10px;left:10px;z-index:11;display:flex;flex-direction:column;gap:6px;">
+            <button onclick="fitAllAnchors()" style="background:#2c3e50;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">🗺 전체</button>
+            <button id="pastTrackBtn" onclick="togglePastTracks()" style="background:#bdc3c7;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">👣 행적</button>
+          </div>
           <div id="mapModeBanner" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;"></div>
         </div>
         <p class="muted" style="margin-top:6px;">💡 검색 → 결과 클릭 / 지도 클릭 → 새 거점 추가 / 핀 드래그 → 위치 수정</p>
@@ -352,7 +354,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717c"></script>
+<script src="common.js?v=20260717d"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -2980,7 +2982,7 @@ function renderPastTracks() {
   __pastTrackLines.forEach(l => { try { l.setMap(null); } catch (e) {} });
   __pastTrackLines = [];
   const btn = document.getElementById('pastTrackBtn');
-  if (!__showPastTracks) { if (btn) { btn.style.background = '#bdc3c7'; btn.textContent = '👣 이전 행적'; } return; }
+  if (!__showPastTracks) { if (btn) { btn.style.background = '#bdc3c7'; btn.textContent = '👣 행적'; } return; }
   const data = loadData();
   const view = document.getElementById('viewSelect') ? document.getElementById('viewSelect').value : 'all';
   // 현재 보기(행사/코스)에 맞는 로그만
@@ -3000,7 +3002,7 @@ function renderPastTracks() {
     __pastTrackLines.push(line);
     cnt++;
   });
-  if (btn) { btn.style.background = '#8e44ad'; btn.textContent = '👣 이전 행적 ' + cnt; }
+  if (btn) { btn.style.background = '#8e44ad'; btn.textContent = '👣 행적 ' + cnt; }
 }
 function togglePastTracks() {
   __showPastTracks = !__showPastTracks;
