@@ -357,8 +357,10 @@
 <!-- 🪶 관리는 무거운 logs/photos/live 없이 가벼운 노드만 동기화 (렉·먹통 방지). 이전행적은 눌렀을 때만 logs 가져옴 -->
 <script>
   window.__SYNC_NODES = ['mapDefault','events','anchors','members','teams','requests','complaints','noSprayZones','notices','vehicles','visibility','eventConfig','savedTeams','schedules','alertConfig','accessConfig','accessGate','telegram','naverSms','publicMonitor','sheetSync','drivePhoto','users','inquiries','memberAuth','memberPinFlags','pushTemplates','pushWebhook','pushPrefs','pushTokens','deviceNames','notifications','notifLog','pushLog','xpConfig','quests','rankTiers','rankOverride'];
+  // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
+  window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260717n"></script>
+<script src="common.js?v=20260717o"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;

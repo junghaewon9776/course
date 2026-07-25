@@ -1348,23 +1348,27 @@ let _partialNodes = null;
 function _initPartialSync(nodes) {
   _partialNodes = nodes.slice();
   _cache = _cache || {};
-  let remaining = nodes.length, readyFired = false;
+  // 핵심 노드(있으면)만 도착하면 바로 화면을 띄운다 → 나머지는 뒤에 스며듦 (체감 로딩 단축)
+  const core = (typeof window !== 'undefined' && Array.isArray(window.__SYNC_CORE) && window.__SYNC_CORE.length)
+    ? window.__SYNC_CORE.filter(n => nodes.indexOf(n) >= 0) : nodes.slice();
+  const coreDone = {}; core.forEach(n => coreDone[n] = false);
+  let coreLeft = core.length, readyFired = false;
   const fireReadyOnce = () => { if (!readyFired) { readyFired = true; _afterSyncUpdate(); } };
+  const markCore = (node) => { if (!readyFired && coreDone[node] === false) { coreDone[node] = true; coreLeft--; if (coreLeft <= 0) fireReadyOnce(); } };
   nodes.forEach(node => {
     fbDb.ref('/' + node).on('value', (s) => {
       const v = s.val();
       if (v === null || v === undefined) { delete _cache[node]; } else { _cache[node] = v; }
       if (!_cache.mapDefault) _cache.mapDefault = defaultData.mapDefault;
-      if (!readyFired) { remaining--; if (remaining <= 0) fireReadyOnce(); }
-      else { _afterSyncUpdate(); }
+      if (!readyFired) markCore(node);
+      else _afterSyncUpdate();   // ready 후 도착한 노드도 화면 갱신
     }, (err) => {
       if (_signingOut) return;
       console.warn('부분동기화 노드 오류:', node, err && err.message);
-      if (!readyFired) { remaining--; if (remaining <= 0) fireReadyOnce(); }
+      markCore(node);
     });
   });
-  // 안전장치: 일부 노드가 늦어도 6초 뒤엔 화면을 띄운다
-  setTimeout(fireReadyOnce, 6000);
+  setTimeout(fireReadyOnce, 4000);   // 안전장치
 }
 // 🛤 무거운 logs는 필요할 때만(예: 이전 행적) 한 번 가져온다
 function fetchLogsOnce() {
