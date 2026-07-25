@@ -106,8 +106,9 @@
           <div id="map" class="map"></div>
           <div id="mapCtrlBtns" style="position:absolute;top:54px;left:10px;z-index:11;display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
             <div style="display:flex;gap:6px;">
-              <button onclick="fitAllAnchors()" style="background:#2c3e50;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">🗺 전체</button>
+              <button onclick="fitAllAnchors()" style="background:#2c3e50;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">전체</button>
               <button id="pastTrackBtn" onclick="togglePastTracks()" style="background:#bdc3c7;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">👣 행적</button>
+              <button onclick="showAdminSettings()" style="background:#8e44ad;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:14px;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);" title="소리·진동·음성 점검">🧭</button>
             </div>
             <div id="trackCoursePanel" style="display:none;background:rgba(255,255,255,0.97);border:1px solid #ddd;border-radius:8px;padding:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);max-width:230px;max-height:210px;overflow:auto;"></div>
           </div>
@@ -357,7 +358,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717f"></script>
+<script src="common.js?v=20260717g"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -2976,6 +2977,73 @@ function renderMap() {
   renderPastTracks();   // 이전 행적(과거 운행 궤적) 오버레이 — 켜져 있으면 다시 그림
 }
 
+// ───── 🧭 관리 설정 · 소리/진동/음성 점검 (오늘의운영 설정을 관리에도) ─────
+function admAlarmOn() { return localStorage.getItem('__alarmSoundOff') !== '1'; }
+function admToggleAlarm() {
+  if (admAlarmOn()) localStorage.setItem('__alarmSoundOff', '1'); else localStorage.removeItem('__alarmSoundOff');
+  const ov = document.getElementById('admSettingsOverlay'); if (ov) { ov.remove(); showAdminSettings(); }
+}
+let __admChimeCtx = null;
+function admChime() {
+  if (!admAlarmOn()) return 0;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return 0;
+    if (!__admChimeCtx) __admChimeCtx = new AC();
+    const ctx = __admChimeCtx; if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+    const now = ctx.currentTime;
+    [[988, 0], [740, 0.2]].forEach(([f, t]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, now + t);
+      g.gain.exponentialRampToValueAtTime(0.55, now + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.34);
+      o.connect(g); g.connect(ctx.destination); o.start(now + t); o.stop(now + t + 0.36);
+    });
+    return 750;
+  } catch (e) { return 0; }
+}
+function admSpeak(text) {
+  try {
+    const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+    if (P) { try { P.stop(); } catch (e) {} P.speak({ text: String(text), lang: 'ko-KR', rate: 1.0, volume: 1.0 }).catch(() => {}); return; }
+    if (!window.speechSynthesis) return;
+    speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function admTestSound() {
+  if (!admAlarmOn()) { alert('알림 소리가 꺼져 있어요. 먼저 켜주세요.'); return; }
+  const d = admChime();
+  setTimeout(() => admSpeak('소리 테스트입니다. 이 말이 들리면 정상입니다.'), d || 0);
+  if (navigator.vibrate) navigator.vibrate([300, 120, 300]);
+}
+function admTestHW() {
+  const lines = [];
+  if (!navigator.vibrate) lines.push('진동: ❌ 이 기기/브라우저 미지원');
+  else { const ok = navigator.vibrate([300, 120, 300]); lines.push('진동: ' + (ok ? '✅ 방금 울렸어야 합니다' : '❌ 차단됨 (폰 진동 꺼짐/권한)')); }
+  const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+  if (P) lines.push('음성: ✅ 앱 TTS 사용');
+  else if (!window.speechSynthesis) lines.push('음성: ❌ 미지원');
+  else { const vs = speechSynthesis.getVoices() || []; const ko = vs.filter(v => /ko/i.test(v.lang || '')); lines.push(vs.length ? ('음성: ✅ 목소리 ' + vs.length + '개 (한국어 ' + ko.length + ')') : '음성: ❌ 목소리(TTS) 없음'); }
+  lines.push('알림 소리 설정: ' + (admAlarmOn() ? '✅ ON' : '❌ OFF ← 꺼져 있으면 음성 안 남'));
+  admChime(); setTimeout(() => admSpeak('음성 테스트입니다.'), 750);
+  setTimeout(() => alert('🔧 진동·음성 점검\n\n' + lines.join('\n')), 450);
+}
+function showAdminSettings() {
+  const ov = document.createElement('div');
+  ov.id = 'admSettingsOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="background:#fff;border-radius:12px;padding:20px;min-width:260px;max-width:320px;text-align:center;">
+    <h3 style="margin:0 0 16px;">🧭 설정 · 소리 점검</h3>
+    <button onclick="admToggleAlarm()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:${admAlarmOn() ? '#27ae60' : '#ecf0f1'};color:${admAlarmOn() ? '#fff' : '#2c3e50'};">${admAlarmOn() ? '🔊 알림 소리 ON (끄기)' : '🔇 알림 소리 OFF (켜기)'}</button>
+    <p style="font-size:11px;color:#888;margin:0 0 12px;">근접 알림 음성 (운영자 화면 공통)</p>
+    <button onclick="admTestSound()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:#f39c12;color:#fff;">🔔 알림음 + 음성 테스트</button>
+    <button onclick="admTestHW()" style="width:100%;padding:10px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:#2c3e50;color:#fff;margin-bottom:4px;">🔧 진동·음성 점검</button>
+    <p style="font-size:11px;color:#888;margin:0 0 12px;">이 폰에서 진동·음성이 실제로 되는지 확인</p>
+    <button onclick="this.closest('#admSettingsOverlay').remove()" style="width:100%;padding:10px;border:none;border-radius:8px;background:#34495e;color:#fff;font-size:13px;font-weight:600;cursor:pointer;">닫기</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
 // ───── 👣 이전 행적: 코스별로 골라서 과거 운행 궤적을 겹쳐 표시 (오늘의운영 이전핑처럼 on/off) ─────
 let __trackPanelOpen = false;   // 코스 선택 패널 열림
 let __trackSel = {};            // courseId -> true (그 코스 궤적 표시)
