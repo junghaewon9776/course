@@ -96,7 +96,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260716r"></script>
+<script src="common.js?v=20260716s"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -1010,6 +1010,43 @@ function showXpBreakdown(name) {
     + '<button onclick="this.closest(\'div\').parentNode.remove()" style="margin-top:12px;width:100%;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;cursor:pointer;">닫기</button></div>';
   document.body.appendChild(ov);
 }
+// 🚗 회원별 운행 내역 조회 — 이름 클릭 시 (날짜·코스·조·역할). 모두 볼 수 있음(회원은 자기 이름 눌러 확인).
+function showMemberRuns(name) {
+  const data = loadData();
+  const nm = String(name || '').trim();
+  const runs = (data.logs || []).filter(l => l && !l.hidden && l.crew && (
+    (l.crew.driver || '').trim() === nm ||
+    (l.crew.assist || '').split(',').map(s => s.trim()).includes(nm)
+  )).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+
+  const body = runs.length ? runs.map(l => {
+    const d = l.date || (l.startedAt ? new Date(l.startedAt).toLocaleDateString('ko-KR') : '-');
+    const c = getCourse(data, l.courseId) || {};
+    const cname = (c.name || '?') + (c.detail ? ' (' + c.detail + ')' : '');
+    const team = (getTeam(data, l.teamId) || {}).name || '';
+    const isDrv = (l.crew.driver || '').trim() === nm;
+    const roleTag = isDrv
+      ? '<span style="background:#2980b9;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px;font-weight:700;">운전</span>'
+      : '<span style="background:#16a085;color:#fff;font-size:10px;padding:1px 7px;border-radius:8px;font-weight:700;">보조</span>';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee;">'
+      + '<div style="font-size:13px;font-weight:700;color:#2c3e50;white-space:nowrap;">' + d + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-size:13px;"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + (c.color || '#999') + ';margin-right:5px;"></span>' + cname.replace(/</g, '&lt;') + '</div>'
+      + (team ? '<div style="font-size:11px;color:#888;">🏷 ' + team.replace(/</g, '&lt;') + '조</div>' : '')
+      + '</div>'
+      + roleTag + '</div>';
+  }).join('') : '<div class="empty">운행 기록이 없습니다</div>';
+
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:40px 14px;overflow:auto;';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:18px;max-width:420px;width:100%;">'
+    + '<h3 style="margin:0 0 2px;">🚗 ' + nm.replace(/</g, '&lt;') + ' 운행 내역</h3>'
+    + '<p class="sub" style="margin:0 0 10px;">총 ' + runs.length + '회 · 날짜 · 코스 · 조</p>'
+    + '<div style="max-height:60vh;overflow:auto;">' + body + '</div>'
+    + '<button onclick="this.closest(\'div\').parentNode.remove()" style="margin-top:12px;width:100%;background:#555;color:#fff;border:none;padding:10px;border-radius:8px;font-weight:700;cursor:pointer;">닫기</button></div>';
+  document.body.appendChild(ov);
+}
 function __toggleMedals(el) {
   const w = el.parentNode.querySelector('.__medalWrap'); if (!w) return;
   const open = w.style.display !== 'none';
@@ -1119,23 +1156,24 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
     + '<div style="font-size:18px;font-weight:800;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + tierBadge(topRk, 20) + '<span>' + String(top.name).replace(/</g, '&lt;') + '</span>'
     + '<span style="font-size:13px;font-weight:600;opacity:.9;">' + String(topRk.name || '') + '</span></div></div>'
     + '<div style="text-align:right;"><div style="font-size:20px;font-weight:800;color:#ffd85e;">' + top.xp + '</div><div style="font-size:10px;opacity:.7;">XP</div></div></div>';
-  el.innerHTML = hall + '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-    + '<tr style="background:#f3eefa;"><th style="text-align:left;padding:6px;">#</th><th style="text-align:left;padding:6px;">이름</th><th style="text-align:left;padding:6px;">계급</th><th style="text-align:right;padding:6px;">XP</th><th style="text-align:left;padding:6px;min-width:130px;">다음 계급까지</th></tr>'
+  el.innerHTML = hall + '<table style="width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px;">'
+    + '<colgroup><col style="width:22px;"><col><col style="width:31%;"><col style="width:42px;"><col style="width:86px;"></colgroup>'
+    + '<tr style="background:#f3eefa;"><th style="text-align:left;padding:5px 4px;">#</th><th style="text-align:left;padding:5px 4px;">이름</th><th style="text-align:left;padding:5px 4px;">계급</th><th style="text-align:right;padding:5px 4px;">XP</th><th style="text-align:left;padding:5px 4px;">다음</th></tr>'
     + rows.map((r, i) => {
       let rk = rankForXp(r.xp, tiers);
       const ovName = (loadData().rankOverride || {})[r.name] || '';
       if (ovName) { const t = tiers.find(t => t.name === ovName); if (t) rk = t; }
       // 다음 계급 진행도
-      let gauge = '<span style="color:#e67e22;font-weight:700;">👑 최고 계급</span>';
+      let gauge = '<span style="color:#e67e22;font-weight:700;font-size:11px;">👑 최고</span>';
       const cur = tiers.reduce((a, t) => (r.xp >= (t.minXp || 0) ? t : a), tiers[0]);
       const next = tiers.find(t => (t.minXp || 0) > r.xp);
       if (next) {
         const base = cur.minXp || 0, span = (next.minXp || 0) - base;
         const pct = span > 0 ? Math.max(4, Math.min(100, Math.round((r.xp - base) / span * 100))) : 0;
         const need = (next.minXp || 0) - r.xp;
-        gauge = '<div style="display:flex;align-items:center;gap:6px;">'
-          + '<div style="flex:1;height:9px;background:#eee;border-radius:5px;overflow:hidden;min-width:70px;"><div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#8e44ad,#c39bd3);"></div></div>'
-          + '<span style="font-size:11px;color:#888;white-space:nowrap;">' + tierBadge(next, 13) + String(next.name || '') + ' -' + need + '</span></div>';
+        gauge = '<div style="display:flex;align-items:center;gap:4px;" title="' + String(next.name || '') + '까지 ' + need + ' XP">'
+          + '<div style="flex:1;height:7px;background:#eee;border-radius:4px;overflow:hidden;"><div style="width:' + pct + '%;height:100%;background:linear-gradient(90deg,#8e44ad,#c39bd3);"></div></div>'
+          + '<span style="font-size:10px;color:#888;white-space:nowrap;">-' + need + '</span></div>';
       }
       const nmEsc = String(r.name).replace(/'/g, "\\'").replace(/"/g, '&quot;');
       const sel = canEdit ? ('<br><select onchange="saveRankOverride(\'' + nmEsc + '\', this.value)" style="font-size:11px;margin-top:3px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;">'
@@ -1143,13 +1181,13 @@ function renderRankCard(uid, sortedAll, matrix, courses) {
         + tiers.map(t => '<option value="' + String(t.name).replace(/"/g, '&quot;') + '"' + (ovName === t.name ? ' selected' : '') + '>' + String(t.name).replace(/</g, '&lt;') + '</option>').join('')
         + '</select>') : '';
       return '<tr style="border-bottom:1px solid #eee;' + (i === 0 ? 'background:#faf5ff;' : '') + '">'
-        + '<td style="padding:6px;">' + (i === 0 ? '⭐' : (i + 1)) + '</td>'
-        + '<td style="padding:6px;font-weight:700;">' + String(r.name).replace(/</g, '&lt;') + '</td>'
-        + '<td style="padding:6px;white-space:nowrap;">' + tierBadge(rk, 16) + '<span style="font-weight:700;color:#6c3483;">' + String(rk.name || '').replace(/</g, '&lt;') + '</span>' + (ovName ? ' <span style="font-size:10px;color:#e67e22;">(수동)</span>' : '') + sel + '</td>'
+        + '<td style="padding:5px 4px;">' + (i === 0 ? '⭐' : (i + 1)) + '</td>'
+        + '<td onclick="showMemberRuns(\'' + nmEsc + '\')" style="padding:5px 4px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#2c3e50;cursor:pointer;text-decoration:underline dotted;" title="운행 내역 보기">' + String(r.name).replace(/</g, '&lt;') + '</td>'
+        + '<td style="padding:5px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + tierBadge(rk, 15) + '<span style="font-weight:700;color:#6c3483;">' + String(rk.name || '').replace(/</g, '&lt;') + '</span>' + (ovName ? ' <span style="font-size:10px;color:#e67e22;">(수동)</span>' : '') + sel + '</td>'
         + (canViewXp
-          ? '<td onclick="showXpBreakdown(\'' + nmEsc + '\')" style="padding:6px;text-align:right;font-weight:700;color:#8e44ad;cursor:pointer;text-decoration:underline dotted;" title="클릭하면 획득 내역">' + r.xp + '</td>'
-          : '<td style="padding:6px;text-align:right;font-weight:700;color:#6c3483;">' + r.xp + '</td>')
-        + '<td style="padding:6px;">' + gauge + '</td></tr>';
+          ? '<td onclick="showXpBreakdown(\'' + nmEsc + '\')" style="padding:5px 4px;text-align:right;font-weight:700;color:#8e44ad;cursor:pointer;text-decoration:underline dotted;">' + r.xp + '</td>'
+          : '<td style="padding:5px 4px;text-align:right;font-weight:700;color:#6c3483;">' + r.xp + '</td>')
+        + '<td style="padding:5px 4px;">' + gauge + '</td></tr>';
     }).join('') + '</table>';
 }
 function __rtRowTpl(t) {
