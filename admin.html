@@ -354,7 +354,11 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717l"></script>
+<!-- 🪶 관리는 무거운 logs/photos/live 없이 가벼운 노드만 동기화 (렉·먹통 방지). 이전행적은 눌렀을 때만 logs 가져옴 -->
+<script>
+  window.__SYNC_NODES = ['mapDefault','events','anchors','members','teams','requests','complaints','noSprayZones','notices','vehicles','visibility','eventConfig','savedTeams','schedules','alertConfig','accessConfig','accessGate','telegram','naverSms','publicMonitor','sheetSync','drivePhoto','users','inquiries','memberAuth','memberPinFlags','pushTemplates','pushWebhook','pushPrefs','pushTokens','deviceNames','notifications','notifLog','pushLog','xpConfig','quests','rankTiers','rankOverride'];
+</script>
+<script src="common.js?v=20260717m"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -3042,11 +3046,21 @@ function showAdminSettings() {
 }
 // ───── 🛤 이전 행적 보기 (오늘의운영과 동일) — 운행별로 표시/끄기 ─────
 let __admPastTrackMap = {};   // logKey -> kakao Polyline
+let __admLogs = null;         // 이전행적용 logs — 관리 초기 로딩에선 안 받고 여기서 한 번만 가져옴
 function admShowPastTracks() {
   const ms = document.getElementById('admSettingsOverlay'); if (ms) ms.remove();
+  if (__admLogs === null && typeof fetchLogsOnce === 'function') {
+    __admRenderPastTracks(true);   // ⏳ 로딩 표시
+    fetchLogsOnce().then(arr => { __admLogs = arr || []; __admRenderPastTracks(false); })
+      .catch(() => { __admLogs = []; __admRenderPastTracks(false); });
+    return;
+  }
+  __admRenderPastTracks(false);
+}
+function __admRenderPastTracks(loading) {
   const data = loadData();
   const view = document.getElementById('viewSelect') ? document.getElementById('viewSelect').value : 'all';
-  let logs = (data.logs || []).filter(l => l && l.track && l.track.length >= 2 && !l.hidden);
+  let logs = (__admLogs || []).filter(l => l && l.track && l.track.length >= 2 && !l.hidden);
   if (view !== 'all') logs = logs.filter(l => l.eventId === view);
   logs.sort((a, b) => (b.finishedAt || b.startedAt || 0) - (a.finishedAt || a.startedAt || 0));
   let ov = document.getElementById('admPastTracksOverlay');
@@ -3055,18 +3069,20 @@ function admShowPastTracks() {
   ov.id = 'admPastTracksOverlay';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;overflow-y:auto;';
   ov.onclick = e => { if (e.target === ov) ov.remove(); };
-  const rows = logs.length ? logs.map(l => {
-    const ev = getEvent(data, l.eventId), co = getCourse(data, l.courseId);
-    const on = !!__admPastTrackMap[l.key];
-    const t = l.startedAt ? new Date(l.startedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:9px;border-bottom:1px solid #eee;border-left:4px solid ${(co && co.color) || '#8e44ad'};">
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;font-size:13px;">${((ev && ev.name) || '?')} · ${((co && co.name) || '?')}</div>
-        <div style="font-size:11px;color:#888;">${t} · ${(l.crew && l.crew.driver) || '-'}${l.crew && l.crew.assist ? ' / ' + l.crew.assist : ''}</div>
-      </div>
-      <button onclick="admTogglePastTrack('${(l.key || '').replace(/'/g, "\\'")}')" style="background:${on ? '#e74c3c' : '#8e44ad'};color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">${on ? '끄기' : '표시'}</button>
-    </div>`;
-  }).join('') : '<div style="padding:30px;text-align:center;color:#aaa;">표시할 행적이 없습니다</div>';
+  const rows = loading
+    ? '<div style="padding:34px;text-align:center;color:#888;">⏳ 운행 기록 불러오는 중…</div>'
+    : (logs.length ? logs.map(l => {
+        const ev = getEvent(data, l.eventId), co = getCourse(data, l.courseId);
+        const on = !!__admPastTrackMap[l.key];
+        const t = l.startedAt ? new Date(l.startedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:9px;border-bottom:1px solid #eee;border-left:4px solid ${(co && co.color) || '#8e44ad'};">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:13px;">${((ev && ev.name) || '?')} · ${((co && co.name) || '?')}</div>
+            <div style="font-size:11px;color:#888;">${t} · ${(l.crew && l.crew.driver) || '-'}${l.crew && l.crew.assist ? ' / ' + l.crew.assist : ''}</div>
+          </div>
+          <button onclick="admTogglePastTrack('${(l.key || '').replace(/'/g, "\\'")}')" style="background:${on ? '#e74c3c' : '#8e44ad'};color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">${on ? '끄기' : '표시'}</button>
+        </div>`;
+      }).join('') : '<div style="padding:30px;text-align:center;color:#aaa;">표시할 행적이 없습니다</div>');
   ov.innerHTML = `<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);">
     <div style="background:#8e44ad;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">
       <span style="font-weight:700;">🛤 이전 행적</span>
@@ -3081,7 +3097,7 @@ function admShowPastTracks() {
 }
 function admTogglePastTrack(key) {
   const data = loadData();
-  const l = (data.logs || []).find(x => x.key === key);
+  const l = (__admLogs || []).find(x => x.key === key);
   if (!l || !l.track || l.track.length < 2) { alert('경로 정보가 없습니다.'); return; }
   if (__admPastTrackMap[key]) {
     try { __admPastTrackMap[key].setMap(null); } catch (e) {}

@@ -1300,6 +1300,11 @@ function initFirebaseSync() {
     return;
   }
   _syncInitialized = true;
+  // 🪶 부분 동기화: 페이지가 window.__SYNC_NODES(가벼운 노드 목록)를 지정하면
+  //    무거운 logs/photos/live를 안 받고 그 노드들만 구독한다 (관리 화면 렉/먹통 방지).
+  const partial = (typeof window !== 'undefined' && Array.isArray(window.__SYNC_NODES) && window.__SYNC_NODES.length)
+    ? window.__SYNC_NODES : null;
+  if (partial) { _initPartialSync(partial); return; }
   fbDb.ref('/').on('value', (snapshot) => {
     const data = snapshot.val();
     if (!data) {
@@ -1314,20 +1319,7 @@ function initFirebaseSync() {
         fbDb.ref('/mapDefault').set(_cache.mapDefault);
       }
     }
-
-    if (!_cacheReady) {
-      _cacheReady = true;
-      try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
-      try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
-      try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
-      try { renderNotifBell(); } catch (e) {}        // 🔔 알림 벨 표시(미확인 수)
-      _readyCallbacks.forEach(cb => cb());
-      _readyCallbacks.length = 0;
-    }
-    try { checkAccessGate(); } catch (e) {}
-    try { maybeResavePushToken(); } catch (e) {}
-    try { renderNotifBell(); } catch (e) {}   // 🔔 알림 벨 미확인 수 갱신
-    if (window.onDataChanged) window.onDataChanged();
+    _afterSyncUpdate();
   }, (err) => {
     // 로그아웃 중이면 무시 (signOut → signInAnonymously 사이에 발생)
     if (_signingOut) return;
@@ -1335,10 +1327,59 @@ function initFirebaseSync() {
     alert('Firebase 연결 실패: ' + err.message);
   });
 }
+// 동기화 갱신 후 공통 처리 (전체/부분 동기화 공용)
+function _afterSyncUpdate() {
+  if (!_cacheReady) {
+    _cacheReady = true;
+    try { checkAccessGate(); } catch (e) { console.warn('게이트 체크 오류:', e); }
+    try { initPushNotifications(); } catch (e) {}  // 📲 앱이면 푸시 등록
+    try { maybeCheckUpdate(); } catch (e) {}       // 🔄 앱이면 업데이트 확인
+    try { renderNotifBell(); } catch (e) {}        // 🔔 알림 벨 표시(미확인 수)
+    _readyCallbacks.forEach(cb => cb());
+    _readyCallbacks.length = 0;
+  }
+  try { checkAccessGate(); } catch (e) {}
+  try { maybeResavePushToken(); } catch (e) {}
+  try { renderNotifBell(); } catch (e) {}   // 🔔 알림 벨 미확인 수 갱신
+  if (window.onDataChanged) window.onDataChanged();
+}
+// 🪶 부분 동기화: 지정 노드만 개별 구독(logs/photos/live 제외). _cache에 병합.
+let _partialNodes = null;
+function _initPartialSync(nodes) {
+  _partialNodes = nodes.slice();
+  _cache = _cache || {};
+  let remaining = nodes.length, readyFired = false;
+  const fireReadyOnce = () => { if (!readyFired) { readyFired = true; _afterSyncUpdate(); } };
+  nodes.forEach(node => {
+    fbDb.ref('/' + node).on('value', (s) => {
+      const v = s.val();
+      if (v === null || v === undefined) { delete _cache[node]; } else { _cache[node] = v; }
+      if (!_cache.mapDefault) _cache.mapDefault = defaultData.mapDefault;
+      if (!readyFired) { remaining--; if (remaining <= 0) fireReadyOnce(); }
+      else { _afterSyncUpdate(); }
+    }, (err) => {
+      if (_signingOut) return;
+      console.warn('부분동기화 노드 오류:', node, err && err.message);
+      if (!readyFired) { remaining--; if (remaining <= 0) fireReadyOnce(); }
+    });
+  });
+  // 안전장치: 일부 노드가 늦어도 6초 뒤엔 화면을 띄운다
+  setTimeout(fireReadyOnce, 6000);
+}
+// 🛤 무거운 logs는 필요할 때만(예: 이전 행적) 한 번 가져온다
+function fetchLogsOnce() {
+  if (typeof fbDb === 'undefined') return Promise.resolve([]);
+  return fbDb.ref('/logs').once('value').then((s) => {
+    const v = s.val() || {};
+    return (Array.isArray(v) ? v : Object.values(v)).filter(Boolean);
+  }).catch(() => []);
+}
 function stopFirebaseSync() {
   if (_syncInitialized && typeof fbDb !== 'undefined') {
-    fbDb.ref('/').off('value');
+    if (_partialNodes) { _partialNodes.forEach(n => { try { fbDb.ref('/' + n).off('value'); } catch (e) {} }); }
+    else { fbDb.ref('/').off('value'); }
   }
+  _partialNodes = null;
   _syncInitialized = false;
   _cacheReady = false;
 }
