@@ -1970,7 +1970,10 @@ function buildMonthlyCourseChart(data, opts) {
       const n = mc[k]; if (!n) return;
       const c = getCourse(data, k) || {};
       const h = tot > 0 ? (n / tot * barH) : 0;
-      segs += '<div title="' + (mo + 1) + '월 ' + String(c.name || '?').replace(/"/g, '') + ' ' + n + '회" style="height:' + h + 'px;background:' + (c.color || '#999') + ';"></div>';
+      const showN = h >= 11;   // 세그먼트가 충분히 높을 때만 숫자 표시
+      segs += '<div title="' + (mo + 1) + '월 ' + String(c.name || '?').replace(/"/g, '') + ' ' + n + '회" style="height:' + h + 'px;background:' + (c.color || '#999') + ';display:flex;align-items:center;justify-content:center;overflow:hidden;">'
+        + (showN ? '<span style="font-size:9px;font-weight:800;color:#555;text-shadow:0 0 2px rgba(255,255,255,.6);line-height:1;">' + n + '</span>' : '')
+        + '</div>';
     });
     const on = tot > 0;
     return '<div ' + (on && clickFn ? 'onclick="' + clickFn + '(' + mo + ')"' : '')
