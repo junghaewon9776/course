@@ -104,13 +104,9 @@
         <div id="searchResults" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #ddd;border-radius:5px;margin-bottom:8px;background:#fff;"></div>
         <div class="map-wrap">
           <div id="map" class="map"></div>
-          <div id="mapCtrlBtns" style="position:absolute;top:54px;left:10px;z-index:11;display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
-            <div style="display:flex;gap:6px;">
-              <button onclick="fitAllAnchors()" style="background:#2c3e50;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">전체</button>
-              <button id="pastTrackBtn" onclick="togglePastTracks()" style="background:#bdc3c7;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">👣 행적</button>
-              <button onclick="showAdminSettings()" style="background:#8e44ad;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:14px;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);" title="소리·진동·음성 점검">🧭</button>
-            </div>
-            <div id="trackCoursePanel" style="display:none;background:rgba(255,255,255,0.97);border:1px solid #ddd;border-radius:8px;padding:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);max-width:230px;max-height:210px;overflow:auto;"></div>
+          <div id="mapCtrlBtns" style="position:absolute;top:54px;left:10px;z-index:11;display:flex;gap:6px;align-items:flex-start;">
+            <button onclick="fitAllAnchors()" style="background:#2c3e50;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">전체</button>
+            <button onclick="showAdminSettings()" style="background:#8e44ad;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:14px;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);" title="설정·이전행적·소리점검">🧭</button>
           </div>
           <div id="mapModeBanner" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;"></div>
         </div>
@@ -358,7 +354,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717g"></script>
+<script src="common.js?v=20260717h"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -2974,7 +2970,6 @@ function renderMap() {
     map.setBounds(bounds);
     __adminMapFitDone = true;
   }
-  renderPastTracks();   // 이전 행적(과거 운행 궤적) 오버레이 — 켜져 있으면 다시 그림
 }
 
 // ───── 🧭 관리 설정 · 소리/진동/음성 점검 (오늘의운영 설정을 관리에도) ─────
@@ -3037,6 +3032,8 @@ function showAdminSettings() {
     <h3 style="margin:0 0 16px;">🧭 설정 · 소리 점검</h3>
     <button onclick="admToggleAlarm()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:${admAlarmOn() ? '#27ae60' : '#ecf0f1'};color:${admAlarmOn() ? '#fff' : '#2c3e50'};">${admAlarmOn() ? '🔊 알림 소리 ON (끄기)' : '🔇 알림 소리 OFF (켜기)'}</button>
     <p style="font-size:11px;color:#888;margin:0 0 12px;">근접 알림 음성 (운영자 화면 공통)</p>
+    <button onclick="admShowPastTracks()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#8e44ad;color:#fff;">🛤 이전 행적 보기</button>
+    <p style="font-size:11px;color:#888;margin:0 0 12px;">지난 운행 경로를 관리 지도에 표시</p>
     <button onclick="admTestSound()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;background:#f39c12;color:#fff;">🔔 알림음 + 음성 테스트</button>
     <button onclick="admTestHW()" style="width:100%;padding:10px;border:none;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;background:#2c3e50;color:#fff;margin-bottom:4px;">🔧 진동·음성 점검</button>
     <p style="font-size:11px;color:#888;margin:0 0 12px;">이 폰에서 진동·음성이 실제로 되는지 확인</p>
@@ -3044,71 +3041,65 @@ function showAdminSettings() {
   </div>`;
   document.body.appendChild(ov);
 }
-// ───── 👣 이전 행적: 코스별로 골라서 과거 운행 궤적을 겹쳐 표시 (오늘의운영 이전핑처럼 on/off) ─────
-let __trackPanelOpen = false;   // 코스 선택 패널 열림
-let __trackSel = {};            // courseId -> true (그 코스 궤적 표시)
-let __pastTrackLines = [];
-function togglePastTracks() {
-  __trackPanelOpen = !__trackPanelOpen;
-  const panel = document.getElementById('trackCoursePanel');
-  const btn = document.getElementById('pastTrackBtn');
-  if (panel) panel.style.display = __trackPanelOpen ? 'block' : 'none';
-  if (btn) btn.style.background = (__trackPanelOpen || Object.values(__trackSel).some(Boolean)) ? '#8e44ad' : '#bdc3c7';
-  if (__trackPanelOpen) renderTrackPanel();
-}
-function renderTrackPanel() {
-  const panel = document.getElementById('trackCoursePanel');
-  if (!panel) return;
+// ───── 🛤 이전 행적 보기 (오늘의운영과 동일) — 운행별로 표시/끄기 ─────
+let __admPastTrackMap = {};   // logKey -> kakao Polyline
+function admShowPastTracks() {
+  const ms = document.getElementById('admSettingsOverlay'); if (ms) ms.remove();
   const data = loadData();
   const view = document.getElementById('viewSelect') ? document.getElementById('viewSelect').value : 'all';
-  const cnt = {};
-  (data.logs || []).forEach(l => {
-    if (!l || l.hidden || !Array.isArray(l.track) || l.track.length < 2) return;
-    if (view !== 'all' && l.eventId !== view) return;
-    const k = l.courseId || '?'; cnt[k] = (cnt[k] || 0) + 1;
-  });
-  const ord = courseOrderMap(data);
-  const keys = Object.keys(cnt).sort((a, b) => ((ord[a] == null ? 999 : ord[a]) - (ord[b] == null ? 999 : ord[b])));
-  if (!keys.length) { panel.innerHTML = '<div style="font-size:12px;color:#888;">운행 궤적 없음</div>'; return; }
-  const anyOn = keys.some(k => __trackSel[k]);
-  panel.innerHTML = '<div style="font-size:11px;color:#888;font-weight:700;margin-bottom:6px;">코스별 궤적 — 눌러서 켜기</div>'
-    + '<div style="display:flex;flex-wrap:wrap;gap:5px;">'
-    + keys.map(k => {
-        const c = getCourse(data, k) || {};
-        const on = !!__trackSel[k];
-        return '<button onclick="toggleTrackCourse(\'' + String(k).replace(/'/g, "\\'") + '\')" style="border:1.5px solid ' + (c.color || '#999') + ';background:' + (on ? (c.color || '#999') : '#fff') + ';color:' + (on ? '#fff' : '#333') + ';border-radius:13px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">' + String(c.name || '코스없음').replace(/</g, '&lt;') + ' ' + cnt[k] + '</button>';
-      }).join('')
-    + '</div>'
-    + (anyOn ? '<button onclick="clearTrackSel()" style="margin-top:7px;width:100%;background:#eee;border:none;border-radius:6px;padding:5px;font-size:11px;color:#666;cursor:pointer;">전부 끄기</button>' : '');
+  let logs = (data.logs || []).filter(l => l && l.track && l.track.length >= 2 && !l.hidden);
+  if (view !== 'all') logs = logs.filter(l => l.eventId === view);
+  logs.sort((a, b) => (b.finishedAt || b.startedAt || 0) - (a.finishedAt || a.startedAt || 0));
+  let ov = document.getElementById('admPastTracksOverlay');
+  if (ov) ov.remove();
+  ov = document.createElement('div');
+  ov.id = 'admPastTracksOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;overflow-y:auto;';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  const rows = logs.length ? logs.map(l => {
+    const ev = getEvent(data, l.eventId), co = getCourse(data, l.courseId);
+    const on = !!__admPastTrackMap[l.key];
+    const t = l.startedAt ? new Date(l.startedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px;border-bottom:1px solid #eee;border-left:4px solid ${(co && co.color) || '#8e44ad'};">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:13px;">${((ev && ev.name) || '?')} · ${((co && co.name) || '?')}</div>
+        <div style="font-size:11px;color:#888;">${t} · ${(l.crew && l.crew.driver) || '-'}${l.crew && l.crew.assist ? ' / ' + l.crew.assist : ''}</div>
+      </div>
+      <button onclick="admTogglePastTrack('${(l.key || '').replace(/'/g, "\\'")}')" style="background:${on ? '#e74c3c' : '#8e44ad'};color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;">${on ? '끄기' : '표시'}</button>
+    </div>`;
+  }).join('') : '<div style="padding:30px;text-align:center;color:#aaa;">표시할 행적이 없습니다</div>';
+  ov.innerHTML = `<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);">
+    <div style="background:#8e44ad;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-weight:700;">🛤 이전 행적</span>
+      <span onclick="document.getElementById('admPastTracksOverlay').remove()" style="cursor:pointer;font-size:22px;line-height:1;">&times;</span>
+    </div>
+    <div style="overflow-y:auto;flex:1;">${rows}</div>
+    <div style="padding:10px 12px;border-top:1px solid #eee;">
+      <button onclick="admClearAllPastTracks()" style="width:100%;padding:9px;background:#555;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">전체 끄기</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
 }
-function toggleTrackCourse(courseId) {
-  __trackSel[courseId] = !__trackSel[courseId];
-  renderTrackPanel();
-  renderPastTracks();
-}
-function clearTrackSel() {
-  __trackSel = {};
-  renderTrackPanel();
-  renderPastTracks();
-  const btn = document.getElementById('pastTrackBtn');
-  if (btn) btn.style.background = __trackPanelOpen ? '#8e44ad' : '#bdc3c7';
-}
-function renderPastTracks() {
-  if (!map) return;
-  __pastTrackLines.forEach(l => { try { l.setMap(null); } catch (e) {} });
-  __pastTrackLines = [];
-  const sel = Object.keys(__trackSel).filter(k => __trackSel[k]);
-  if (!sel.length) return;
+function admTogglePastTrack(key) {
   const data = loadData();
-  const view = document.getElementById('viewSelect') ? document.getElementById('viewSelect').value : 'all';
-  (data.logs || []).forEach(l => {
-    if (!l || l.hidden || !Array.isArray(l.track) || l.track.length < 2) return;
-    if (view !== 'all' && l.eventId !== view) return;
-    if (!__trackSel[l.courseId || '?']) return;
-    const co = getCourse(data, l.courseId) || {};
+  const l = (data.logs || []).find(x => x.key === key);
+  if (!l || !l.track || l.track.length < 2) { alert('경로 정보가 없습니다.'); return; }
+  if (__admPastTrackMap[key]) {
+    try { __admPastTrackMap[key].setMap(null); } catch (e) {}
+    delete __admPastTrackMap[key];
+  } else {
+    const co = getCourse(data, l.courseId);
     const path = l.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
-    __pastTrackLines.push(new kakao.maps.Polyline({ path, strokeWeight: 3, strokeColor: co.color || '#3498db', strokeOpacity: 0.4, strokeStyle: 'solid', map, zIndex: 1 }));
-  });
+    const line = new kakao.maps.Polyline({ path, strokeWeight: 4, strokeColor: (co && co.color) || '#95a5a6', strokeOpacity: 0.7, strokeStyle: 'shortdash' });
+    line.setMap(map);
+    __admPastTrackMap[key] = line;
+  }
+  admShowPastTracks();
+}
+function admClearAllPastTracks() {
+  Object.values(__admPastTrackMap).forEach(l => { try { l.setMap(null); } catch (e) {} });
+  __admPastTrackMap = {};
+  const ov = document.getElementById('admPastTracksOverlay'); if (ov) ov.remove();
 }
 
 // ────── 행사별 조/차량 선택 ──────
