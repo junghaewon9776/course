@@ -101,6 +101,7 @@
           <input id="searchInput" type="text" placeholder="주소 또는 장소 검색 (예: 영광읍사무소, 영광로 123)" onkeydown="if(event.key==='Enter')searchPlace()">
           <button onclick="searchPlace()" style="white-space:nowrap;">🔍 검색</button>
           <button onclick="fitAllAnchors()" style="white-space:nowrap;background:#2c3e50;color:#fff;">🗺 전체보기</button>
+          <button id="pastTrackBtn" onclick="togglePastTracks()" style="white-space:nowrap;background:#bdc3c7;color:#fff;">👣 이전 행적</button>
         </div>
         <div id="searchResults" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #ddd;border-radius:5px;margin-bottom:8px;background:#fff;"></div>
         <div class="map-wrap">
@@ -351,7 +352,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717a"></script>
+<script src="common.js?v=20260717b"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -2966,6 +2967,45 @@ function renderMap() {
   if (hasPoints && !__adminMapFitDone) {
     map.setBounds(bounds);
     __adminMapFitDone = true;
+  }
+  renderPastTracks();   // 이전 행적(과거 운행 궤적) 오버레이 — 켜져 있으면 다시 그림
+}
+
+// ───── 👣 이전 행적: 과거 운행 궤적을 옅게 겹쳐 표시 (거점·위치 수정 참고용) ─────
+let __showPastTracks = false, __pastTrackLines = [];
+function renderPastTracks() {
+  if (!map) return;
+  __pastTrackLines.forEach(l => { try { l.setMap(null); } catch (e) {} });
+  __pastTrackLines = [];
+  const btn = document.getElementById('pastTrackBtn');
+  if (!__showPastTracks) { if (btn) { btn.style.background = '#bdc3c7'; btn.textContent = '👣 이전 행적'; } return; }
+  const data = loadData();
+  const view = document.getElementById('viewSelect') ? document.getElementById('viewSelect').value : 'all';
+  // 현재 보기(행사/코스)에 맞는 로그만
+  const logs = (data.logs || []).filter(l => {
+    if (!l || l.hidden || !Array.isArray(l.track) || l.track.length < 2) return false;
+    if (view !== 'all' && l.eventId !== view) return false;
+    return isCourseVisible(l.courseId);
+  });
+  let cnt = 0;
+  logs.forEach(l => {
+    const co = getCourse(data, l.courseId) || {};
+    const path = l.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
+    const line = new kakao.maps.Polyline({
+      path, strokeWeight: 3, strokeColor: co.color || '#3498db',
+      strokeOpacity: 0.35, strokeStyle: 'solid', map, zIndex: 1
+    });
+    __pastTrackLines.push(line);
+    cnt++;
+  });
+  if (btn) { btn.style.background = '#8e44ad'; btn.textContent = '👣 이전 행적 ' + cnt; }
+}
+function togglePastTracks() {
+  __showPastTracks = !__showPastTracks;
+  renderPastTracks();
+  if (__showPastTracks && !__pastTrackLines.length) {
+    // 표시할 궤적이 없으면 안내
+    setTimeout(() => { if (__showPastTracks && !__pastTrackLines.length) alert('이 보기에 표시할 이전 운행 궤적이 없습니다.\n(운행기록이 쌓이면 나옵니다)'); }, 50);
   }
 }
 
