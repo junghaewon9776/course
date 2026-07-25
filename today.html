@@ -120,7 +120,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260716y"></script>
+<script src="common.js?v=20260716z"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3943,7 +3943,7 @@ function showHistoryModal(type, courseFilter) {
     }).join('');
     filterHtml = `
       <div style="padding:10px 16px 0;">
-        <select onchange="showHistoryModal('complaints', this.value)" style="width:100%;padding:10px;border:1px solid #bbb;border-radius:8px;font-size:14px;font-weight:700;color:#2c3e50;background:#fff;">
+        <select id="__histCourseFilter" onchange="showHistoryModal('complaints', this.value)" style="width:100%;padding:10px;border:1px solid #bbb;border-radius:8px;font-size:14px;font-weight:700;color:#2c3e50;background:#fff;">
           <option value=""${courseFilter === '' ? ' selected' : ''}>전체 코스 · ${all.length}건</option>
           ${opts}
         </select>
@@ -3975,11 +3975,24 @@ function showHistoryModal(type, courseFilter) {
             </div>` : '';
         const crs = it.courseId ? (getCourse(data, it.courseId) || {}) : null;
         const courseTag = crs ? `<span style="background:${crs.color||'#888'};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${(crs.name||'').replace(/</g,'&lt;')}${crs.detail ? ' ('+crs.detail.replace(/</g,'&lt;')+')' : ''}</span>` : '';
+        // 🗂 관리자: 이 민원의 코스를 직접 지정 (그 민원의 행사 코스 목록)
+        let __hrole=''; try{__hrole=getMyRole();}catch(e){}
+        const canSetCourse = (__hrole==='admin'||__hrole==='super');
+        let evCourses = [];
+        const evForC = it.eventId ? (getEvent(data, it.eventId) || null) : null;
+        if (evForC && (evForC.courses||[]).length) evCourses = evForC.courses;
+        else (data.events||[]).forEach(e => (e.courses||[]).forEach(c => evCourses.push(c)));
+        const courseSel = canSetCourse
+          ? `<select onchange="setComplaintCourse('${it.id}', this.value)" style="font-size:11px;padding:3px 6px;border:1px solid ${crs?(crs.color||'#888'):'#ccc'};border-radius:8px;max-width:170px;font-weight:700;color:#2c3e50;">
+              <option value="">＋ 코스 지정</option>
+              ${evCourses.map(c=>`<option value="${c.id}"${it.courseId===c.id?' selected':''}>${(c.name||'').replace(/</g,'&lt;')}${c.detail?' ('+c.detail.replace(/</g,'&lt;')+')':''}</option>`).join('')}
+            </select>`
+          : courseTag;
         return `
           <div style="padding:10px 0;border-bottom:1px solid #eee;">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap;">
               <span style="background:${statusColor};color:#fff;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;">${statusLabel}</span>
-              ${courseTag}
+              ${courseSel}
               <span style="font-size:11px;color:#888;">${timeStr}</span>
             </div>
             <div style="font-weight:600;font-size:14px;margin-bottom:2px;">${(it.content || '내용 없음').replace(/</g,'&lt;')}</div>
@@ -4053,6 +4066,20 @@ function copyAddrFrom(btn) {
     }
   } catch (e) {}
   fallback();
+}
+
+// 🗂 민원에 코스 지정 (관리자 이상) — 지정하면 코스별 필터에 잡힘
+function setComplaintCourse(id, courseId) {
+  let role = ''; try { role = getMyRole(); } catch (e) {}
+  if (role !== 'admin' && role !== 'super') { alert('코스 지정은 관리자(admin) 이상만 가능합니다.'); return; }
+  const data = loadData();
+  const c = (data.complaints || []).find(x => x.id === id);
+  if (!c) return;
+  c.courseId = courseId || '';
+  saveData(data);
+  // 현재 보고 있던 코스 필터 유지하며 다시 그림
+  const fEl = document.getElementById('__histCourseFilter');
+  showHistoryModal('complaints', fEl ? fEl.value : undefined);
 }
 
 // 민원/거점요청 '📍 지도' → 별도 지도 모달 대신 '오늘의운영 메인 지도'를 그 위치로 이동
