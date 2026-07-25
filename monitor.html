@@ -161,6 +161,8 @@
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid #eee;">
           <div style="font-size:12px;color:#888;font-weight:700;margin-bottom:6px;">📊 코스별 방역 횟수 <span style="font-weight:400;">— 누르면 며칠에 했는지 나옴</span></div>
           <div id="courseStat" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+          <div style="font-size:12px;color:#888;font-weight:700;margin:12px 0 6px;">📈 월별 운행 추이 <span style="font-weight:400;">— 막대 누르면 그달 상세</span></div>
+          <div id="trendChart"></div>
         </div>
       </div>
       <div class="card">
@@ -197,7 +199,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260716t"></script>
+<script src="common.js?v=20260716u"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -1706,6 +1708,38 @@ function render() {
     }
   }
 
+  // 📈 월별 운행 추이 막대그래프 (올해, 행사필터 반영·기간슬라이더 무관) — 막대 클릭 시 그달 상세
+  {
+    const tc = document.getElementById('trendChart');
+    if (tc) {
+      const evF = document.getElementById('eventFilter')?.value || '';
+      const yr = new Date().getFullYear();
+      const monthCnt = new Array(12).fill(0);
+      (data.logs || []).forEach(l => {
+        if (!l || l.hidden) return;
+        if (evF && l.eventId !== evF) return;
+        const t = l.startedAt || 0; if (!t) return;
+        const dt = new Date(t); if (dt.getFullYear() !== yr) return;
+        monthCnt[dt.getMonth()]++;
+      });
+      const maxN = Math.max(1, ...monthCnt);
+      const anyN = monthCnt.some(n => n > 0);
+      tc.innerHTML = anyN
+        ? '<div style="display:flex;align-items:flex-end;gap:3px;height:96px;padding-top:4px;">'
+          + monthCnt.map((n, m) => {
+              const h = Math.round(n / maxN * 82);
+              const on = n > 0;
+              return '<div onclick="' + (on ? "showMonthRuns(" + m + ")" : '') + '" title="' + (m + 1) + '월 ' + n + '회" '
+                + 'style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2px;' + (on ? 'cursor:pointer;' : '') + '">'
+                + (n ? '<span style="font-size:9px;font-weight:800;color:#2980b9;">' + n + '</span>' : '')
+                + '<div style="width:100%;height:' + Math.max(on ? 4 : 1, h) + 'px;border-radius:4px 4px 0 0;background:' + (on ? 'linear-gradient(180deg,#5dade2,#2980b9)' : '#eee') + ';"></div>'
+                + '<span style="font-size:9px;color:#999;">' + (m + 1) + '</span></div>';
+            }).join('')
+          + '</div><div style="font-size:10px;color:#bbb;text-align:right;margin-top:2px;">' + yr + '년 · 월(1~12)</div>'
+        : '<span style="color:#aaa;font-size:12px;">올해 기록 없음</span>';
+    }
+  }
+
   // 목록
   const el = document.getElementById('logList');
   if (!logs.length) {
@@ -2363,6 +2397,38 @@ function showCourseRuns(courseId) {
   }).join('') : '<div style="text-align:center;color:#aaa;padding:16px;">기록이 없습니다</div>';
   const cname = (c.name || '코스없음') + (c.detail ? ' (' + c.detail + ')' : '');
   __openInfoModal('📅 ' + escapeHtml(cname) + ' 방역한 날', '총 ' + runs.length + '회 · 며칠에 했는지', body);
+}
+// 📅 그달(올해 특정 월) 운행 상세 — 막대그래프 클릭. 코스별 요약 + 날짜별 목록.
+function showMonthRuns(monthIdx) {
+  const data = loadData();
+  const evF = document.getElementById('eventFilter')?.value || '';
+  const yr = new Date().getFullYear();
+  const runs = (data.logs || []).filter(l => {
+    if (!l || l.hidden) return false;
+    if (evF && l.eventId !== evF) return false;
+    const t = l.startedAt || 0; if (!t) return false;
+    const dt = new Date(t);
+    return dt.getFullYear() === yr && dt.getMonth() === monthIdx;
+  }).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  // 코스별 요약
+  const byC = {};
+  runs.forEach(l => { const k = l.courseId || '?'; byC[k] = (byC[k] || 0) + 1; });
+  const chips = Object.keys(byC).sort((a, b) => byC[b] - byC[a]).map(k => {
+    const c = getCourse(data, k) || {};
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:#f4f6f9;border:1px solid #e3e8ee;border-radius:12px;padding:3px 9px;font-size:12px;font-weight:700;margin:0 4px 4px 0;">'
+      + '<span style="width:8px;height:8px;border-radius:50%;background:' + (c.color || '#999') + ';"></span>'
+      + escapeHtml(c.name || '코스없음') + ' <b style="color:#2980b9;">' + byC[k] + '</b></span>';
+  }).join('');
+  const list = runs.map(l => {
+    const d = l.date || new Date(l.startedAt).toLocaleDateString('ko-KR');
+    const c = getCourse(data, l.courseId) || {};
+    const who = (l.crew && l.crew.driver) || (getTeam(data, l.teamId) || {}).name || '단원';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #eee;">'
+      + '<div style="font-size:13px;font-weight:700;white-space:nowrap;">' + d + '</div>'
+      + '<div style="flex:1;min-width:0;font-size:12px;"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + (c.color || '#999') + ';margin-right:5px;"></span>' + escapeHtml(c.name || '?') + ' · ' + escapeHtml(who) + '</div></div>';
+  }).join('');
+  const body = runs.length ? ('<div style="margin-bottom:8px;">' + chips + '</div>' + list) : '<div style="text-align:center;color:#aaa;padding:16px;">이 달 기록이 없습니다</div>';
+  __openInfoModal('📅 ' + yr + '년 ' + (monthIdx + 1) + '월', '총 ' + runs.length + '회', body);
 }
 // 공용 정보 모달
 function __openInfoModal(titleHtml, subHtml, bodyHtml) {
