@@ -44,6 +44,7 @@
           <div class="sub" id="opSubtitle"></div>
         </div>
         <div class="op-toolbar">
+          <button class="small" onclick="showAccidentInfo()" style="background:#c0392b;font-weight:800;">🚨 사고·보험</button>
           <button class="small" id="gpsToggle" onclick="toggleGPS()">📍 GPS 시작</button>
           <button class="small" onclick="if(currentPos)openRoadview(currentPos.lat,currentPos.lng,'현재 위치');else alert('현재 위치가 아직 없어요. GPS를 켜주세요.');" style="background:#16a085;"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" aria-hidden="true"><circle cx="12" cy="4.2" r="2.9" fill="currentColor"/><path d="M15.5 8.4h-7A1.5 1.5 0 0 0 7 9.9v4.4h2.1V22h5.8v-7.7H17V9.9a1.5 1.5 0 0 0-1.5-1.5z" fill="currentColor"/></svg> 로드뷰</button>
           <select id="liveInterval" onchange="setLiveInterval(this.value)" style="font-size:11px;padding:2px 4px;border-radius:4px;" title="위치 데이터 전송 주기 (지도는 항상 실시간)">
@@ -120,7 +121,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260717d"></script>
+<script src="common.js?v=20260717e"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -972,7 +973,8 @@ function quickStartByVehicle(eventId, courseId, vehicleId) {
     assistPhone: assistPhone,
     vehicle: v.plate || '',
     vehicleColor: v.color || '',
-    vehicleName: hochaName
+    vehicleName: hochaName,
+    vehicleId: v.id, owner: v.owner || '', ownerPhone: v.ownerPhone || ''   // 🚨 사고 시 보험 연락처
   });
 }
 
@@ -1030,11 +1032,14 @@ function confirmStartForm(eventId, courseId) {
     const m = (data.members || []).find(x => (x.name||'').trim() === n.trim());
     return m?.phone || '';
   };
+  // 차량번호로 등록차량 조회 → 보험정보 첨부 (사고 시 연락용)
+  const __veh = vehicle ? (data.vehicles || []).find(v => (v.plate || '').trim() && (v.plate || '').trim() === vehicle.trim()) : null;
   closeStartForm();
   startSession(eventId, courseId, teamId, {
     driver, assist, vehicle, vehicleColor, vehicleName,
     driverPhone: findPhone(driver),
-    assistPhone: findPhone(assist)
+    assistPhone: findPhone(assist),
+    vehicleId: (__veh && __veh.id) || '', owner: (__veh && __veh.owner) || '', ownerPhone: (__veh && __veh.ownerPhone) || ''
   });
 }
 
@@ -3625,6 +3630,41 @@ function resolveComplaintFromMap(id) {
 
 let __cmpMap = null, __cmpMarker = null, __cmpAddr = '', __cmpType = '';
 
+// 🚨 사고 시 연락 — 이 운행 차량의 보험사·연락처 + 112/119
+function showAccidentInfo() {
+  const crew = (currentSession && currentSession.crew) || {};
+  const data = loadData();
+  let owner = crew.owner || '', ownerPhone = crew.ownerPhone || '';
+  const plate = crew.vehicle || '';
+  // 예전에 시작한 세션 등 보험정보가 없으면 차량번호로 조회
+  if ((!owner && !ownerPhone) && plate) {
+    const v = (data.vehicles || []).find(x => (x.plate || '').trim() === plate.trim());
+    if (v) { owner = v.owner || ''; ownerPhone = v.ownerPhone || ''; }
+  }
+  const veh = [crew.vehicleName, plate].filter(Boolean).join(' · ') || '차량 미지정';
+  const tel = (ownerPhone || '').replace(/[^0-9+]/g, '');
+  const esc = s => String(s || '').replace(/</g, '&lt;');
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = '<div style="background:#fff;border-radius:14px;padding:20px;max-width:360px;width:100%;">'
+    + '<div style="font-weight:800;font-size:19px;color:#c0392b;margin-bottom:2px;">🚨 사고 시 연락처</div>'
+    + '<div style="font-size:12px;color:#888;margin-bottom:14px;">🚐 ' + esc(veh) + '</div>'
+    + '<div style="background:#fdf2f0;border:1px solid #f5c6cb;border-radius:10px;padding:14px;margin-bottom:12px;">'
+    + '<div style="font-size:12px;color:#888;">보험사 / 소유주</div>'
+    + '<div style="font-size:16px;font-weight:800;color:#2c3e50;margin:2px 0 10px;">' + (owner ? esc(owner) : '<span style="color:#aaa;font-weight:400;">미등록 — 간부에게 문의</span>') + '</div>'
+    + (ownerPhone
+        ? '<a href="tel:' + tel + '" style="display:block;text-align:center;background:#c0392b;color:#fff;padding:14px;border-radius:10px;font-weight:800;font-size:18px;text-decoration:none;">📞 보험 ' + esc(ownerPhone) + '</a>'
+        : '<div style="color:#e67e22;font-size:13px;text-align:center;font-weight:700;">보험 연락처가 등록돼 있지 않아요</div>')
+    + '</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:10px;">'
+    + '<a href="tel:112" style="flex:1;text-align:center;background:#2c3e50;color:#fff;padding:14px;border-radius:10px;font-weight:800;font-size:16px;text-decoration:none;">📞 112 경찰</a>'
+    + '<a href="tel:119" style="flex:1;text-align:center;background:#e74c3c;color:#fff;padding:14px;border-radius:10px;font-weight:800;font-size:16px;text-decoration:none;">📞 119 구급</a>'
+    + '</div>'
+    + '<button onclick="this.closest(\'div\').parentNode.remove()" style="width:100%;background:#555;color:#fff;border:none;padding:12px;border-radius:10px;font-weight:700;cursor:pointer;">닫기</button>'
+    + '</div>';
+  document.body.appendChild(ov);
+}
 function reportComplaint() {
   if (!currentSession) { alert('먼저 코스를 시작하세요'); return; }
   if (!currentPos) { alert('GPS 위치가 잡히지 않았습니다.\nGPS를 켜고 위치 잡힌 후 다시 시도하세요'); return; }
