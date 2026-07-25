@@ -358,13 +358,25 @@
 <script>
   window.__SYNC_NODES = ['mapDefault','events','anchors','members','teams','requests','complaints','noSprayZones','notices','vehicles','visibility','eventConfig','savedTeams','schedules','alertConfig','accessConfig','accessGate','telegram','naverSms','publicMonitor','sheetSync','drivePhoto','users','inquiries','memberAuth','memberPinFlags','pushTemplates','pushWebhook','pushPrefs','pushTokens','deviceNames','notifications','notifLog','pushLog','xpConfig','quests','rankTiers','rankOverride'];
 </script>
-<script src="common.js?v=20260717m"></script>
+<script src="common.js?v=20260717n"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
 
+// ⏱ 로딩 시간 측정 (?perf=1 일 때만 화면에 표시) — 웹이 어디서 느린지 진단용
+window.__perf = { t0: Date.now() };
+function __perfMark(k) { if (window.__perf && window.__perf[k] == null) window.__perf[k] = Date.now() - window.__perf.t0; __perfShow(); }
+function __perfShow() {
+  if (!/[?&]perf/.test(location.search)) return;
+  let el = document.getElementById('__perfBadge');
+  if (!el) { el = document.createElement('div'); el.id = '__perfBadge'; el.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:2147483647;background:#111;color:#0f0;font:12px/1.5 monospace;padding:8px 10px;border-radius:6px;white-space:pre;box-shadow:0 2px 10px rgba(0,0,0,.5);'; document.body.appendChild(el); }
+  const p = window.__perf;
+  el.textContent = '⏱ 로딩(초)\n데이터: ' + (p.data != null ? (p.data / 1000).toFixed(1) : '…')
+    + '\n지도SDK: ' + (p.map != null ? (p.map / 1000).toFixed(1) : '…')
+    + '\n첫렌더: ' + (p.render != null ? (p.render / 1000).toFixed(1) : '…');
+}
 // 인증 → 데이터 동기화 → 카카오 지도 초기화
-window.onAuthSuccess = () => onDataReady(loadKakaoMap);
+window.onAuthSuccess = () => onDataReady(() => { __perfMark('data'); loadKakaoMap(); });
 // 데이터가 바뀔 때마다 전체 재렌더하면 운영 중(실시간 위치 등) 관리 화면이 계속 버벅인다.
 // → 600ms 동안 모아서 딱 한 번만 refreshAll (렉·먹통 방지). renderMap은 map 없으면 자체 스킵.
 let __admRefreshTimer = null;
@@ -374,7 +386,7 @@ window.onDataChanged = () => {
 };
 
 checkAdminAuth().then(ok => {
-  if (ok) onDataReady(loadKakaoMap);
+  if (ok) onDataReady(() => { __perfMark('data'); loadKakaoMap(); });
 });
 
 let __kakaoLoadAttempt = 0;
@@ -399,6 +411,7 @@ function loadKakaoMap() {
 }
 
 function initMap() {
+  __perfMark('map');
   const data = loadData();
   map = new kakao.maps.Map(document.getElementById('map'), {
     center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
@@ -425,6 +438,7 @@ function initMap() {
     handleMapClick(lat, lng);
   });
   refreshAll();
+  __perfMark('render');
 }
 
 function setMapType(type) {
