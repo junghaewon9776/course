@@ -199,7 +199,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260716w"></script>
+<script src="common.js?v=20260716x"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -2272,7 +2272,7 @@ async function showPhotoViewer() {
 // 사진 확대/이동 (핀치·더블탭·드래그·휠)
 function __attachPhotoZoom(stage, img) {
   let scale = 1, tx = 0, ty = 0, startDist = 0, startScale = 1;
-  let panning = false, sx = 0, sy = 0, stx = 0, sty = 0, lastTap = 0;
+  let panning = false, sx = 0, sy = 0, stx = 0, sty = 0, lastTap = 0, lastTouchAt = 0;
   const MIN = 1, MAX = 6;
   const dist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
   function apply() { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ')'; }
@@ -2283,12 +2283,13 @@ function __attachPhotoZoom(stage, img) {
   }
   function zoomTo(s) { scale = Math.max(MIN, Math.min(MAX, s)); if (scale <= 1.01) { scale = 1; tx = 0; ty = 0; } clamp(); apply(); }
   stage.addEventListener('wheel', function (e) { e.preventDefault(); zoomTo(scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)); }, { passive: false });
-  stage.addEventListener('dblclick', function (e) { e.preventDefault(); zoomTo(scale > 1 ? 1 : 2.5); });
+  stage.addEventListener('dblclick', function (e) { e.preventDefault(); if (Date.now() - lastTouchAt < 700) return; /* 터치에서 온 합성 dblclick 무시 */ zoomTo(scale > 1 ? 1 : 2.5); });
   stage.addEventListener('touchstart', function (e) {
+    lastTouchAt = Date.now();
     if (e.touches.length === 2) { startDist = dist(e.touches); startScale = scale; panning = false; }
     else if (e.touches.length === 1) {
       const now = Date.now();
-      if (now - lastTap < 300) { zoomTo(scale > 1 ? 1 : 2.5); lastTap = 0; }
+      if (now - lastTap < 400) { zoomTo(scale > 1 ? 1 : 2.5); lastTap = 0; }
       else { lastTap = now; if (scale > 1) { panning = true; sx = e.touches[0].clientX; sy = e.touches[0].clientY; stx = tx; sty = ty; } }
     }
   }, { passive: false });
