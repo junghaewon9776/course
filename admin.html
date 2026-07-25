@@ -354,14 +354,14 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717j"></script>
+<script src="common.js?v=20260717k"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
 
 // 인증 → 데이터 동기화 → 카카오 지도 초기화
 window.onAuthSuccess = () => onDataReady(loadKakaoMap);
-window.onDataChanged = () => { if (map) refreshAll(); };
+window.onDataChanged = () => { refreshAll(); };   // 지도보다 데이터가 먼저 와도 패널·드롭다운 갱신 (renderMap은 map 없으면 자체 스킵)
 
 checkAdminAuth().then(ok => {
   if (ok) onDataReady(loadKakaoMap);
@@ -1264,33 +1264,26 @@ function fitAllAnchors() {
 
 function refreshAll() {
   // super 전용 카드 표시
-  const myRole = getMyRole();
-  document.querySelectorAll('.super-only').forEach(el => {
-    el.style.display = myRole === 'super' ? '' : 'none';
-  });
-  renderRequests();
-  renderEvents();
-  renderEventSelect('viewSelect', true);
-  renderEventSelect('courseEventSel');
-  renderEventSelect('complaintEventSel');
-  renderCourses();
-  renderAnchorCourseSelect();
-  renderAnchors();
-  renderComplaints();
-  renderNoSprayZones();
-  renderNotices();
-  renderAlertConfig();
-  renderVisSaveBar();   // 👁 저장 안 된 표시 변경이 있으면 하단 저장 바 유지
-  renderTeams();
-  renderEventSelect('evtAssignSel');
-  renderEvtAssign();
-  renderSchedules();
-  renderTelegramConfig();
-  renderMap();
-  // 모드 버튼 시각 동기화 (현재 모드 표시)
-  document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.mode === pendingClickMode);
-  });
+  try {
+    const myRole = getMyRole();
+    document.querySelectorAll('.super-only').forEach(el => { el.style.display = myRole === 'super' ? '' : 'none'; });
+  } catch (e) {}
+  // ⚠️ 한 단계가 에러 나도 나머지는 계속 그린다 (예전엔 앞 단계 오류로 거점 코스 드롭다운 등이 통째로 안 뜨던 문제)
+  const steps = [
+    renderRequests, renderEvents,
+    () => renderEventSelect('viewSelect', true),
+    () => renderEventSelect('courseEventSel'),
+    () => renderEventSelect('complaintEventSel'),
+    renderCourses, renderAnchorCourseSelect, renderAnchors, renderComplaints,
+    renderNoSprayZones, renderNotices, renderAlertConfig, renderVisSaveBar,
+    renderTeams,
+    () => renderEventSelect('evtAssignSel'),
+    renderEvtAssign, renderSchedules, renderTelegramConfig, renderMap
+  ];
+  for (const fn of steps) { try { fn(); } catch (e) { console.warn('refreshAll 단계 오류:', e); } }
+  try {
+    document.querySelectorAll('.mode-btn').forEach(btn => { btn.classList.toggle('active', btn.dataset.mode === pendingClickMode); });
+  } catch (e) {}
 }
 
 function renderTelegramConfig() {
@@ -3090,7 +3083,7 @@ function admTogglePastTrack(key) {
   } else {
     const co = getCourse(data, l.courseId);
     const path = l.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
-    const line = new kakao.maps.Polyline({ path, strokeWeight: 4, strokeColor: (co && co.color) || '#95a5a6', strokeOpacity: 0.7, strokeStyle: 'shortdash' });
+    const line = new kakao.maps.Polyline({ path, strokeWeight: 4, strokeColor: '#7f8c8d', strokeOpacity: 0.75, strokeStyle: 'shortdash' });   // 회색 — 코스 색과 겹쳐 안 보이던 문제
     line.setMap(map);
     __admPastTrackMap[key] = line;
   }
