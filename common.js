@@ -1920,6 +1920,73 @@ function getCourseEventId(data, courseId) {
   }
   return null;
 }
+// 운행 1건의 운영자 표시 (운전 + 보조 함께). HTML 이스케이프 포함.
+function crewLabel(data, l) {
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const drv = (l && l.crew && l.crew.driver || '').trim();
+  const ast = (l && l.crew && l.crew.assist || '').trim();
+  const parts = [];
+  if (drv) parts.push('<b style="color:#2c3e50;">운전</b> ' + esc(drv));
+  if (ast) parts.push('<span style="color:#16a085;font-weight:700;">보조</span> ' + esc(ast));
+  if (parts.length) return parts.join(' · ');
+  const team = (getTeam(data, l && l.teamId) || {}).name;
+  return team ? esc(team) + '조' : '단원';
+}
+// 코스 전역 순서 맵 {courseId: 순번} — 행사 순서 → 행사 안 코스 순서 (1코스부터 나오게 정렬용)
+function courseOrderMap(data) {
+  const m = {}; let idx = 0;
+  ((data && data.events) || []).forEach(e => (e.courses || []).forEach(c => { m[c.id] = idx++; }));
+  return m;
+}
+// 📈 월별 코스색 누적 막대그래프 HTML (공용) — monitor·stats 공통
+//   opts: { eventFilter, year, clickFn('showMonthRuns' 등 전역함수명, monthIdx 받음), height }
+function buildMonthlyCourseChart(data, opts) {
+  opts = opts || {};
+  const evF = opts.eventFilter || '';
+  const yr = opts.year || (new Date()).getFullYear();
+  const clickFn = opts.clickFn || '';
+  const H = opts.height || 112;
+  const ord = courseOrderMap(data);
+  const months = Array.from({ length: 12 }, () => ({}));
+  const totals = new Array(12).fill(0);
+  const used = {};
+  ((data && data.logs) || []).forEach(l => {
+    if (!l || l.hidden) return;
+    if (evF && l.eventId !== evF) return;
+    const t = l.startedAt || 0; if (!t) return;
+    const dt = new Date(t); if (dt.getFullYear() !== yr) return;
+    const mo = dt.getMonth(), k = l.courseId || '?';
+    months[mo][k] = (months[mo][k] || 0) + 1;
+    totals[mo]++; used[k] = true;
+  });
+  if (!totals.some(n => n > 0)) return '<span style="color:#aaa;font-size:12px;">' + yr + '년 기록 없음</span>';
+  const maxN = Math.max(1, ...totals);
+  const courseKeys = Object.keys(used).sort((a, b) => ((ord[a] == null ? 999 : ord[a]) - (ord[b] == null ? 999 : ord[b])));
+  const bars = months.map((mc, mo) => {
+    const tot = totals[mo];
+    const barH = Math.round(tot / maxN * (H - 18));
+    let segs = '';
+    courseKeys.forEach(k => {
+      const n = mc[k]; if (!n) return;
+      const c = getCourse(data, k) || {};
+      const h = tot > 0 ? (n / tot * barH) : 0;
+      segs += '<div title="' + (mo + 1) + '월 ' + String(c.name || '?').replace(/"/g, '') + ' ' + n + '회" style="height:' + h + 'px;background:' + (c.color || '#999') + ';"></div>';
+    });
+    const on = tot > 0;
+    return '<div ' + (on && clickFn ? 'onclick="' + clickFn + '(' + mo + ')"' : '')
+      + ' style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:3px;' + (on && clickFn ? 'cursor:pointer;' : '') + '">'
+      + (tot ? '<span style="font-size:9px;font-weight:800;color:#555;line-height:1;">' + tot + '</span>' : '')
+      + '<div style="width:70%;max-width:20px;height:' + (on ? Math.max(3, barH) : 1) + 'px;border-radius:3px 3px 0 0;overflow:hidden;display:flex;flex-direction:column-reverse;' + (on ? '' : 'background:#eee;') + '">' + segs + '</div>'
+      + '<span style="font-size:9px;color:#999;line-height:1;">' + (mo + 1) + '</span></div>';
+  }).join('');
+  const legend = courseKeys.map(k => {
+    const c = getCourse(data, k) || {};
+    return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#555;margin:0 8px 3px 0;"><span style="width:10px;height:10px;border-radius:2px;background:' + (c.color || '#999') + ';"></span>' + String(c.name || '코스없음').replace(/</g, '&lt;') + '</span>';
+  }).join('');
+  return '<div style="display:flex;align-items:flex-end;gap:4px;height:' + H + 'px;">' + bars + '</div>'
+    + '<div style="margin-top:6px;line-height:1.6;">' + legend + '</div>'
+    + '<div style="font-size:10px;color:#bbb;text-align:right;">' + yr + '년 · 월(1~12) · 막대=코스별 누적</div>';
+}
 function getTeam(data, teamId) {
   return (data.teams || []).find(t => t.id === teamId);
 }
