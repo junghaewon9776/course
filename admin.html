@@ -104,9 +104,12 @@
         <div id="searchResults" style="display:none;max-height:160px;overflow-y:auto;border:1px solid #ddd;border-radius:5px;margin-bottom:8px;background:#fff;"></div>
         <div class="map-wrap">
           <div id="map" class="map"></div>
-          <div id="mapCtrlBtns" style="position:absolute;top:10px;left:10px;z-index:11;display:flex;flex-direction:column;gap:6px;">
-            <button onclick="fitAllAnchors()" style="background:#2c3e50;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">🗺 전체</button>
-            <button id="pastTrackBtn" onclick="togglePastTracks()" style="background:#bdc3c7;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">👣 행적</button>
+          <div id="mapCtrlBtns" style="position:absolute;top:54px;left:10px;z-index:11;display:flex;flex-direction:column;gap:6px;align-items:flex-start;">
+            <div style="display:flex;gap:6px;">
+              <button onclick="fitAllAnchors()" style="background:#2c3e50;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">🗺 전체</button>
+              <button id="pastTrackBtn" onclick="togglePastTracks()" style="background:#bdc3c7;color:#fff;border:none;border-radius:7px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,0.3);white-space:nowrap;">👣 행적</button>
+            </div>
+            <div id="trackCoursePanel" style="display:none;background:rgba(255,255,255,0.97);border:1px solid #ddd;border-radius:8px;padding:8px;box-shadow:0 2px 8px rgba(0,0,0,0.25);max-width:230px;max-height:210px;overflow:auto;"></div>
           </div>
           <div id="mapModeBanner" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:10;padding:10px 20px;border-radius:8px;font-weight:bold;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,0.3);pointer-events:none;text-align:center;"></div>
         </div>
@@ -354,7 +357,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717e"></script>
+<script src="common.js?v=20260717f"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -1683,12 +1686,10 @@ function isCourseVisible(id) {
 function toggleEventVisible(id) {
   __visPending.events[id] = !isEventVisible(id);
   renderEvents(); renderCourses(); renderVisSaveBar();   // 저장 없이 화면만 갱신 (가볍게)
-  if (__showPastTracks) renderPastTracks();   // 이전 행적도 코스/행사 켜기·끄기 즉시 반영
 }
 function toggleCourseVisible(id) {
   __visPending.courses[id] = !isCourseVisible(id);
   renderCourses(); renderVisSaveBar();
-  if (__showPastTracks) renderPastTracks();   // 켠 코스의 궤적만 바로 보이게
 }
 // 보류된 표시 변경을 실제로 저장
 // 같은 알림이 짧은 시간에 두 번 뜨는 것 방지 (저장 경로가 겹쳐 호출돼도 안내는 한 번만)
@@ -2975,42 +2976,71 @@ function renderMap() {
   renderPastTracks();   // 이전 행적(과거 운행 궤적) 오버레이 — 켜져 있으면 다시 그림
 }
 
-// ───── 👣 이전 행적: 과거 운행 궤적을 옅게 겹쳐 표시 (거점·위치 수정 참고용) ─────
-let __showPastTracks = false, __pastTrackLines = [];
+// ───── 👣 이전 행적: 코스별로 골라서 과거 운행 궤적을 겹쳐 표시 (오늘의운영 이전핑처럼 on/off) ─────
+let __trackPanelOpen = false;   // 코스 선택 패널 열림
+let __trackSel = {};            // courseId -> true (그 코스 궤적 표시)
+let __pastTrackLines = [];
+function togglePastTracks() {
+  __trackPanelOpen = !__trackPanelOpen;
+  const panel = document.getElementById('trackCoursePanel');
+  const btn = document.getElementById('pastTrackBtn');
+  if (panel) panel.style.display = __trackPanelOpen ? 'block' : 'none';
+  if (btn) btn.style.background = (__trackPanelOpen || Object.values(__trackSel).some(Boolean)) ? '#8e44ad' : '#bdc3c7';
+  if (__trackPanelOpen) renderTrackPanel();
+}
+function renderTrackPanel() {
+  const panel = document.getElementById('trackCoursePanel');
+  if (!panel) return;
+  const data = loadData();
+  const view = document.getElementById('viewSelect') ? document.getElementById('viewSelect').value : 'all';
+  const cnt = {};
+  (data.logs || []).forEach(l => {
+    if (!l || l.hidden || !Array.isArray(l.track) || l.track.length < 2) return;
+    if (view !== 'all' && l.eventId !== view) return;
+    const k = l.courseId || '?'; cnt[k] = (cnt[k] || 0) + 1;
+  });
+  const ord = courseOrderMap(data);
+  const keys = Object.keys(cnt).sort((a, b) => ((ord[a] == null ? 999 : ord[a]) - (ord[b] == null ? 999 : ord[b])));
+  if (!keys.length) { panel.innerHTML = '<div style="font-size:12px;color:#888;">운행 궤적 없음</div>'; return; }
+  const anyOn = keys.some(k => __trackSel[k]);
+  panel.innerHTML = '<div style="font-size:11px;color:#888;font-weight:700;margin-bottom:6px;">코스별 궤적 — 눌러서 켜기</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:5px;">'
+    + keys.map(k => {
+        const c = getCourse(data, k) || {};
+        const on = !!__trackSel[k];
+        return '<button onclick="toggleTrackCourse(\'' + String(k).replace(/'/g, "\\'") + '\')" style="border:1.5px solid ' + (c.color || '#999') + ';background:' + (on ? (c.color || '#999') : '#fff') + ';color:' + (on ? '#fff' : '#333') + ';border-radius:13px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;">' + String(c.name || '코스없음').replace(/</g, '&lt;') + ' ' + cnt[k] + '</button>';
+      }).join('')
+    + '</div>'
+    + (anyOn ? '<button onclick="clearTrackSel()" style="margin-top:7px;width:100%;background:#eee;border:none;border-radius:6px;padding:5px;font-size:11px;color:#666;cursor:pointer;">전부 끄기</button>' : '');
+}
+function toggleTrackCourse(courseId) {
+  __trackSel[courseId] = !__trackSel[courseId];
+  renderTrackPanel();
+  renderPastTracks();
+}
+function clearTrackSel() {
+  __trackSel = {};
+  renderTrackPanel();
+  renderPastTracks();
+  const btn = document.getElementById('pastTrackBtn');
+  if (btn) btn.style.background = __trackPanelOpen ? '#8e44ad' : '#bdc3c7';
+}
 function renderPastTracks() {
   if (!map) return;
   __pastTrackLines.forEach(l => { try { l.setMap(null); } catch (e) {} });
   __pastTrackLines = [];
-  const btn = document.getElementById('pastTrackBtn');
-  if (!__showPastTracks) { if (btn) { btn.style.background = '#bdc3c7'; btn.textContent = '👣 행적'; } return; }
+  const sel = Object.keys(__trackSel).filter(k => __trackSel[k]);
+  if (!sel.length) return;
   const data = loadData();
   const view = document.getElementById('viewSelect') ? document.getElementById('viewSelect').value : 'all';
-  // 현재 보기(행사/코스)에 맞는 로그만
-  const logs = (data.logs || []).filter(l => {
-    if (!l || l.hidden || !Array.isArray(l.track) || l.track.length < 2) return false;
-    if (view !== 'all' && l.eventId !== view) return false;
-    return isCourseVisible(l.courseId);
-  });
-  let cnt = 0;
-  logs.forEach(l => {
+  (data.logs || []).forEach(l => {
+    if (!l || l.hidden || !Array.isArray(l.track) || l.track.length < 2) return;
+    if (view !== 'all' && l.eventId !== view) return;
+    if (!__trackSel[l.courseId || '?']) return;
     const co = getCourse(data, l.courseId) || {};
     const path = l.track.map(t => new kakao.maps.LatLng(t[0], t[1]));
-    const line = new kakao.maps.Polyline({
-      path, strokeWeight: 3, strokeColor: co.color || '#3498db',
-      strokeOpacity: 0.35, strokeStyle: 'solid', map, zIndex: 1
-    });
-    __pastTrackLines.push(line);
-    cnt++;
+    __pastTrackLines.push(new kakao.maps.Polyline({ path, strokeWeight: 3, strokeColor: co.color || '#3498db', strokeOpacity: 0.4, strokeStyle: 'solid', map, zIndex: 1 }));
   });
-  if (btn) { btn.style.background = '#8e44ad'; btn.textContent = '👣 행적 ' + cnt; }
-}
-function togglePastTracks() {
-  __showPastTracks = !__showPastTracks;
-  renderPastTracks();
-  if (__showPastTracks && !__pastTrackLines.length) {
-    // 표시할 궤적이 없으면 안내
-    setTimeout(() => { if (__showPastTracks && !__pastTrackLines.length) alert('이 보기에 표시할 이전 운행 궤적이 없습니다.\n(운행기록이 쌓이면 나옵니다)'); }, 50);
-  }
 }
 
 // ────── 행사별 조/차량 선택 ──────
