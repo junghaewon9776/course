@@ -120,7 +120,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260717b"></script>
+<script src="common.js?v=20260717c"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -416,7 +416,7 @@ function initMap() {
     center: new kakao.maps.LatLng(data.mapDefault.lat, data.mapDefault.lng),
     level: data.mapDefault.level || 4,
     minLevel: 3, // 너무 가까이 못 가게
-    maxLevel: 9
+    maxLevel: 13 // 모니터링처럼 전국 수준까지 축소 가능
   });
   // 확대/축소 컨트롤 (+/-) — 모니터링과 동일
   map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);

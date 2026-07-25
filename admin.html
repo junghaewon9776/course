@@ -352,7 +352,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717b"></script>
+<script src="common.js?v=20260717c"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -1681,10 +1681,12 @@ function isCourseVisible(id) {
 function toggleEventVisible(id) {
   __visPending.events[id] = !isEventVisible(id);
   renderEvents(); renderCourses(); renderVisSaveBar();   // 저장 없이 화면만 갱신 (가볍게)
+  if (__showPastTracks) renderPastTracks();   // 이전 행적도 코스/행사 켜기·끄기 즉시 반영
 }
 function toggleCourseVisible(id) {
   __visPending.courses[id] = !isCourseVisible(id);
   renderCourses(); renderVisSaveBar();
+  if (__showPastTracks) renderPastTracks();   // 켠 코스의 궤적만 바로 보이게
 }
 // 보류된 표시 변경을 실제로 저장
 // 같은 알림이 짧은 시간에 두 번 뜨는 것 방지 (저장 경로가 겹쳐 호출돼도 안내는 한 번만)
