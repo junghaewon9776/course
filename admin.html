@@ -32,6 +32,18 @@
   </style>
 </head>
 <body>
+<!-- ⏳ 처음 켤 때(연결·데이터 로딩) 흰 화면/멈춤처럼 안 보이게 로딩 표시 -->
+<div id="__loadingScreen" style="position:fixed;inset:0;z-index:2147483646;background:#f4f6f9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;">
+  <div style="width:44px;height:44px;border:4px solid #d7dee6;border-top-color:#2c3e50;border-radius:50%;animation:__spin 0.8s linear infinite;"></div>
+  <div style="font-size:15px;font-weight:700;color:#2c3e50;">관리 화면 불러오는 중…</div>
+  <div style="font-size:12px;color:#8a97a6;">처음 켤 때만 잠깐 걸려요</div>
+</div>
+<style>@keyframes __spin{to{transform:rotate(360deg)}}</style>
+<script>
+  // 안전장치: 무슨 일이 있어도 12초 뒤엔 로딩 화면 내림
+  window.__hideLoading = function(){ var el=document.getElementById('__loadingScreen'); if(el){ el.style.transition='opacity .25s'; el.style.opacity='0'; setTimeout(function(){ if(el&&el.parentNode) el.parentNode.removeChild(el); },260); } };
+  setTimeout(function(){ if(window.__hideLoading) window.__hideLoading(); }, 12000);
+</script>
 <header>
   <h1>⚙️ 관리자</h1>
   <nav>
@@ -360,7 +372,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260717p"></script>
+<script src="common.js?v=20260717q"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -389,6 +401,7 @@ window.onDataChanged = () => {
 
 checkAdminAuth().then(ok => {
   if (ok) onDataReady(() => { __perfMark('data'); loadKakaoMap(); });
+  else if (window.__hideLoading) window.__hideLoading();   // 로그인 필요 → 로딩 내려서 로그인 화면 보이게
 });
 
 let __kakaoLoadAttempt = 0;
@@ -441,6 +454,7 @@ function initMap() {
   });
   refreshAll();
   __perfMark('render');
+  if (window.__hideLoading) window.__hideLoading();   // ✅ 화면 다 그려짐 → 로딩 내림
 }
 
 function setMapType(type) {
