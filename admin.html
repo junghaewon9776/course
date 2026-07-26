@@ -360,7 +360,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260717o"></script>
+<script src="common.js?v=20260717p"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -1701,11 +1701,13 @@ function isCourseVisible(id) {
 }
 function toggleEventVisible(id) {
   __visPending.events[id] = !isEventVisible(id);
-  renderEvents(); renderCourses(); renderVisSaveBar();   // 저장 없이 화면만 갱신 (가볍게)
+  renderEvents(); renderCourses(); renderVisSaveBar();
+  try { renderMap(); } catch (e) { console.warn(e); }   // 🔄 지도에서 바로 켜짐/꺼짐(저장 아님, '표시 저장' 눌러야 운영자 반영)
 }
 function toggleCourseVisible(id) {
   __visPending.courses[id] = !isCourseVisible(id);
   renderCourses(); renderVisSaveBar();
+  try { renderMap(); } catch (e) { console.warn(e); }   // 🔄 눈 끄면 그 코스 지도에서 바로 사라짐(렉 줄이기용)
 }
 // 보류된 표시 변경을 실제로 저장
 // 같은 알림이 짧은 시간에 두 번 뜨는 것 방지 (저장 경로가 겹쳐 호출돼도 안내는 한 번만)
