@@ -2385,11 +2385,17 @@ function scaledCircleMarkerImage(svgContent, scale) {
 //                     | { type:'pin', svg, baseW, baseH }
 function setupMarkerZoomScale(map, getMarkers) {
   let lastScale = getMarkerScale(map.getLevel());
+  let __zoomScaleTimer = null;
   kakao.maps.event.addListener(map, 'zoom_changed', () => {
     const scale = getMarkerScale(map.getLevel());
     if (scale === lastScale) return;
     lastScale = scale;
+    // 줌 연속 변경은 모아서 한 번만 (매 프레임 재생성 방지)
+    clearTimeout(__zoomScaleTimer);
+    __zoomScaleTimer = setTimeout(() => {
     const markers = getMarkers();
+    // 마커가 아주 많으면(관리 거점 수백~수천 개) 줌마다 재크기 조절이 렉·깜빡임을 유발 → 생략(고정 크기 유지)
+    if (markers.length > 200) return;
     markers.forEach(m => {
       if (!m || !m.__markerMeta) return;
       const meta = m.__markerMeta;
@@ -2407,6 +2413,7 @@ function setupMarkerZoomScale(map, getMarkers) {
         ));
       }
     });
+    }, 120);
   });
 }
 
