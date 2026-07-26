@@ -372,7 +372,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260717s"></script>
+<script src="common.js?v=20260717t"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -455,6 +455,9 @@ function initMap() {
   refreshAll();
   __perfMark('render');
   if (window.__hideLoading) window.__hideLoading();   // ✅ 화면 다 그려짐 → 로딩 내림
+  // 지도 타일이 회백빛으로 안 채워진 채 굳는 경우 방지 — 레이아웃 정착 후 다시 배치
+  setTimeout(() => { try { map.relayout(); } catch (e) {} }, 300);
+  setTimeout(() => { try { map.relayout(); } catch (e) {} }, 1000);
 }
 
 function setMapType(type) {
