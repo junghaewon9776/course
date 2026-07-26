@@ -372,7 +372,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260717r"></script>
+<script src="common.js?v=20260717s"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -2805,10 +2805,17 @@ function renderMap() {
         }
         renderMap();
       });
-      const iw = new kakao.maps.InfoWindow({
-        zIndex: 999,
-        removable: true,
-        content: `<div style="padding:9px 11px;font-size:12px;width:182px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;">
+      kakao.maps.event.addListener(marker, 'click', () => {
+        if (reorderMode && course.id === reorderCourseId) {
+          handleReorderClick(a.id);
+          return;
+        }
+        // 정보창은 '누를 때' 처음 만든다 (거점 수백 개를 미리 만들면 먹통 → 지연 생성)
+        if (!marker.__iw) {
+          marker.__iw = new kakao.maps.InfoWindow({
+            zIndex: 999,
+            removable: true,
+            content: `<div style="padding:9px 11px;font-size:12px;width:182px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid #eee;">
             <span style="background:${course.color};color:#fff;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;">${course.name} ${i+1}</span>
           </div>
@@ -2821,13 +2828,9 @@ function renderMap() {
             <button onclick="if(confirm('이 거점 삭제?'))deleteAnchor('${a.id}')" style="flex:none;background:#e74c3c;color:#fff;padding:7px 9px;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">🗑</button>
           </div>
         </div>`
-      });
-      kakao.maps.event.addListener(marker, 'click', () => {
-        if (reorderMode && course.id === reorderCourseId) {
-          handleReorderClick(a.id);
-          return;
+          });
         }
-        toggleInfoWindow(iw, marker, map);
+        toggleInfoWindow(marker.__iw, marker, map);
       });
       kakaoMarkers.push(marker);
       path.push(pos);
@@ -2841,9 +2844,11 @@ function renderMap() {
       // ⚠️ 특별 표시된 거점 → 다음 거점 구간을 지정 색·모양으로 덧그림 (후진·유턴·위험 구간)
       drawMarkSegments(map, anchors, path, kakaoLines);
       drawMarkRadius(map, anchors, kakaoLines);   // 알림 범위 연한 원
-      // 화살표 (각 구간 중간)
-      for (let i = 0; i < path.length - 1; i++) {
-        kakaoMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
+      // 화살표 (각 구간 중간) — 거점 많으면 화살표만 수백 개라 먹통 유발 → 30개 이하 코스만 표시
+      if (path.length <= 30) {
+        for (let i = 0; i < path.length - 1; i++) {
+          kakaoMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
+        }
       }
     }
   }
