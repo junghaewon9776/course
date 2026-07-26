@@ -2394,8 +2394,9 @@ function setupMarkerZoomScale(map, getMarkers) {
     clearTimeout(__zoomScaleTimer);
     __zoomScaleTimer = setTimeout(() => {
     const markers = getMarkers();
-    // 마커가 아주 많으면(관리 거점 수백~수천 개) 줌마다 재크기 조절이 렉·깜빡임을 유발 → 생략(고정 크기 유지)
-    if (markers.length > 200) return;
+    // 마커가 아주 많으면(수백 개 이상) 줌마다 재크기 조절이 렉·깜빡임을 유발 → 생략(고정 크기 유지)
+    // 관리는 한 코스 거점만 뜨므로 대개 이 아래라 정상 동작
+    if (markers.length > 500) return;
     markers.forEach(m => {
       if (!m || !m.__markerMeta) return;
       const meta = m.__markerMeta;
