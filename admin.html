@@ -163,7 +163,8 @@
         </div>
         <input type="file" id="csvUpload" accept=".csv,.xlsx,.xls" style="display:none">
         <label>대상 코스</label>
-        <select id="anchorCourseSel" onchange="renderAnchors()"></select>
+        <select id="anchorCourseSel" onchange="renderAnchors();renderMap()"></select>
+        <div class="sub" style="font-size:11px;color:#e67e22;margin-top:3px;">💡 지도엔 <b>선택한 코스의 거점만</b> 표시됩니다 (거점이 수백 개라 다 찍으면 느려짐). 다른 코스는 경로선만 보여요.</div>
         <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
           <button class="small" id="drawAnchorBtn" style="background:#8e44ad;" onclick="toggleDrawAnchor()">✏️ 연속 거점 그리기</button>
           <button class="small" style="background:#9b59b6;" onclick="startReorderMode()">🔗 순서 다시 짜기</button>
@@ -372,7 +373,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260717t"></script>
+<script src="common.js?v=20260717u"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let pendingClick = null;
@@ -2779,6 +2780,9 @@ function renderMap() {
 
   let bounds = new kakao.maps.LatLngBounds();
   let hasPoints = false;
+  // 🪶 지도엔 '거점 대상 코스'로 고른 코스의 핀만 찍는다 (거점 수백~수천 개 한꺼번에 = 먹통).
+  //    나머지 코스는 경로선만. 코스 안 골랐으면 핀 없음(가장 가벼움).
+  const selCourseId = document.getElementById('anchorCourseSel') ? document.getElementById('anchorCourseSel').value : '';
 
   for (const { course } of courses) {
     const anchors = getCourseAnchors(data, course.id);
@@ -2786,6 +2790,8 @@ function renderMap() {
     anchors.forEach((a, i) => {
       const pos = new kakao.maps.LatLng(a.lat, a.lng);
       bounds.extend(pos); hasPoints = true;
+      path.push(pos);
+      if (course.id !== selCourseId) return;   // 핀은 선택한 코스만 (나머지는 경로선만 → 먹통 방지)
       const marker = new kakao.maps.Marker({
         position: pos, map, draggable: true,
         title: `${course.name} ${i+1}. ${a.name}`,
@@ -2836,7 +2842,6 @@ function renderMap() {
         toggleInfoWindow(marker.__iw, marker, map);
       });
       kakaoMarkers.push(marker);
-      path.push(pos);
     });
     if (path.length >= 2) {
       const line = new kakao.maps.Polyline({
@@ -2844,13 +2849,14 @@ function renderMap() {
         strokeOpacity: 0.7, strokeStyle: 'solid', map
       });
       kakaoLines.push(line);
-      // ⚠️ 특별 표시된 거점 → 다음 거점 구간을 지정 색·모양으로 덧그림 (후진·유턴·위험 구간)
-      drawMarkSegments(map, anchors, path, kakaoLines);
-      drawMarkRadius(map, anchors, kakaoLines);   // 알림 범위 연한 원
-      // 화살표 (각 구간 중간) — 거점 많으면 화살표만 수백 개라 먹통 유발 → 30개 이하 코스만 표시
-      if (path.length <= 30) {
-        for (let i = 0; i < path.length - 1; i++) {
-          kakaoMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
+      // 특별표시·반경·화살표는 선택한 코스만 (나머지는 경로선만 → 가볍게)
+      if (course.id === selCourseId) {
+        drawMarkSegments(map, anchors, path, kakaoLines);
+        drawMarkRadius(map, anchors, kakaoLines);   // 알림 범위 연한 원
+        if (path.length <= 30) {   // 거점 많으면 화살표 생략(먹통 방지)
+          for (let i = 0; i < path.length - 1; i++) {
+            kakaoMarkers.push(arrowMarker(map, path[i], path[i+1], course.color));
+          }
         }
       }
     }
