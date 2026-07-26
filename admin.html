@@ -373,9 +373,10 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260717v"></script>
+<script src="common.js?v=20260717w"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
+let anchorClusterer = null;   // 거점 핀 클러스터(묶어서 표시) — 많아도 부드럽게
 let pendingClick = null;
 
 // ⏱ 로딩 시간 측정 (?perf=1 일 때만 화면에 표시) — 웹이 어디서 느린지 진단용
@@ -415,7 +416,7 @@ function loadKakaoMap() {
   __kakaoLoadAttempt++;
   const script = document.createElement('script');
   script.dataset.kakaoSdk = '1';
-  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`;
+  script.src = `//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services,clusterer`;
   script.onload = () => kakao.maps.load(initMap);
   script.onerror = () => {
     console.warn('카카오 SDK 로드 실패. 재시도', __kakaoLoadAttempt);
@@ -453,6 +454,12 @@ function initMap() {
     const lng = e.latLng.getLng();
     handleMapClick(lat, lng);
   });
+  // 거점 핀 클러스터 — 줌아웃하면 뭉치고 줌인하면 개별로 (거점 많아도 부드럽게)
+  try {
+    if (kakao.maps.MarkerClusterer) {
+      anchorClusterer = new kakao.maps.MarkerClusterer({ map, averageCenter: true, minLevel: 4, gridSize: 60, disableClickZoom: false });
+    }
+  } catch (e) { console.warn('클러스터 초기화 실패', e); }
   refreshAll();
   __perfMark('render');
   if (window.__hideLoading) window.__hideLoading();   // ✅ 화면 다 그려짐 → 로딩 내림
@@ -2765,6 +2772,8 @@ function renderMap() {
   kakaoMarkers.forEach(m => m.setMap(null));
   kakaoLines.forEach(l => l.setMap(null));
   kakaoMarkers = []; kakaoLines = [];
+  if (anchorClusterer) { try { anchorClusterer.clear(); } catch (e) {} }
+  const __clusterMarkers = [];   // 거점 핀은 여기 모아서 클러스터에 넣는다
 
   const data = loadData();
   const view = document.getElementById('viewSelect').value;
@@ -2793,7 +2802,7 @@ function renderMap() {
       path.push(pos);
       if (course.id !== selCourseId) return;   // 핀은 선택한 코스만 (나머지는 경로선만 → 먹통 방지)
       const marker = new kakao.maps.Marker({
-        position: pos, map, draggable: true,
+        position: pos, draggable: true,   // map은 클러스터가 관리(직접 안 붙임)
         title: `${course.name} ${i+1}. ${a.name}`,
         image: numberedMarkerImage(i+1, course.color, false, getMarkerScale(map.getLevel()), anchorMark(a)),
         zIndex: 10
@@ -2841,7 +2850,7 @@ function renderMap() {
         }
         toggleInfoWindow(marker.__iw, marker, map);
       });
-      kakaoMarkers.push(marker);
+      __clusterMarkers.push(marker);
     });
     if (path.length >= 2) {
       const line = new kakao.maps.Polyline({
@@ -2860,6 +2869,11 @@ function renderMap() {
         }
       }
     }
+  }
+  // 거점 핀을 클러스터에 한 번에 (없으면 지도에 직접)
+  if (__clusterMarkers.length) {
+    if (anchorClusterer) anchorClusterer.addMarkers(__clusterMarkers);
+    else { __clusterMarkers.forEach(m => m.setMap(map)); kakaoMarkers.push(...__clusterMarkers); }
   }
 
   // ─── 📢 안내 핑 (지정 색 원 + 반경) ───
