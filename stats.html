@@ -87,6 +87,7 @@
   </div>
 
   <div id="hofTop"></div>
+  <div id="monthKing"></div>
   <div id="myRankCard"></div>
   <div id="statsContainer"></div>
 </div>
@@ -96,7 +97,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260717x"></script>
+<script src="common.js?v=20260717y"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -264,6 +265,7 @@ function render() {
   renderEventFilterOptions();
   renderYearOptions();
   try { renderHallOfFameTop(); } catch (e) {}
+  try { renderMonthKing(); } catch (e) {}
   try { renderMyRankCard(); } catch (e) {}
   const data = loadData();
   const allLogs = getFilteredLogs();
@@ -1022,6 +1024,61 @@ function renderHallOfFameTop() {
     + '<span style="font-weight:800;font-size:15px;">' + String(best.name).replace(/</g, '&lt;') + '</span>'
     + '<span style="font-size:12px;opacity:.9;">' + String(rk.name || '') + '</span>'
     + '<span style="margin-left:auto;font-weight:800;color:#ffd85e;white-space:nowrap;">' + best.total + '회</span></div>';
+}
+// 🔥 이달의 방역왕 — 이번 달(현재 월) 실적으로 실시간 순위 경쟁 표시
+function renderMonthKing() {
+  const el = document.getElementById('monthKing');
+  if (!el) return;
+  const data = loadData();
+  const now = new Date();
+  const y = now.getFullYear(), mo = now.getMonth();
+  // 이번 달에 시작한 운행만 (숨긴 것 제외)
+  const monthLogs = (data.logs || []).filter(l => {
+    if (!l || l.hidden) return false;
+    const t = l.startedAt || l.finishedAt; if (!t) return false;
+    const d = new Date(t);
+    return d.getFullYear() === y && d.getMonth() === mo;
+  });
+  const counts = __vaxByName(monthLogs);   // 이름별 방역 횟수
+  const rows = Object.keys(counts).map(n => ({ name: n, c: counts[n] }))
+    .sort((a, b) => b.c - a.c || a.name.localeCompare(b.name, 'ko'));
+  if (!rows.length) { el.innerHTML = ''; return; }   // 이번 달 기록 없으면 카드 숨김
+
+  const esc = s => String(s || '').replace(/</g, '&lt;');
+  const top = rows[0].c;
+  const totalRuns = monthLogs.length;
+  const show = rows.slice(0, 6);
+  const rowsHtml = show.map((r, i) => {
+    const isLead = i === 0;
+    const pct = Math.max(6, Math.round(r.c / top * 100));
+    const gap = top - r.c;
+    const rankMark = i < 3
+      ? '<span style="font-size:20px;">' + ['🥇', '🥈', '🥉'][i] + '</span>'
+      : '<span style="font-size:13px;font-weight:800;color:#9aa;">' + (i + 1) + '</span>';
+    const bar = isLead ? 'linear-gradient(90deg,#f6b73c,#e8890b)' : 'linear-gradient(90deg,#9b59b6,#c39bd3)';
+    return '<div style="display:flex;align-items:center;gap:11px;margin:9px 0;">'
+      + '<div style="width:28px;text-align:center;flex:none;">' + rankMark + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+      +   '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:3px;">'
+      +     '<span style="font-weight:' + (isLead ? 800 : 700) + ';font-size:15px;color:' + (isLead ? '#b9770a' : '#2c3e50') + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(r.name) + (isLead ? ' 👑' : '') + '</span>'
+      +     '<span style="white-space:nowrap;"><b style="font-size:15px;color:#2c3e50;">' + r.c + '회</b>'
+      +       (gap > 0 ? ' <span style="font-size:11px;color:#e67e22;font-weight:700;">1위까지 ' + gap + '</span>' : '') + '</span>'
+      +   '</div>'
+      +   '<div style="height:10px;background:#eceaf0;border-radius:6px;overflow:hidden;">'
+      +     '<div style="width:' + pct + '%;height:100%;background:' + bar + ';border-radius:6px;"></div>'
+      +   '</div>'
+      + '</div></div>';
+  }).join('');
+
+  el.innerHTML = '<div class="card" style="border:2px solid #f0b429;background:#fffdf5;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:10px;">'
+    +   '<h2 style="margin:0;">🔥 ' + (mo + 1) + '월 방역왕 — 지금 누가 1등?</h2>'
+    +   '<span style="font-size:12px;color:#888;">이번 달 ' + totalRuns + '회 · ' + rows.length + '명 참여</span>'
+    + '</div>'
+    + rowsHtml
+    + (rows.length > 6 ? '<div style="font-size:12px;color:#999;text-align:center;margin-top:8px;">…외 ' + (rows.length - 6) + '명</div>' : '')
+    + '<div style="font-size:12px;color:#b9770a;text-align:center;margin-top:10px;font-weight:700;">🏆 이번 달 끝날 때 1위가 방역왕! 아직 기회 있어요</div>'
+    + '</div>';
 }
 // 🎖 내 계급 카드 (모든 사용자, 본인 것만) — 보이는 행사 전체 합산
 function renderMyRankCard() {
