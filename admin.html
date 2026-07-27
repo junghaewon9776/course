@@ -373,7 +373,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260717w"></script>
+<script src="common.js?v=20260717x"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let anchorClusterer = null;   // 거점 핀 클러스터(묶어서 표시) — 많아도 부드럽게
@@ -457,7 +457,11 @@ function initMap() {
   // 거점 핀 클러스터 — 줌아웃하면 뭉치고 줌인하면 개별로 (거점 많아도 부드럽게)
   try {
     if (kakao.maps.MarkerClusterer) {
-      anchorClusterer = new kakao.maps.MarkerClusterer({ map, averageCenter: true, minLevel: 4, gridSize: 60, disableClickZoom: false });
+      anchorClusterer = new kakao.maps.MarkerClusterer({
+        map, averageCenter: true, minLevel: 5, gridSize: 60, disableClickZoom: false,
+        styles: [{ width: '16px', height: '16px', background: 'rgba(142,68,173,0.9)', borderRadius: '8px', border: '2px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.35)' }],
+        texts: function () { return ''; }   // 클러스터에 숫자 안 보이게 (그냥 점)
+      });
     }
   } catch (e) { console.warn('클러스터 초기화 실패', e); }
   refreshAll();
