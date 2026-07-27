@@ -87,10 +87,11 @@
   </div>
 
   <div id="hofTop"></div>
-  <div id="monthKing"></div>
-  <div id="yearKing"></div>
   <div id="myRankCard"></div>
   <div id="statsContainer"></div>
+  <!-- 🔥 방역왕은 운행기록 아래로 (통계는 운행기록 보러 오는 화면이라) -->
+  <div id="monthKing"></div>
+  <div id="yearKing"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -98,7 +99,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260718a"></script>
+<script src="common.js?v=20260718b"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
@@ -1545,27 +1546,55 @@ function editRankTiers() {
   if (modal) modal.remove();
   modal = document.createElement('div');
   modal.id = 'rankTierModal';
-  modal.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:40px 12px;overflow-y:auto;';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px 12px;';
   modal.onclick = e => { if (e.target === modal) modal.remove(); };
-  modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:420px;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,.3);">'
-    + '<h3 style="margin:0 0 4px;">⚙ 계급 · 퀘스트 설정</h3>'
-    + '<p class="sub" style="margin:0 0 10px;">퀘스트(XP 획득 규칙) · 계급(모양/이름/최소XP)</p>'
-    + '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">🧩 퀘스트 (XP 획득 규칙)</div>'
-    + '<div id="qList">' + getQuests().map(q => __questRowTpl(q)).join('') + '</div>'
-    + '<div style="display:flex;gap:6px;margin:2px 0 14px;flex-wrap:wrap;">'
-    + '<button onclick="document.getElementById(\'qList\').insertAdjacentHTML(\'beforeend\', __questRowTpl()); __qInitCats();" style="background:#8e44ad;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">+ 퀘스트 추가</button>'
-    + '<button onclick="addRankRewardQuests()" style="background:#e67e22;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;" title="1등 값 기준 2등·3등 자동 추가">🏅 순위 보상 자동 넣기 (2·3등)</button>'
+  const tabOn = 'flex:1;padding:10px;border:none;border-radius:9px 9px 0 0;font-weight:800;cursor:pointer;font-size:14px;';
+  modal.innerHTML = '<div style="background:#fff;border-radius:12px;width:100%;max-width:440px;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.3);overflow:hidden;">'
+    // 헤더 + 탭
+    + '<div style="padding:15px 16px 0;">'
+    +   '<h3 style="margin:0 0 11px;">⚙ 계급 · 퀘스트 설정</h3>'
+    +   '<div style="display:flex;gap:6px;">'
+    +     '<button id="tabBtnQuest" onclick="__rtTab(\'quest\')" style="' + tabOn + 'background:#8e44ad;color:#fff;">🧩 퀘스트 (XP 규칙)</button>'
+    +     '<button id="tabBtnTier" onclick="__rtTab(\'tier\')" style="' + tabOn + 'background:#ece7f3;color:#777;">🎖 계급</button>'
+    +   '</div>'
     + '</div>'
-    + '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">🎖 계급 (모양 · 이름 · 최소 XP)</div>'
-    + '<div id="rtList">' + tiers.map(t => __rtRowTpl(t)).join('') + '</div>'
-    + '<div style="display:flex;gap:6px;margin:4px 0 12px;flex-wrap:wrap;">'
-    + '<button onclick="document.getElementById(\'rtList\').insertAdjacentHTML(\'beforeend\', __rtRowTpl())" style="background:#3498db;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">+ 계급 추가</button>'
-    + '<button onclick="const a=__seedDefaultRankIcons();alert(a?(a+\'개 기본 계급장을 보관함에 넣었어요\'):\'이미 들어있어요\');" style="background:#16a085;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">📁 기본 계급장 보관함에 채우기</button>'
+    // 스크롤 본문
+    + '<div style="overflow-y:auto;flex:1;padding:14px 16px;background:#fafafa;">'
+    +   '<div id="tabQuest">'
+    +     '<div id="qList">' + getQuests().map(q => __questRowTpl(q)).join('') + '</div>'
+    +     '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
+    +       '<button onclick="document.getElementById(\'qList\').insertAdjacentHTML(\'beforeend\', __questRowTpl()); __qInitCats();" style="background:#8e44ad;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">+ 퀘스트 추가</button>'
+    +       '<button onclick="addRankRewardQuests()" style="background:#e67e22;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;" title="1등 값 기준 2등·3등 자동 추가">🏅 순위 보상 자동 넣기 (2·3등)</button>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div id="tabTier" style="display:none;">'
+    +     '<div id="rtList">' + tiers.map(t => __rtRowTpl(t)).join('') + '</div>'
+    +     '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">'
+    +       '<button onclick="document.getElementById(\'rtList\').insertAdjacentHTML(\'beforeend\', __rtRowTpl())" style="background:#3498db;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">+ 계급 추가</button>'
+    +       '<button onclick="const a=__seedDefaultRankIcons();alert(a?(a+\'개 기본 계급장을 보관함에 넣었어요\'):\'이미 들어있어요\');" style="background:#16a085;color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;cursor:pointer;">📁 기본 계급장 채우기</button>'
+    +     '</div>'
+    +   '</div>'
     + '</div>'
-    + '<div style="display:flex;gap:8px;"><button onclick="saveRankTiers()" style="flex:1;background:#27ae60;color:#fff;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">저장</button>'
-    + '<button onclick="document.getElementById(\'rankTierModal\').remove()" style="flex:1;background:#555;color:#fff;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;">취소</button></div></div>';
+    // 하단 고정 저장 바
+    + '<div style="padding:12px 16px;border-top:1px solid #e5e5e5;display:flex;gap:8px;background:#fff;flex:none;">'
+    +   '<button onclick="saveRankTiers()" style="flex:1;background:#27ae60;color:#fff;border:none;padding:13px;border-radius:9px;font-weight:800;cursor:pointer;font-size:15px;">💾 저장</button>'
+    +   '<button onclick="document.getElementById(\'rankTierModal\').remove()" style="flex:none;background:#555;color:#fff;border:none;padding:13px 20px;border-radius:9px;font-weight:700;cursor:pointer;">취소</button>'
+    + '</div>'
+    + '</div>';
   document.body.appendChild(modal);
   __qInitCats();
+}
+// ⚙ 계급설정 모달 탭 전환 (퀘스트 ↔ 계급)
+function __rtTab(which) {
+  const q = document.getElementById('tabQuest'), t = document.getElementById('tabTier');
+  const bq = document.getElementById('tabBtnQuest'), bt = document.getElementById('tabBtnTier');
+  if (!q || !t) return;
+  const base = 'flex:1;padding:10px;border:none;border-radius:9px 9px 0 0;font-weight:800;cursor:pointer;font-size:14px;';
+  const isTier = (which === 'tier');
+  q.style.display = isTier ? 'none' : '';
+  t.style.display = isTier ? '' : 'none';
+  if (bq) bq.style.cssText = base + (isTier ? 'background:#ece7f3;color:#777;' : 'background:#8e44ad;color:#fff;');
+  if (bt) bt.style.cssText = base + (isTier ? 'background:#2f80c4;color:#fff;' : 'background:#ece7f3;color:#777;');
 }
 // 🏅 1등 값 기준으로 월별·년도 2등(50%)·3등(20%) 보상 퀘스트를 자동으로 채워 넣는다
 function addRankRewardQuests() {
