@@ -16,7 +16,7 @@
     th:first-child { white-space: nowrap; }
     tr:hover td { background: #fffde7; }
     .num-zero { color: #ccc; }
-    .num-high { background: #c8e6c9; font-weight: 700; }
+    .num-high { font-weight: 700; }  /* 초록 강조 제거 — 많이 한 칸은 굵게만 */
     .scroll-x { overflow-x: auto; max-height: 600px; }
   </style>
 </head>
@@ -99,7 +99,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260718b"></script>
+<script src="common.js?v=20260718c"></script>
 <script>
 let __charts = []; // 동적 차트 인스턴스 추적
 
