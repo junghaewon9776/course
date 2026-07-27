@@ -1113,19 +1113,36 @@ function cmTotalXp(data, name) {
   // ⏳ 끝난 기간만 인정 (stats.html과 동일)
   const __cmNow = Date.now();
   const cmCurW = cmWeekKey(__cmNow), cmCurM = cmMonthKey(__cmNow), cmCurY = String(new Date(__cmNow).getFullYear());
-  function cmWins(b, skip) { let w = 0; Object.keys(b).forEach(function (k) { if (skip && skip(k)) return; const cc = vaxBy(b[k]); let best = null, bn = 0; Object.keys(cc).forEach(function (n) { if (cc[n] > bn) { bn = cc[n]; best = n; } }); if (best === name) w++; }); return w; }
+  // 기간별 '몇 등'을 몇 번 했는지 (rank=1 → 1등, 2 → 2등, 3 → 3등). 동점은 이름순으로 등수 매김.
+  function cmWins(b, skip, rank) {
+    rank = rank || 1; let w = 0;
+    Object.keys(b).forEach(function (k) {
+      if (skip && skip(k)) return;
+      const cc = vaxBy(b[k]);
+      const ranked = Object.keys(cc).sort(function (a, b2) { return (cc[b2] - cc[a]) || (a < b2 ? -1 : 1); });   // 횟수 많은 순
+      const who = ranked[rank - 1];
+      if (who === name && cc[who] > 0) w++;
+    });
+    return w;
+  }
   // liveTop 퀘스트용: skip 없이(진행 중 기간 포함) 계산한 버전도 준비
-  function cmTopWins(keyFn, skip, live) { return cmWins(cmBucket(keyFn), live ? null : skip); }
+  function cmTopWins(keyFn, skip, live, rank) { return cmWins(cmBucket(keyFn), live ? null : skip, rank); }
   function cmWinsFor(trigger, live) {
-    if (trigger === 'monthTop') return cmTopWins(function (l, t) { return cmMonthKey(t); }, function (k) { return k === cmCurM; }, live);
-    if (trigger === 'weekTop') return cmTopWins(function (l, t) { return cmWeekKey(t); }, function (k) { return k === cmCurW; }, live);
-    if (trigger === 'yearTop') return cmTopWins(function (l, t) { return String(new Date(t).getFullYear()); }, function (k) { return k === cmCurY; }, live);
-    if (trigger === 'courseWeekTop') return cmTopWins(function (l, t) { return cmWeekKey(t) + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurW; }, live);
-    if (trigger === 'courseMonthTop') return cmTopWins(function (l, t) { return cmMonthKey(t) + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurM; }, live);
-    if (trigger === 'courseYearTop') return cmTopWins(function (l, t) { return new Date(t).getFullYear() + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurY; }, live);
+    const mK = function (l, t) { return cmMonthKey(t); }, mSkip = function (k) { return k === cmCurM; };
+    const yK = function (l, t) { return String(new Date(t).getFullYear()); }, ySkip = function (k) { return k === cmCurY; };
+    if (trigger === 'monthTop')  return cmTopWins(mK, mSkip, live, 1);
+    if (trigger === 'monthTop2') return cmTopWins(mK, mSkip, live, 2);   // 월별 2등
+    if (trigger === 'monthTop3') return cmTopWins(mK, mSkip, live, 3);   // 월별 3등
+    if (trigger === 'weekTop') return cmTopWins(function (l, t) { return cmWeekKey(t); }, function (k) { return k === cmCurW; }, live, 1);
+    if (trigger === 'yearTop')  return cmTopWins(yK, ySkip, live, 1);
+    if (trigger === 'yearTop2') return cmTopWins(yK, ySkip, live, 2);    // 년도 2등
+    if (trigger === 'yearTop3') return cmTopWins(yK, ySkip, live, 3);    // 년도 3등
+    if (trigger === 'courseWeekTop') return cmTopWins(function (l, t) { return cmWeekKey(t) + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurW; }, live, 1);
+    if (trigger === 'courseMonthTop') return cmTopWins(function (l, t) { return cmMonthKey(t) + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurM; }, live, 1);
+    if (trigger === 'courseYearTop') return cmTopWins(function (l, t) { return new Date(t).getFullYear() + '|' + l.courseId; }, function (k) { return k.split('|')[0] === cmCurY; }, live, 1);
     return 0;
   }
-  const CM_TOP_TRIGGERS = ['weekTop', 'monthTop', 'yearTop', 'courseWeekTop', 'courseMonthTop', 'courseYearTop'];
+  const CM_TOP_TRIGGERS = ['weekTop', 'monthTop', 'monthTop2', 'monthTop3', 'yearTop', 'yearTop2', 'yearTop3', 'courseWeekTop', 'courseMonthTop', 'courseYearTop'];
   // 🚗 운행거리·시간 누적 + 신규 퀘스트 집계 (조 두 명 모두)
   let kmTotal = 0, minTotal = 0, perfectCnt = 0;
   const tripLogs = [];
