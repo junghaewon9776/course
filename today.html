@@ -121,7 +121,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260718c"></script>
+<script src="common.js?v=20260718d"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1190,8 +1190,17 @@ function startSession(eventId, courseId, teamId, crew) {
 
 function saveSession() {
   if (!currentSession) return;
-  localStorage.setItem(currentSession.key, JSON.stringify(currentSession));
-  localStorage.setItem('lastActiveSession', JSON.stringify(currentSession));
+  const s = JSON.stringify(currentSession);   // 한 번만 문자열화 (예전엔 두 번 → 궤적 커지면 2배 부담)
+  localStorage.setItem(currentSession.key, s);
+  localStorage.setItem('lastActiveSession', s);
+}
+// 주행 중 잦은 저장은 8초에 한 번만 (장시간 stringify 누적 부담 완화 — 강제종료 방지)
+let __saveSessAt = 0;
+function saveSessionThrottled() {
+  const now = Date.now();
+  if (now - __saveSessAt < 8000) return;
+  __saveSessAt = now;
+  saveSession();
 }
 
 // 라이브 위치 publish — GPS 업데이트 시 10초마다 한 번
@@ -2012,12 +2021,16 @@ function renderMapForSession() {
 }
 
 // 🪶 주행 중(5m 이동마다) '가벼운' 궤적선만 갱신 — 거점/민원/마커 통째 재생성 안 함(장시간 렉·강제종료 방지)
+//   ⚠️ 장시간 운행 시 점이 수천 개 → 매번 전체 선을 새로 만들면 메모리 폭주로 앱이 꺼진다.
+//      그래서 '화면에 그리는 선'은 최근 1200개 점까지만. (기록(track)은 전부 그대로 저장됨)
+const TRACKLINE_MAX_POINTS = 1200;
 function updateTrackLine() {
   if (!map || !currentSession) return;
   if (isPinCourse()) return;   // 핑 코스는 궤적선 안 그림
   const t = currentSession.track || [];
   if (t.length < 2) return;
-  const trackPath = t.map(p => new kakao.maps.LatLng(p[0], p[1]));
+  const seg = t.length > TRACKLINE_MAX_POINTS ? t.slice(t.length - TRACKLINE_MAX_POINTS) : t;
+  const trackPath = seg.map(p => new kakao.maps.LatLng(p[0], p[1]));
   if (trackLine) trackLine.setPath(trackPath);
   else trackLine = new kakao.maps.Polyline({ path: trackPath, strokeWeight: 3, strokeColor: '#666', strokeOpacity: 0.8, strokeStyle: 'shortdash', map });
 }
@@ -2864,7 +2877,7 @@ function onGpsUpdate(pos) {
     const last = currentSession.track[currentSession.track.length - 1];
     if (!last || distance(last[0], last[1], lat, lng) > 5) {
       currentSession.track.push([lat, lng, Date.now()]);
-      saveSession();
+      saveSessionThrottled();   // 8초에 한 번만 저장 (매 5m마다 전체 stringify는 장시간 부담)
       updateTrackLine();   // 무거운 전체 재렌더 대신 궤적선만 갱신 (장시간 운영 시 멈춤/강제종료 방지)
       updateProgressStat();
     }
