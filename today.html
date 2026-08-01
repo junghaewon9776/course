@@ -121,7 +121,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260718o"></script>
+<script src="common.js?v=20260718p"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2669,24 +2669,8 @@ async function showVoicePicker() {
     + '<h3 style="margin:0 0 4px;">🗣 안내 목소리 고르기</h3>'
     + '<p style="margin:0 0 12px;color:#888;font-size:13px;">누르면 그 목소리로 바로 들려줍니다. 마음에 드는 걸 고르세요.</p>'
     + body
-    + '<button onclick="openTtsSettings()" style="margin-top:10px;width:100%;background:#2e7d32;color:#fff;border:none;padding:11px;border-radius:9px;font-weight:700;cursor:pointer;">📥 새 목소리 받으러 가기</button>'
-    + '<p style="margin:6px 2px 0;color:#999;font-size:11px;line-height:1.5;">※ 목소리는 각자 자기 폰에서 직접 받아야 합니다. 받으면 위 목록에 자동으로 늘어나요.</p>'
     + '<button onclick="document.getElementById(\'voicePickerOverlay\').remove()" style="margin-top:12px;width:100%;background:#555;color:#fff;border:none;padding:11px;border-radius:9px;font-weight:700;cursor:pointer;">닫기</button></div>';
   document.body.appendChild(ov);
-}
-// 📥 폰의 TTS(음성) 설정 화면 열기 시도 + 안 되면 경로 안내
-function openTtsSettings() {
-  let opened = false;
-  try {
-    const f = document.createElement('iframe');
-    f.style.display = 'none';
-    f.src = 'intent:#Intent;action=com.android.settings.TTS_SETTINGS;end';
-    document.body.appendChild(f);
-    opened = true;
-    setTimeout(() => { try { f.remove(); } catch (e) {} }, 1500);
-  } catch (e) {}
-  // 열렸든 아니든 경로 안내를 같이 띄움(폰마다 설정 위치가 조금 달라서)
-  alert('새 목소리 받는 법 (폰마다 메뉴 이름이 달라요)\n\n■ 제일 쉬운 방법\n설정 → 맨 위 검색창에 "TTS" 또는 "음성" 입력\n→ "텍스트 음성 변환(TTS)" 눌러 들어가기\n\n■ 폰별 경로\n· 삼성폰: 설정 → 일반 → 텍스트 음성 변환(TTS)\n· 구글/기본폰: 설정 → 접근성 → 텍스트 음성 변환 출력\n\n들어간 뒤 → "Google 음성 서비스" 옆 톱니 → 음성 데이터 설치 → 원하는 목소리 다운로드\n\n※ 받은 목소리는 이 폰에만 저장되고, 이 창 목록에 자동으로 나타납니다.');
 }
 function pickVoice(id) {
   const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
