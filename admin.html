@@ -373,7 +373,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260718m"></script>
+<script src="common.js?v=20260718n"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let anchorClusterer = null;   // 거점 핀 클러스터(묶어서 표시) — 많아도 부드럽게
@@ -3119,8 +3119,21 @@ async function admShowVoicePicker() {
     + '<h3 style="margin:0 0 4px;">🗣 안내 목소리 고르기</h3>'
     + '<p style="margin:0 0 12px;color:#888;font-size:13px;">누르면 그 목소리로 바로 들려줍니다. (오늘의운영과 같이 적용)</p>'
     + body
+    + '<button onclick="admOpenTtsSettings()" style="margin-top:10px;width:100%;background:#2e7d32;color:#fff;border:none;padding:11px;border-radius:9px;font-weight:700;cursor:pointer;">📥 새 목소리 받으러 가기</button>'
+    + '<p style="margin:6px 2px 0;color:#999;font-size:11px;line-height:1.5;">※ 목소리는 각자 자기 폰에서 직접 받아야 합니다. 받으면 위 목록에 자동으로 늘어나요.</p>'
     + '<button onclick="document.getElementById(\'admVoicePickerOverlay\').remove()" style="margin-top:12px;width:100%;background:#555;color:#fff;border:none;padding:11px;border-radius:9px;font-weight:700;cursor:pointer;">닫기</button></div>';
   document.body.appendChild(ov);
+}
+// 📥 폰의 TTS(음성) 설정 화면 열기 시도 + 안 되면 경로 안내
+function admOpenTtsSettings() {
+  try {
+    const f = document.createElement('iframe');
+    f.style.display = 'none';
+    f.src = 'intent:#Intent;action=com.android.settings.TTS_SETTINGS;end';
+    document.body.appendChild(f);
+    setTimeout(() => { try { f.remove(); } catch (e) {} }, 1500);
+  } catch (e) {}
+  alert('새 목소리 받는 법\n\n폰 설정 → 시스템 → 언어 및 입력 → 음성/TTS 출력\n→ "Google 음성 서비스"의 톱니(설정) → 음성 데이터 설치\n→ 원하는 목소리 다운로드\n\n※ 받은 목소리는 이 폰에만 저장되고, 이 창 목록에 자동으로 나타납니다.');
 }
 function admPickVoice(id) {
   const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
