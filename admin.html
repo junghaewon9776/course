@@ -373,7 +373,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260718l"></script>
+<script src="common.js?v=20260718m"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let anchorClusterer = null;   // 거점 핀 클러스터(묶어서 표시) — 많아도 부드럽게
@@ -3084,6 +3084,14 @@ function admSpeak(text) {
     speechSynthesis.speak(u);
   } catch (e) {}
 }
+// 목소리 구분용 짧은 태그(엔진/식별자)
+function __admShortVoice(s) {
+  s = String(s || '');
+  const m = s.match(/x-([a-z0-9]+)/i);
+  if (m) return m[1];
+  const parts = s.split(/[-_.]/).filter(Boolean);
+  return parts.length > 2 ? parts.slice(-2).join('-') : s.slice(0, 18);
+}
 // 🗣 안내 목소리 고르기 (관리) — 오늘의운영과 같은 설정 공유(localStorage)
 async function admShowVoicePicker() {
   const ms = document.getElementById('admSettingsOverlay'); if (ms) ms.remove();
@@ -3091,18 +3099,18 @@ async function admShowVoicePicker() {
   let voices = [], isApp = false;
   if (P && P.getSupportedVoices) {
     isApp = true;
-    try { const r = await P.getSupportedVoices(); (r && r.voices || []).forEach((v, i) => voices.push({ id: String(i), label: v.name || v.voiceURI || ('음성 ' + (i + 1)), lang: v.lang || '' })); } catch (e) {}
+    try { const r = await P.getSupportedVoices(); (r && r.voices || []).forEach((v, i) => voices.push({ id: String(i), label: v.name || v.voiceURI || ('음성 ' + (i + 1)), lang: v.lang || '', sub: __admShortVoice(v.voiceURI || v.name || '') })); } catch (e) {}
   } else if (window.speechSynthesis) {
-    (speechSynthesis.getVoices() || []).forEach(v => voices.push({ id: v.voiceURI, label: v.name, lang: v.lang || '' }));
+    (speechSynthesis.getVoices() || []).forEach(v => voices.push({ id: v.voiceURI, label: v.name, lang: v.lang || '', sub: __admShortVoice(v.voiceURI || '') }));
   }
   const ko = voices.filter(v => /ko/i.test(v.lang));
   const list = ko.length ? ko : voices;
   const cur = isApp ? localStorage.getItem('__ttsVoiceApp') : localStorage.getItem('__ttsVoiceWeb');
   const esc = s => String(s || '').replace(/</g, '&lt;');
-  const rowBtn = (id, label, on) => '<button onclick="admPickVoice(' + (id === null ? 'null' : "'" + String(id).replace(/'/g, "\\'") + "'") + ')" style="display:block;width:100%;text-align:left;margin:5px 0;padding:12px 14px;border-radius:9px;border:2px solid ' + (on ? '#8e44ad' : '#e0e0e0') + ';background:' + (on ? '#f3e9fa' : '#fff') + ';font-size:15px;font-weight:' + (on ? 800 : 600) + ';cursor:pointer;color:#2c3e50;">' + (on ? '✅ ' : '') + esc(label) + '</button>';
+  const rowBtn = (id, label, sub, on) => '<button onclick="admPickVoice(' + (id === null ? 'null' : "'" + String(id).replace(/'/g, "\\'") + "'") + ')" style="display:block;width:100%;text-align:left;margin:5px 0;padding:12px 14px;border-radius:9px;border:2px solid ' + (on ? '#8e44ad' : '#e0e0e0') + ';background:' + (on ? '#f3e9fa' : '#fff') + ';font-size:15px;font-weight:' + (on ? 800 : 600) + ';cursor:pointer;color:#2c3e50;">' + (on ? '✅ ' : '') + esc(label) + (sub ? ' <span style="font-size:11px;color:#9a9a9a;font-weight:400;">' + esc(sub) + '</span>' : '') + '</button>';
   let body;
   if (!list.length) body = '<div style="color:#888;font-size:14px;padding:14px 0;text-align:center;">이 기기에서 고를 수 있는 음성이 없어요.<br>폰 설정 → 음성/TTS에서 목소리를 추가하면 나옵니다.</div>';
-  else body = rowBtn(null, '기본 (폰 설정 목소리)', cur === null || cur === '' || cur == null) + list.map(v => rowBtn(v.id, v.label, String(cur) === String(v.id))).join('');
+  else body = rowBtn(null, '기본 (폰 설정 목소리)', '', cur === null || cur === '' || cur == null) + list.map((v, i) => rowBtn(v.id, (i + 1) + '. ' + v.label, v.sub, String(cur) === String(v.id))).join('');
   const ov = document.createElement('div');
   ov.id = 'admVoicePickerOverlay';
   ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:40px 14px;overflow:auto;';
