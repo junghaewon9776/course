@@ -373,7 +373,7 @@
   // 이것들만 오면 바로 화면 그림 → 나머지는 도착하는 대로 다시 그림(드롭다운·목록 자가 보정)
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','teams','members','vehicles','noSprayZones','notices','visibility','accessGate'];
 </script>
-<script src="common.js?v=20260718n"></script>
+<script src="common.js?v=20260718o"></script>
 <script>
 let map, kakaoMarkers = [], kakaoLines = [];
 let anchorClusterer = null;   // 거점 핀 클러스터(묶어서 표시) — 많아도 부드럽게
@@ -3133,7 +3133,7 @@ function admOpenTtsSettings() {
     document.body.appendChild(f);
     setTimeout(() => { try { f.remove(); } catch (e) {} }, 1500);
   } catch (e) {}
-  alert('새 목소리 받는 법\n\n폰 설정 → 시스템 → 언어 및 입력 → 음성/TTS 출력\n→ "Google 음성 서비스"의 톱니(설정) → 음성 데이터 설치\n→ 원하는 목소리 다운로드\n\n※ 받은 목소리는 이 폰에만 저장되고, 이 창 목록에 자동으로 나타납니다.');
+  alert('새 목소리 받는 법 (폰마다 메뉴 이름이 달라요)\n\n■ 제일 쉬운 방법\n설정 → 맨 위 검색창에 "TTS" 또는 "음성" 입력\n→ "텍스트 음성 변환(TTS)" 눌러 들어가기\n\n■ 폰별 경로\n· 삼성폰: 설정 → 일반 → 텍스트 음성 변환(TTS)\n· 구글/기본폰: 설정 → 접근성 → 텍스트 음성 변환 출력\n\n들어간 뒤 → "Google 음성 서비스" 옆 톱니 → 음성 데이터 설치 → 원하는 목소리 다운로드\n\n※ 받은 목소리는 이 폰에만 저장되고, 이 창 목록에 자동으로 나타납니다.');
 }
 function admPickVoice(id) {
   const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
