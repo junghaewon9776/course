@@ -200,7 +200,14 @@ function openRoadview(lat, lng, title) {
   ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:#000;display:flex;flex-direction:column;';
   var bar = document.createElement('div');
   bar.style.cssText = 'flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:#1a1a1a;color:#fff;font-size:14px;font-weight:700;';
-  bar.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + RV_ICON + ' 로드뷰' + (title ? ' · ' + String(title).replace(/</g, '&lt;') : '') + '</span>';
+  bar.innerHTML = '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">' + RV_ICON + ' 로드뷰' + (title ? ' · ' + String(title).replace(/</g, '&lt;') : '') + '</span>';
+  // 📅 연도별 로드뷰 — SDK엔 없어서(최신만), 카카오맵에서 열어 연도 선택
+  var yearBtn = document.createElement('button');
+  yearBtn.textContent = '📅 연도별';
+  yearBtn.title = '카카오맵에서 열어 촬영 연도 선택';
+  yearBtn.style.cssText = 'flex:none;background:#2f80c4;color:#fff;border:none;border-radius:8px;padding:8px 12px;font-weight:700;font-size:13px;cursor:pointer;';
+  yearBtn.onclick = function () { try { window.open('https://map.kakao.com/link/roadview/' + lat + ',' + lng, '_blank'); } catch (e) { location.href = 'https://map.kakao.com/link/roadview/' + lat + ',' + lng; } };
+  bar.appendChild(yearBtn);
   var closeBtn = document.createElement('button');
   closeBtn.textContent = '✕ 닫기';
   closeBtn.style.cssText = 'flex:none;background:#e74c3c;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;font-size:14px;cursor:pointer;';
