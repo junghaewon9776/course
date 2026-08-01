@@ -121,7 +121,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260718j"></script>
+<script src="common.js?v=20260718k"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2385,6 +2385,8 @@ function showMapSettings() {
         ${alarmSoundOn() ? '🔊 알림 소리 ON (끄기)' : '🔇 알림 소리 OFF (켜기)'}
       </button>
       <p style="font-size:11px;color:#888;margin:0 0 10px;">방역금지·민원 근접 시 음성 멘트</p>
+      <button onclick="showVoicePicker()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#2980b9;color:#fff;">🗣 안내 목소리 고르기</button>
+      <p style="font-size:11px;color:#888;margin:0 0 12px;">폰에 깔린 음성(남/여 등) 중 골라서 바꿔요</p>
       <button onclick="showPastTracks()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#8e44ad;color:#fff;">🛤 이전 행적 보기</button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">지난 운행 경로를 오늘 지도에 표시</p>
       <div style="display:flex;gap:6px;margin-bottom:6px;">
@@ -2612,17 +2614,63 @@ function speakKo(text) {
     const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
     if (P) {
       try { P.stop(); } catch (e) {}
-      P.speak({ text: String(text), lang: 'ko-KR', rate: 1.0, volume: 1.0 })
-        .catch(err => console.warn('TTS 실패:', err && err.message));
+      const opt = { text: String(text), lang: 'ko-KR', rate: 1.0, volume: 1.0 };
+      const vi = localStorage.getItem('__ttsVoiceApp');       // 사용자가 고른 목소리(번호)
+      if (vi !== null && vi !== '') opt.voice = parseInt(vi, 10);
+      P.speak(opt).catch(err => console.warn('TTS 실패:', err && err.message));
       return;
     }
-    // 💻 브라우저(크롬 등)는 기존 웹 음성 사용
+    // 💻 브라우저(크롬 등)는 웹 음성 사용
     if (!window.speechSynthesis) return;
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'ko-KR'; u.rate = 1.0; u.volume = 1.0;
-    speechSynthesis.speak(u);   // 보이스는 시스템 기본에 맡김
+    const uri = localStorage.getItem('__ttsVoiceWeb');        // 사용자가 고른 목소리
+    if (uri) { const v = (speechSynthesis.getVoices() || []).find(x => x.voiceURI === uri); if (v) u.voice = v; }
+    speechSynthesis.speak(u);
   } catch (e) {}
+}
+// 🗣 안내 목소리 고르기 — 폰에 깔린 여러 TTS 음성(남/여·다른 AI) 중 선택
+async function showVoicePicker() {
+  const ms = document.getElementById('mapSettingsOverlay'); if (ms) ms.remove();
+  const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+  let voices = [], isApp = false;
+  if (P && P.getSupportedVoices) {
+    isApp = true;
+    try { const r = await P.getSupportedVoices(); (r && r.voices || []).forEach((v, i) => voices.push({ id: String(i), label: v.name || v.voiceURI || ('음성 ' + (i + 1)), lang: v.lang || '' })); } catch (e) {}
+  } else if (window.speechSynthesis) {
+    (speechSynthesis.getVoices() || []).forEach(v => voices.push({ id: v.voiceURI, label: v.name, lang: v.lang || '' }));
+  }
+  const ko = voices.filter(v => /ko/i.test(v.lang));
+  const list = ko.length ? ko : voices;   // 한국어 있으면 그것만, 없으면 전체
+  const cur = isApp ? localStorage.getItem('__ttsVoiceApp') : localStorage.getItem('__ttsVoiceWeb');
+  const esc = s => String(s || '').replace(/</g, '&lt;');
+  const rowBtn = (id, label, on) => '<button onclick="pickVoice(' + (id === null ? 'null' : "'" + String(id).replace(/'/g, "\\'") + "'") + ')" style="display:block;width:100%;text-align:left;margin:5px 0;padding:12px 14px;border-radius:9px;border:2px solid ' + (on ? '#8e44ad' : '#e0e0e0') + ';background:' + (on ? '#f3e9fa' : '#fff') + ';font-size:15px;font-weight:' + (on ? 800 : 600) + ';cursor:pointer;color:#2c3e50;">' + (on ? '✅ ' : '') + esc(label) + '</button>';
+  let body;
+  if (!list.length) {
+    body = '<div style="color:#888;font-size:14px;padding:14px 0;text-align:center;">이 기기에서 고를 수 있는 음성이 없어요.<br>폰 설정 → 음성/TTS에서 목소리를 추가하면 여기 나옵니다.</div>';
+  } else {
+    body = rowBtn(null, '기본 (폰 설정 목소리)', cur === null || cur === '' || cur == null)
+      + list.map(v => rowBtn(v.id, v.label, String(cur) === String(v.id))).join('');
+  }
+  const ov = document.createElement('div');
+  ov.id = 'voicePickerOverlay';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.5);display:flex;align-items:flex-start;justify-content:center;padding:40px 14px;overflow:auto;';
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:18px;max-width:380px;width:100%;">'
+    + '<h3 style="margin:0 0 4px;">🗣 안내 목소리 고르기</h3>'
+    + '<p style="margin:0 0 12px;color:#888;font-size:13px;">누르면 그 목소리로 바로 들려줍니다. 마음에 드는 걸 고르세요.</p>'
+    + body
+    + '<button onclick="document.getElementById(\'voicePickerOverlay\').remove()" style="margin-top:12px;width:100%;background:#555;color:#fff;border:none;padding:11px;border-radius:9px;font-weight:700;cursor:pointer;">닫기</button></div>';
+  document.body.appendChild(ov);
+}
+function pickVoice(id) {
+  const P = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech;
+  const key = (P && P.getSupportedVoices) ? '__ttsVoiceApp' : '__ttsVoiceWeb';
+  if (id === null || id === '') localStorage.removeItem(key); else localStorage.setItem(key, String(id));
+  // 미리듣기 + 목록 다시 그려 선택 표시
+  speakKo('안녕하세요. 이 목소리로 안내해 드릴게요.');
+  showVoicePicker();
 }
 
 // ───────── ⛔ 방역금지구역 근접 알람 ─────────
