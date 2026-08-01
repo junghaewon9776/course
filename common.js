@@ -223,12 +223,24 @@ function openRoadview(lat, lng, title) {
   var rv = new kakao.maps.Roadview(rvDiv);
   var client = new kakao.maps.RoadviewClient();
   var rvMap = new kakao.maps.Map(mapDiv, { center: pos, level: 3 });
-  var rvMarker = new kakao.maps.Marker({ position: pos, map: rvMap });   // 로드뷰가 보고 있는 위치
+  rvMap.addOverlayMapTypeId(kakao.maps.MapTypeId.ROADVIEW);   // 로드뷰 되는 도로(파란선) 표시
+
+  // 방향(시야)이 보이는 로드뷰 마커 — 드래그해서 옮길 수 있음
+  function __walkerImg(pan) {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">'
+      + '<g transform="rotate(' + (pan || 0) + ' 24 24)">'
+      + '<path d="M24 24 L11 2 A26 26 0 0 1 37 2 Z" fill="rgba(41,128,185,0.4)"/>'   // 시야 부채꼴(위쪽 기준)
+      + '</g>'
+      + '<circle cx="24" cy="24" r="8.5" fill="#2980b9" stroke="#fff" stroke-width="3"/></svg>';
+    return new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg),
+      new kakao.maps.Size(48, 48), { offset: new kakao.maps.Point(24, 24) });
+  }
+  var rvMarker = new kakao.maps.Marker({ position: pos, map: rvMap, image: __walkerImg(0), draggable: true, zIndex: 50 });
 
   function __rvLoad(p) {
     client.getNearestPanoId(p, 120, function (panoId) {
       if (panoId === null) {
-        rvDiv.innerHTML = '<div style="color:#fff;text-align:center;padding:60px 20px;font-size:15px;line-height:1.6;">이 위치 주변엔 로드뷰가 없어요.<br><span style="opacity:.7;font-size:13px;">(골목·시골길·농로는 로드뷰 미지원 구간이 많아요)</span><br><span style="opacity:.7;font-size:12px;">아래 지도에서 큰 길 쪽을 눌러보세요.</span></div>';
+        rvDiv.innerHTML = '<div style="color:#fff;text-align:center;padding:60px 20px;font-size:15px;line-height:1.6;">이 위치 주변엔 로드뷰가 없어요.<br><span style="opacity:.7;font-size:13px;">(골목·시골길·농로는 로드뷰 미지원 구간이 많아요)</span><br><span style="opacity:.7;font-size:12px;">아래 지도의 파란 길로 마커를 옮겨보세요.</span></div>';
         return;
       }
       rv.setPanoId(panoId, p);
@@ -236,17 +248,18 @@ function openRoadview(lat, lng, title) {
   }
   __rvLoad(pos);
 
-  // 로드뷰에서 걸어 이동하면 → 아래 지도 중심·마커가 따라감
+  // 로드뷰 시점(바라보는 방향) 바뀌면 → 마커 방향 회전
+  kakao.maps.event.addListener(rv, 'viewpoint_changed', function () {
+    try { rvMarker.setImage(__walkerImg(rv.getViewpoint().pan)); } catch (e) {}
+  });
+  // 로드뷰에서 걸어 이동하면 → 마커·지도 따라감
   kakao.maps.event.addListener(rv, 'position_changed', function () {
-    var p = rv.getPosition();
-    rvMarker.setPosition(p);
-    rvMap.setCenter(p);
+    var p = rv.getPosition(); rvMarker.setPosition(p); rvMap.setCenter(p);
   });
-  // 아래 지도를 누르면 → 그 위치 로드뷰로 이동
-  kakao.maps.event.addListener(rvMap, 'click', function (e) {
-    rvMarker.setPosition(e.latLng);
-    __rvLoad(e.latLng);
-  });
+  // 마커를 파란 길로 드래그 → 그 위치 로드뷰
+  kakao.maps.event.addListener(rvMarker, 'dragend', function () { __rvLoad(rvMarker.getPosition()); });
+  // 지도 클릭으로도 이동 가능
+  kakao.maps.event.addListener(rvMap, 'click', function (e) { rvMarker.setPosition(e.latLng); __rvLoad(e.latLng); });
   // 컨테이너 크기 잡힌 뒤 지도 다시 배치 (회백 방지)
   setTimeout(function () { try { rvMap.relayout(); rvMap.setCenter(pos); } catch (e) {} }, 250);
 }
