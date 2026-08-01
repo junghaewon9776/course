@@ -213,19 +213,42 @@ function openRoadview(lat, lng, title) {
   closeBtn.style.cssText = 'flex:none;background:#e74c3c;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:700;font-size:14px;cursor:pointer;';
   closeBtn.onclick = function () { ov.remove(); };
   bar.appendChild(closeBtn);
-  var rvDiv = document.createElement('div'); rvDiv.style.cssText = 'flex:1;width:100%;';
-  ov.appendChild(bar); ov.appendChild(rvDiv);
+  // 위: 로드뷰 / 아래: 지도 (서로 연동)
+  var rvDiv = document.createElement('div'); rvDiv.style.cssText = 'flex:1.7;width:100%;min-height:0;';
+  var mapDiv = document.createElement('div'); mapDiv.style.cssText = 'flex:1;width:100%;min-height:0;border-top:2px solid #333;';
+  ov.appendChild(bar); ov.appendChild(rvDiv); ov.appendChild(mapDiv);
   document.body.appendChild(ov);
+
   var pos = new kakao.maps.LatLng(lat, lng);
   var rv = new kakao.maps.Roadview(rvDiv);
   var client = new kakao.maps.RoadviewClient();
-  client.getNearestPanoId(pos, 120, function (panoId) {
-    if (panoId === null) {
-      rvDiv.innerHTML = '<div style="color:#fff;text-align:center;padding:80px 20px;font-size:15px;line-height:1.6;">이 위치 주변엔 로드뷰가 없어요.<br><span style="opacity:.7;font-size:13px;">(골목·시골길·농로는 로드뷰 미지원 구간이 많아요)</span></div>';
-      return;
-    }
-    rv.setPanoId(panoId, pos);
+  var rvMap = new kakao.maps.Map(mapDiv, { center: pos, level: 3 });
+  var rvMarker = new kakao.maps.Marker({ position: pos, map: rvMap });   // 로드뷰가 보고 있는 위치
+
+  function __rvLoad(p) {
+    client.getNearestPanoId(p, 120, function (panoId) {
+      if (panoId === null) {
+        rvDiv.innerHTML = '<div style="color:#fff;text-align:center;padding:60px 20px;font-size:15px;line-height:1.6;">이 위치 주변엔 로드뷰가 없어요.<br><span style="opacity:.7;font-size:13px;">(골목·시골길·농로는 로드뷰 미지원 구간이 많아요)</span><br><span style="opacity:.7;font-size:12px;">아래 지도에서 큰 길 쪽을 눌러보세요.</span></div>';
+        return;
+      }
+      rv.setPanoId(panoId, p);
+    });
+  }
+  __rvLoad(pos);
+
+  // 로드뷰에서 걸어 이동하면 → 아래 지도 중심·마커가 따라감
+  kakao.maps.event.addListener(rv, 'position_changed', function () {
+    var p = rv.getPosition();
+    rvMarker.setPosition(p);
+    rvMap.setCenter(p);
   });
+  // 아래 지도를 누르면 → 그 위치 로드뷰로 이동
+  kakao.maps.event.addListener(rvMap, 'click', function (e) {
+    rvMarker.setPosition(e.latLng);
+    __rvLoad(e.latLng);
+  });
+  // 컨테이너 크기 잡힌 뒤 지도 다시 배치 (회백 방지)
+  setTimeout(function () { try { rvMap.relayout(); rvMap.setCenter(pos); } catch (e) {} }, 250);
 }
 // 공개 모니터링 토큰 생성 (16자 랜덤)
 function generatePublicToken() {
