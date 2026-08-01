@@ -248,9 +248,13 @@ function openRoadview(lat, lng, title) {
   }
   __rvLoad(pos);
 
-  // 로드뷰 시점(바라보는 방향) 바뀌면 → 마커 방향 회전
+  // 로드뷰 시점(바라보는 방향) 바뀌면 → 마커 방향 회전.
+  //   ⚠️ 두리번거릴 때 매 프레임 SVG 재생성하면 화면이 먹통 → 0.2초에 한 번만 갱신
+  var __vpBusy = false;
   kakao.maps.event.addListener(rv, 'viewpoint_changed', function () {
-    try { rvMarker.setImage(__walkerImg(rv.getViewpoint().pan)); } catch (e) {}
+    if (__vpBusy) return;
+    __vpBusy = true;
+    setTimeout(function () { __vpBusy = false; try { rvMarker.setImage(__walkerImg(rv.getViewpoint().pan)); } catch (e) {} }, 200);
   });
   // 로드뷰에서 걸어 이동하면 → 마커·지도 따라감
   kakao.maps.event.addListener(rv, 'position_changed', function () {
