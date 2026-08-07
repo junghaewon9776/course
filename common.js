@@ -1119,14 +1119,18 @@ function cmGetQuests(data) {
 function cmTotalXp(data, name) {
   const __y = new Date().getFullYear();
   function __inYr(ts) { return new Date(ts || 0).getFullYear() === __y; }
+  // 🎖 계급표(stats rankLogs)와 동일 기준: 방역 로그는 "전체 년도 + 숨김 제외 + 공개 행사만".
+  //    (예전엔 '올해만' 세서 여러 해 누적 계급보다 낮게 잡혀, 이미 지난 계급을 다시 진급 알림하던 버그)
+  const __visEv = (data.visibility || {}).events || {};
+  function __evVisible(eid) { return __visEv[eid] !== false; }
   let vaxTotal = 0, setTotal = 0;
   (data.events || []).forEach(ev => {
+    if (!__evVisible(ev.id)) return;
     const courses = ev.courses || [];
     const idx = {}; courses.forEach((c, i) => idx[c.id] = i);
     const counts = courses.map(() => 0);
     (data.logs || []).forEach(l => {
-      if (!l || l.eventId !== ev.id || !l.finishedAt) return;
-      if (!__inYr(l.startedAt || l.finishedAt)) return;   // 올해 로그만 (통계와 동일)
+      if (!l || l.eventId !== ev.id || l.hidden || !l.finishedAt) return;
       const keys = [];
       if (l.crew && l.crew.driver) keys.push(l.crew.driver.trim());
       if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => keys.push(n));
@@ -1161,7 +1165,7 @@ function cmTotalXp(data, name) {
   }
   // 월별/년도 1등 계산 (방역 최다)
   function vaxBy(ls) { const m = {}; ls.forEach(l => { if (!l || !l.finishedAt) return; const ks = []; if (l.crew && l.crew.driver) ks.push(l.crew.driver.trim()); if (l.crew && l.crew.assist) l.crew.assist.split(',').map(s => s.trim()).filter(Boolean).forEach(n => ks.push(n)); ks.forEach(n => { if (n) m[n] = (m[n] || 0) + 1; }); }); return m; }
-  const allLogs = (data.logs || []).filter(l => l && l.finishedAt && __inYr(l.startedAt || l.finishedAt));   // 올해 로그만
+  const allLogs = (data.logs || []).filter(l => l && !l.hidden && l.finishedAt && __evVisible(l.eventId));   // 계급표와 동일: 전체 년도·공개행사·숨김 제외
   function cmBucket(keyFn) { const b = {}; allLogs.forEach(function (l) { const t = l.startedAt || l.finishedAt || 0; const k = keyFn(l, t); (b[k] = b[k] || []).push(l); }); return b; }
   function cmWeekKey(t) { const d = new Date(t); const day = (d.getDay() + 6) % 7; const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day); return mon.getFullYear() + '-' + (mon.getMonth() + 1) + '-' + mon.getDate(); }
   function cmMonthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + d.getMonth(); }
