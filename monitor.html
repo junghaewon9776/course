@@ -199,7 +199,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260718q"></script>
+<script src="common.js?v=20260718r"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -208,7 +208,7 @@ let __groupSelKey = null;           // 선택된 그룹 키
 let __groupTracks = [];             // 묶음 보기용 궤적 폴리라인들
 const GROUP_COLORS = ['#e74c3c','#3498db','#27ae60','#e67e22','#9b59b6','#16a085','#f39c12','#2c3e50','#c0392b','#2980b9'];
 let __replayTimer = null, __replayMarker = null, __replayIdx = 0;
-let __replayTrack = null, __replaySpeed = 1, __replayPaused = false, __replayBaseMs = 100;
+let __replayTrack = null, __replaySpeed = 1, __replayPaused = false, __replayBaseMs = 100, __replayDir = 1;
 let __directionOverlays = [], __startEndMarkers = [];
 
 window.onAuthSuccess = () => onDataReady(loadKakaoMap);
@@ -2036,6 +2036,9 @@ function startReplay(track) {
   } catch (e) {}
   const replayBtn = document.getElementById('replayBtn');
   if (replayBtn) { replayBtn.textContent = '⏹ 정지'; replayBtn.style.background = '#e74c3c'; }
+  const rvBtn = document.getElementById('replayRvBtn');
+  if (rvBtn) rvBtn.style.display = '';
+  __replayDir = 1;
   __replayRunTimer();
   renderReplayControls();
 }
@@ -2061,9 +2064,16 @@ function __replayRunTimer() {
   if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
   if (__replayPaused || !__replayTrack) return;
   __replayTimer = setInterval(() => {
-    __replayIdx++;
-    if (__replayIdx >= __replayTrack.length) {
+    __replayIdx += __replayDir;                       // 방향(+1 앞으로 / -1 뒤로)대로 이동
+    if (__replayIdx >= __replayTrack.length) {         // 끝 도달 → 멈춤
       __replayIdx = __replayTrack.length - 1;
+      __replayPaused = true;
+      if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
+      renderReplayControls();
+      return;
+    }
+    if (__replayIdx < 0) {                             // 처음 도달(되감기 끝) → 멈춤
+      __replayIdx = 0;
       __replayPaused = true;
       if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
       renderReplayControls();
@@ -2074,17 +2084,36 @@ function __replayRunTimer() {
 }
 function setReplaySpeed(s) { __replaySpeed = s; if (!__replayPaused) __replayRunTimer(); renderReplayControls(); }
 function pauseReplay() { __replayPaused = true; if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; } renderReplayControls(); }
-function resumeReplay() {
+// ▶ 앞으로 재생
+function playForwardReplay() {
   if (!__replayTrack) return;
+  __replayDir = 1;
   if (__replayIdx >= __replayTrack.length - 1) __replayIdx = 0; // 끝이면 처음부터
   __replayPaused = false; __replayRunTimer(); renderReplayControls();
+}
+// ⏪ 뒤로 재생(되감기). x1/2/4/8 속도는 이 방향에도 그대로 적용
+function rewindReplay() {
+  if (!__replayTrack) return;
+  __replayDir = -1;
+  if (__replayIdx <= 0) __replayIdx = __replayTrack.length - 1; // 처음이면 끝에서부터 뒤로
+  __replayPaused = false; __replayRunTimer(); renderReplayControls();
+}
+function resumeReplay() { playForwardReplay(); }  // 예전 호출 호환
+// 🅡 로드뷰 버튼: 재생 중이면 일시정지하고, 지금 그 위치 로드뷰를 보여줌
+function replayRoadview() {
+  if (!__replayTrack || !__replayMarker) { alert('먼저 재생을 시작하세요'); return; }
+  pauseReplay();
+  const t = __replayTrack[__replayIdx];
+  if (t) openRoadview(t[0], t[1], '이 지점 로드뷰');
 }
 function stopReplay() {
   if (__replayTimer) { clearInterval(__replayTimer); __replayTimer = null; }
   if (__replayMarker) { __replayMarker.setMap(null); __replayMarker = null; }
-  __replayIdx = 0; __replayTrack = null; __replayPaused = false; __replaySpeed = 1;
+  __replayIdx = 0; __replayTrack = null; __replayPaused = false; __replaySpeed = 1; __replayDir = 1;
   const replayBtn = document.getElementById('replayBtn');
   if (replayBtn) { replayBtn.textContent = '▶ 재생'; replayBtn.style.background = '#e67e22'; }
+  const rvBtn = document.getElementById('replayRvBtn');
+  if (rvBtn) rvBtn.style.display = 'none';
   renderReplayControls();
 }
 function renderReplayControls() {
@@ -2097,9 +2126,13 @@ function renderReplayControls() {
   const atEnd = __replayIdx >= total;
   const btn = (label, fn, bg) => `<button onclick="${fn}" style="background:${bg||'#34495e'};color:#fff;border:none;padding:6px 11px;border-radius:5px;font-size:13px;font-weight:700;cursor:pointer;">${label}</button>`;
   const spd = [1,2,4,8].map(s => `<button onclick="setReplaySpeed(${s})" style="background:${__replaySpeed===s?'#27ae60':'#b0b8c0'};color:#fff;border:none;padding:5px 8px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;">x${s}</button>`).join('');
+  const playing = !__replayPaused;
+  const atStart = __replayIdx <= 0;
   el.innerHTML =
-    (__replayPaused ? btn(atEnd ? '↻처음' : '▶', 'resumeReplay()', '#27ae60') : btn('⏸', 'pauseReplay()', '#e67e22'))
-    + `<input type="range" id="__replaySlider" min="0" max="${total}" value="${__replayIdx}" oninput="seekReplayTo(this.value)" onpointerdown="window.__replaySeeking=true" onpointerup="window.__replaySeeking=false" onpointercancel="window.__replaySeeking=false" onblur="window.__replaySeeking=false" style="flex:1;min-width:130px;accent-color:#27ae60;cursor:pointer;">`
+    btn('⏪', 'rewindReplay()', (playing && __replayDir === -1) ? '#e67e22' : '#95a5a6')   // 뒤로 재생(되감기)
+    + (playing ? btn('⏸', 'pauseReplay()', '#e74c3c') : '')                                // 재생 중일 때만 일시정지
+    + btn((atEnd && !playing) ? '↻' : '▶', 'playForwardReplay()', (playing && __replayDir === 1) ? '#27ae60' : '#95a5a6')  // 앞으로 재생
+    + `<input type="range" id="__replaySlider" min="0" max="${total}" value="${__replayIdx}" oninput="seekReplayTo(this.value)" onpointerdown="window.__replaySeeking=true" onpointerup="window.__replaySeeking=false" onpointercancel="window.__replaySeeking=false" onblur="window.__replaySeeking=false" style="flex:1;min-width:120px;accent-color:#27ae60;cursor:pointer;">`
     + `<span id="__replayPct" style="align-self:center;font-size:11px;color:#888;min-width:34px;">${pct}%</span>`
     + spd;
 }
@@ -2203,6 +2236,7 @@ function drawLog(log) {
   const hasTrack = log.track && log.track.length >= 2;
   const replayHtml = hasTrack
     ? `<button id="replayBtn" onclick="toggleReplay()" style="background:#e67e22;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;margin-left:8px;">▶ 재생</button>`
+      + `<button id="replayRvBtn" onclick="replayRoadview()" style="display:none;background:#16a085;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;margin-left:6px;">${RV_ICON} 로드뷰</button>`
     : '';
   document.getElementById('logInfo').innerHTML = `
     <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">
