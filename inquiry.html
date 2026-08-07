@@ -165,7 +165,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260718v"></script>
+<script src="common.js?v=20260718w"></script>
 <script>
 // ────── 기본 분류 데이터 ──────
 const DEFAULT_CATEGORIES = [
@@ -680,6 +680,29 @@ function writerLabel(uid, name) {
   return name || '익명';
 }
 
+// 📋 주소 복사 (버튼의 data-addr 값을 클립보드로)
+function copyAddrFrom(btn) {
+  if (!btn) return;
+  const text = btn.getAttribute('data-addr') || '';
+  if (!text) return;
+  const done = () => { const o = btn.textContent; btn.textContent = '✓ 복사됨'; setTimeout(() => { btn.textContent = o; }, 1200); };
+  const fallback = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove(); done();
+    } catch (e) { alert('복사가 안 됩니다. 주소를 길게 눌러 복사하세요.\n\n' + text); }
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(fallback);
+      return;
+    }
+  } catch (e) {}
+  fallback();
+}
+
 // renderInquiryCard(q, isAdmin, isOwner, isMemberView)
 function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
   const cats = getCategories();
@@ -688,6 +711,9 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
   const [statusText, statusClass] = statusMap[q.status] || statusMap.pending;
   const when = q.createdAt ? new Date(q.createdAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   const phoneTel = (q.phone || '').replace(/[^0-9+]/g, '');
+  const addr = (q.locName || q.area || q.address || '').trim();
+  const addrAttr = addr.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  const locName = String(q.locName || '위치').replace(/'/g, '').replace(/</g, '');
   const u = fbAuth.currentUser;
   const loggedIn = u && !u.isAnonymous;
   const myUid = (u && u.uid) || '';
@@ -760,15 +786,23 @@ function renderInquiryCard(q, isAdmin, isOwner, isMemberView) {
       </div>
       ${q.content ? `<div style="margin:8px 0;color:#444;font-size:14px;white-space:pre-wrap;line-height:1.5;">${q.content.replace(/</g,'&lt;')}</div>` : ''}
       ${(q.images && q.images.length) ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin:8px 0;">${q.images.map((img,ii)=>`<img src="${img}" onclick="viewInqImage('${q.id}',${ii})" style="width:110px;height:82px;object-fit:cover;border-radius:8px;border:1px solid #ddd;cursor:pointer;">`).join('')}</div>` : ''}
-      <div style="font-size:12px;color:#999;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <div style="font-size:12px;color:#999;display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;">
         <span>🕐 ${when}</span>
         <span>👤 ${writerLabel(q.writerUid, q.writer).replace(/</g,'&lt;')}</span>
-        ${q.phone ? `<a href="tel:${phoneTel}" style="color:#3498db;text-decoration:none;" onclick="event.stopPropagation()">📞 ${q.phone}</a>` : ''}
-        ${(q.lat && q.lng) ? `<a href="#" onclick="event.stopPropagation();openLocationMap(${q.lat},${q.lng},'${(q.locName||'위치').replace(/'/g,'').replace(/</g,'')}');return false;" style="display:inline-flex;align-items:center;gap:4px;background:#e67e22;color:#fff;padding:7px 12px;border-radius:8px;text-decoration:none;font-weight:800;font-size:13px;">📍 지도</a>
-        <a href="#" onclick="event.stopPropagation();openRoadview(${q.lat},${q.lng},'${(q.locName||'위치').replace(/'/g,'').replace(/</g,'')}');return false;" style="display:inline-flex;align-items:center;gap:4px;background:#16a085;color:#fff;padding:7px 12px;border-radius:8px;text-decoration:none;font-weight:800;font-size:13px;">${RV_ICON} 로드뷰</a>
-        <a href="https://map.kakao.com/link/map/${encodeURIComponent(q.locName||'민원위치')},${q.lat},${q.lng}" target="_blank" style="color:#e67e22;text-decoration:none;font-weight:700;" onclick="event.stopPropagation()">${(q.locName||'위치 보기').replace(/</g,'&lt;')}</a>` : ''}
         ${q.deviceName ? `<span>📱 ${q.deviceName}</span>` : ''}
       </div>
+      ${addr
+        ? `<div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+            <span style="flex:1;min-width:0;font-size:12px;color:#2c3e50;word-break:break-all;">📍 ${addr.replace(/</g,'&lt;')}</span>
+            <button onclick="event.stopPropagation();copyAddrFrom(this)" data-addr="${addrAttr}" style="flex:none;background:#34495e;color:#fff;border:none;padding:4px 9px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">복사</button>
+          </div>`
+        : ((q.lat && q.lng) ? `<div style="font-size:12px;color:#aaa;margin-top:6px;">📍 위치 있음 (주소 미확인)</div>` : '')}
+      ${q.phone ? `<a href="tel:${phoneTel}" onclick="event.stopPropagation()" style="display:block;text-align:center;background:#3498db;color:#fff;padding:9px;border-radius:7px;font-weight:700;font-size:13px;text-decoration:none;margin-top:8px;">📞 ${q.phone.replace(/</g,'&lt;')} — 전화걸기</a>` : ''}
+      ${(q.lat && q.lng) ? `<div style="display:flex;gap:6px;margin-top:8px;">
+        <a href="https://map.kakao.com/link/to/민원위치,${q.lat},${q.lng}" target="_blank" onclick="event.stopPropagation()" style="flex:1;text-align:center;background:#e74c3c;color:#fff;padding:9px 4px;border-radius:7px;font-weight:700;font-size:12px;text-decoration:none;">🧭 네비</a>
+        <a href="#" onclick="event.stopPropagation();openLocationMap(${q.lat},${q.lng},'${locName}');return false;" style="flex:1;text-align:center;background:#e67e22;color:#fff;padding:9px 4px;border-radius:7px;font-weight:700;font-size:12px;text-decoration:none;">📍 지도</a>
+        <a href="#" onclick="event.stopPropagation();openRoadview(${q.lat},${q.lng},'${locName}');return false;" style="flex:1;text-align:center;background:#16a085;color:#fff;padding:9px 4px;border-radius:7px;font-weight:700;font-size:12px;text-decoration:none;">${RV_ICON} 로드뷰</a>
+      </div>` : ''}
       ${q.adminMemo ? `<div style="margin-top:8px;padding:8px 10px;background:#fff8e1;border-radius:6px;font-size:13px;border-left:3px solid #f1c40f;"><b>관리자 메모:</b> ${q.adminMemo.replace(/</g,'&lt;')}</div>` : ''}
       ${replyHtml}
       ${commentsHtml}
