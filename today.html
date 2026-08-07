@@ -121,7 +121,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260718u"></script>
+<script src="common.js?v=20260718v"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -4091,7 +4091,7 @@ function showHistoryModal(type, courseFilter) {
         const phone = (it.phone || '').trim();
         const phoneTel = phone.replace(/[^0-9+]/g, '');
         // 📍 주소 한 줄 따로 + 작은 복사 버튼
-        const addr = (it.address || '').trim();
+        const addr = (it.address || it.area || it.locName || '').trim();   // 접수처마다 주소 필드가 다름(오늘운영=address, 게시판=area)
         const addrAttr = addr.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
         const addrHtml = addr ? `<div style="display:flex;align-items:center;gap:6px;margin:5px 0 3px;">
               <span style="flex:1;min-width:0;font-size:12px;color:#2c3e50;word-break:break-all;">📍 ${addr.replace(/</g,'&lt;')}</span>
