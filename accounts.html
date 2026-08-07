@@ -124,6 +124,7 @@
           <option value="로그인">로그인</option>
           <option value="시작">시작/완료</option>
         </select>
+        <button class="small" onclick="migrateActivityLogs()" style="background:#2e7d32;color:#fff;">🧹 옛 로그 분리</button>
         <button class="small gray" onclick="clearLogs()">🗑 전체삭제</button>
       </div>
     </div>
@@ -161,7 +162,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260512v"></script>
-<script src="common.js?v=20260718s"></script>
+<script src="common.js?v=20260718t"></script>
 <script>
 // 계정 생성용 보조 Firebase 앱 (현재 로그인 유지하기 위함)
 let secondaryApp = null;
@@ -498,17 +499,54 @@ function getLogIcon(text) {
   return '📝';
 }
 function loadMoreLogs() { __logShowCount += 50; renderLogs(); }
-function clearLogs() {
-  if (!confirm('전체 활동 로그를 삭제할까요? 복구할 수 없습니다.')) return;
-  fbDb.ref('/logs').remove();
-  __allLogs = [];
+async function clearLogs() {
+  if (!confirm('전체 활동 로그를 삭제할까요? 복구할 수 없습니다.\n(운행기록은 삭제되지 않습니다)')) return;
+  try {
+    await fbDb.ref('/activityLogs').remove();          // 새 활동로그 노드 비우기
+    // 옛 /logs 에 섞여 있던 활동로그만 골라 삭제 (운행기록은 절대 건드리지 않음)
+    const snap = await fbDb.ref('/logs').once('value');
+    const val = snap.val() || {}; const updates = {};
+    Object.entries(val).forEach(([k, l]) => {
+      if (l && l.text !== undefined && (typeof isRunLog !== 'function' || !isRunLog(l))) updates['/logs/' + k] = null;
+    });
+    if (Object.keys(updates).length) await fbDb.ref().update(updates);
+    __actLogsNew = {}; __actLogsLegacy = {}; __allLogs = []; renderLogs();
+    alert('활동 로그를 삭제했습니다. (운행기록은 그대로예요)');
+  } catch (e) { alert('삭제 중 오류: ' + e.message); }
+}
+// 옛 /logs 에 섞여 있던 활동로그를 /activityLogs 로 옮기고 /logs 를 정리 (운행기록 유지)
+async function migrateActivityLogs() {
+  if (!confirm('옛 활동로그를 운행기록(/logs)에서 분리해 옮깁니다.\n운행기록은 그대로 유지됩니다. 진행할까요?')) return;
+  try {
+    const snap = await fbDb.ref('/logs').once('value');
+    const val = snap.val() || {}; const updates = {}; let moved = 0;
+    Object.entries(val).forEach(([k, l]) => {
+      if (l && l.text !== undefined && (typeof isRunLog !== 'function' || !isRunLog(l))) {
+        updates['/activityLogs/' + k] = l;   // 같은 키로 복사
+        updates['/logs/' + k] = null;        // 원본 제거
+        moved++;
+      }
+    });
+    if (!moved) { alert('옮길 옛 활동로그가 없습니다. (이미 분리됨)'); return; }
+    await fbDb.ref().update(updates);
+    alert(moved + '건을 분리했습니다.\n이제 운행기록 목록이 가벼워지고, 활동로그도 따로 관리됩니다.');
+  } catch (e) { alert('이관 중 오류: ' + e.message); }
+}
+let __actLogsNew = {}, __actLogsLegacy = {};
+function __mergeActivityLogs() {
+  const nw = Object.values(__actLogsNew || {});
+  // 옛 /logs 에 남은 활동로그만(운행기록 제외). isRunLog 는 common.js 전역
+  const old = Object.values(__actLogsLegacy || {}).filter(l => l && l.text !== undefined && (typeof isRunLog !== 'function' || !isRunLog(l)));
+  __allLogs = nw.concat(old).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   renderLogs();
 }
 function initLogListener() {
+  fbDb.ref('/activityLogs').orderByChild('ts').limitToLast(500).on('value', snap => {
+    __actLogsNew = snap.val() || {}; __mergeActivityLogs();
+  });
+  // 이관 전 옛 활동로그도 계속 보이게 (이관하면 자동으로 비워짐)
   fbDb.ref('/logs').orderByChild('ts').limitToLast(500).on('value', snap => {
-    const val = snap.val() || {};
-    __allLogs = Object.values(val).sort((a, b) => (b.ts || 0) - (a.ts || 0));
-    renderLogs();
+    __actLogsLegacy = snap.val() || {}; __mergeActivityLogs();
   });
 }
 

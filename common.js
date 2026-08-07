@@ -684,7 +684,7 @@ function addLog(text) {
       page: location.pathname.split('/').pop() || '',
       ts: Date.now()
     };
-    fbDb.ref('/logs').push(entry);
+    fbDb.ref('/activityLogs').push(entry);   // 운행기록(/logs)과 분리 — 섞이지 않게
   } catch (e) { console.warn('로그 저장 실패:', e); }
 }
 
