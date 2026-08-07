@@ -663,6 +663,14 @@ async function getTgSender() {
   return `\n👤 ${who} · ${dev}\n🌐 ${ipText}`;
 }
 
+// /logs 에는 (1) 운행기록 (2) 활동로그(addLog) 두 종류가 섞여 있다.
+// 운행기록만 골라내는 판별기 — 활동로그는 top-level .text 를 갖고 startedAt/track 이 없다.
+function isRunLog(l) {
+  if (!l || typeof l !== 'object') return false;
+  if (l.text !== undefined && !l.startedAt && !l.track) return false; // 활동로그 제외
+  return !!(l.startedAt || l.track || l.completions || l.courseId || l.key);
+}
+
 // Firebase에 활동 로그 저장 (텔레그램 여부와 무관)
 function addLog(text) {
   try {
