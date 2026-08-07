@@ -1269,7 +1269,11 @@ function checkPromotionForNames(names) {
     const __logCnt = data.logs ? (Array.isArray(data.logs) ? data.logs.length : Object.keys(data.logs).length) : 0;
     if (!__logCnt) return;
     const users = data.users || {};
+    const rankOv = data.rankOverride || {};   // 수동 고정 계급(표시용)
     names.filter((n, i) => n && names.indexOf(n) === i).forEach(name => {
+      // 🎖 수동으로 계급을 고정해 둔 사람은 자동(XP) 진급 알림을 보내지 않는다.
+      //    (표시 계급은 고정값인데 XP 계산은 다른 계급으로 잡혀 '소위 아닌데 진급' 같은 오알림이 나가던 문제)
+      if (rankOv[name]) return;
       const st = cmTotalXp(data, name);
       // rankState2: 구버전(전체년도 XP로 계산하던) 클라이언트와 분리 — 옛 주소는 부풀린 기준이 남아 구버전 폰이 더는 못 쏨
       const key = cmRankKey(name);
