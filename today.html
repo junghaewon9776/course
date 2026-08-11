@@ -124,11 +124,12 @@
 <!-- 🪶 오늘의운영: 루트 전체 구독 대신 노드별 부분 동기화 (매 /live·변경마다 DB 전체 재파싱 → 장시간 메모리 폭주·팅김 방지).
      운영에 필요한 logs/photos 는 포함(진급 계산·사진 XP 유지), 무거운 activityLogs 는 제외. /live 는 아래 코드가 따로 구독. -->
 <script>
-  window.__SYNC_NODES = ['mapDefault','events','anchors','members','teams','requests','complaints','noSprayZones','notices','vehicles','visibility','eventConfig','savedTeams','schedules','alertConfig','accessConfig','accessGate','telegram','naverSms','publicMonitor','sheetSync','drivePhoto','users','inquiries','memberAuth','memberPinFlags','pushTemplates','pushWebhook','pushPrefs','pushTokens','deviceNames','notifications','notifLog','pushLog','xpConfig','quests','rankTiers','rankOverride','logs','photos'];
+  window.__SYNC_NODES = ['mapDefault','events','anchors','members','teams','requests','complaints','noSprayZones','notices','vehicles','visibility','eventConfig','savedTeams','schedules','alertConfig','accessConfig','accessGate','telegram','naverSms','publicMonitor','sheetSync','drivePhoto','users','inquiries','memberAuth','memberPinFlags','pushTemplates','pushWebhook','pushPrefs','pushTokens','deviceNames','notifications','notifLog','pushLog','xpConfig','quests','rankTiers','rankOverride','photos'];
+  // ⚠️ logs(운행기록·GPS궤적)는 무거워서 평소 동기화 안 함 → 코스완료 진급계산·이전행적 볼 때만 그때 불러옴
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260718z"></script>
+<script src="common.js?v=20260719a"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1676,12 +1677,23 @@ function focusPin(id) {
   if (mapEl) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
+// ───────── 🪶 운영 중 옛 로그 온디맨드 캐시 (평소 동기화 안 함 → 필요할 때 한 번 불러와 보관) ─────────
+let __opLogsCache = null;
+function ensureOpLogs(cb) {
+  if (Array.isArray(__opLogsCache)) { cb(__opLogsCache); return; }
+  const synced = !window.__SYNC_NODES || window.__SYNC_NODES.indexOf('logs') >= 0;
+  if (synced && _cache && _cache.logs) { __opLogsCache = Array.isArray(_cache.logs) ? _cache.logs : Object.values(_cache.logs).filter(Boolean); cb(__opLogsCache); return; }
+  if (typeof fetchLogsOnce === 'function') {
+    fetchLogsOnce().then(logs => { __opLogsCache = Array.isArray(logs) ? logs : []; cb(__opLogsCache); }).catch(() => { __opLogsCache = []; cb([]); });
+  } else { __opLogsCache = []; cb([]); }
+}
+function invalidateOpLogs() { __opLogsCache = null; }   // 새 운행 완료 시 다음에 다시 불러오게
+
 // ───────── 👁 이전(끝난) 핑 불러오기 — 같은 코스의 지난 운행기록 핑 ─────────
-function getPastPinsForCourse() {
+function getPastPinsForCourse(logs) {
   if (!currentSession) return [];
-  const data = loadData();
   const out = [];
-  (data.logs || []).forEach(l => {
+  (logs || []).forEach(l => {
     if (l.courseId !== currentSession.courseId) return;
     if (l.key && l.key === currentSession.key) return;   // 내 현재 세션 제외
     (l.pins || []).forEach(p => {
@@ -1695,7 +1707,9 @@ function renderPastPins() {
   __pastPinMarkers.forEach(m => { try { m.setMap(null); } catch(e){} });
   __pastPinMarkers = [];
   if (!__showPastPins || !isPinCourse()) { updatePastPinBtn(0); return; }
-  const past = getPastPinsForCourse();
+  ensureOpLogs(logs => {
+  if (!map || !__showPastPins) return;
+  const past = getPastPinsForCourse(logs);
   past.forEach(p => {
     const pos = new kakao.maps.LatLng(p.lat, p.lng);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="26" viewBox="0 0 26 34"><path d="M13 0 C6 0 0 6 0 13 C0 22 13 34 13 34 C13 34 26 22 26 13 C26 6 20 0 13 0 Z" fill="#7f8c8d" stroke="white" stroke-width="2"/><circle cx="13" cy="13" r="5" fill="white"/></svg>`;
@@ -1715,6 +1729,7 @@ function renderPastPins() {
     __pastPinMarkers.push(marker);
   });
   updatePastPinBtn(past.length);
+  });   // ensureOpLogs 콜백 닫기
 }
 function updatePastPinBtn(count) {
   const btn = document.getElementById('btnPastPins');
@@ -2416,7 +2431,8 @@ function showPastTracks() {
   const data = loadData();
   const curCourseId = currentSession && currentSession.courseId;
   const filterKey = window.__pastTrackFilter || 'all';
-  let logs = (data.logs || []).filter(l => l && l.track && l.track.length >= 2 && !l.hidden);
+  ensureOpLogs(__allLogs => {
+  let logs = (__allLogs || []).filter(l => l && l.track && l.track.length >= 2 && !l.hidden);
   if (filterKey === 'course' && curCourseId) logs = logs.filter(l => l.courseId === curCourseId);
   logs.sort((a, b) => (b.finishedAt || b.startedAt || 0) - (a.finishedAt || a.startedAt || 0));
   let ov = document.getElementById('pastTracksOverlay');
@@ -2452,11 +2468,12 @@ function showPastTracks() {
     </div>
   </div>`;
   document.body.appendChild(ov);
+  });   // ensureOpLogs 콜백 닫기
 }
 function setPastTrackFilter(f) { window.__pastTrackFilter = f; showPastTracks(); }
 function togglePastTrack(key) {
   const data = loadData();
-  const l = (data.logs || []).find(x => x.key === key);
+  const l = (__opLogsCache || []).find(x => x.key === key);
   if (!l || !l.track || l.track.length < 2) { alert('경로 정보가 없습니다.'); return; }
   if (__pastTrackMap[key]) {
     try { __pastTrackMap[key].setMap(null); } catch (e) {}
@@ -3057,9 +3074,8 @@ function formatDist(m) {
 }
 
 // 🔧 날아간 운행로그 복구 — 이 기기 localStorage에 남은 "완료된" 세션을 /logs로 다시 저장
-function scanRecoverableLogs() {
-  const data = loadData();
-  const existingKeys = new Set((data.logs || []).map(l => l && l.key).filter(Boolean));
+function scanRecoverableLogs(existingLogs) {
+  const existingKeys = new Set((existingLogs || []).map(l => l && l.key).filter(Boolean));
   const out = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
@@ -3072,38 +3088,53 @@ function scanRecoverableLogs() {
   return out.sort((a, b) => (a.finishedAt || 0) - (b.finishedAt || 0));
 }
 function recoverLocalLogs() {
-  const list = scanRecoverableLogs();
-  if (!list.length) { alert('이 기기에 복구할 로그가 없습니다.\n(운행을 했던 바로 그 폰에서 실행해야 해요)'); return; }
-  const data = loadData();
-  const names = list.map(s => {
-    const ev = getEvent(data, s.eventId), co = getCourse(data, s.courseId);
-    return `· ${(ev && ev.name) || '?'} ${(co && co.name) || ''} — ${new Date(s.finishedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
-  }).join('\n');
-  if (!confirm(`복구 가능한 운행 ${list.length}건:\n\n${names}\n\n모두 운행기록에 복구할까요?`)) return;
-  let n = 0;
-  list.forEach(s => {
-    try {
-      fbDb.ref('/logs').push(s);
-      if (_cache) { if (!Array.isArray(_cache.logs)) _cache.logs = _cache.logs ? Object.values(_cache.logs) : []; _cache.logs.push(s); }
-      n++;
-    } catch (e) { console.warn('복구 실패', e); }
+  ensureOpLogs(logs => {
+    const list = scanRecoverableLogs(logs);
+    if (!list.length) { alert('이 기기에 복구할 로그가 없습니다.\n(운행을 했던 바로 그 폰에서 실행해야 해요)'); return; }
+    const data = loadData();
+    const names = list.map(s => {
+      const ev = getEvent(data, s.eventId), co = getCourse(data, s.courseId);
+      return `· ${(ev && ev.name) || '?'} ${(co && co.name) || ''} — ${new Date(s.finishedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
+    }).join('\n');
+    if (!confirm(`복구 가능한 운행 ${list.length}건:\n\n${names}\n\n모두 운행기록에 복구할까요?`)) return;
+    let n = 0;
+    list.forEach(s => {
+      try {
+        fbDb.ref('/logs').push(s);
+        if (Array.isArray(__opLogsCache)) __opLogsCache.push(s);   // 캐시에도 반영(중복 재복구 방지)
+        n++;
+      } catch (e) { console.warn('복구 실패', e); }
+    });
+    alert(`✅ ${n}건 복구 완료!\n운행기록(모니터링)에서 확인하세요.`);
+    const b = document.getElementById('__logRecoverBanner'); if (b) b.remove();
   });
-  alert(`✅ ${n}건 복구 완료!\n운행기록(모니터링)에서 확인하세요.`);
-  const b = document.getElementById('__logRecoverBanner'); if (b) b.remove();
+}
+// 이 기기 localStorage에 완료된 세션이 하나라도 있나 (로그 안 불러오고 가볍게 확인)
+function __hasLocalSessions() {
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.indexOf('session_') === 0) {
+      try { const s = JSON.parse(localStorage.getItem(k)); if (s && s.finishedAt && s.key) return true; } catch (e) {}
+    }
+  }
+  return false;
 }
 // 복구할 로그가 있으면 상단에 배너 표시
 function maybeShowLogRecovery() {
   try {
-    const list = scanRecoverableLogs();
-    if (!list.length) return;
-    if (document.getElementById('__logRecoverBanner')) return;
-    const b = document.createElement('div');
-    b.id = '__logRecoverBanner';
-    b.style.cssText = 'background:#fff3cd;border:1px solid #f1c40f;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:14px;color:#7d6608;';
-    b.innerHTML = `⚠️ 이 기기에 <b>저장 안 된 운행기록 ${list.length}건</b>이 있어요.`
-      + ` <button onclick="recoverLocalLogs()" style="margin-left:8px;background:#e67e22;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;">🔧 복구하기</button>`;
-    const cont = document.querySelector('.container');
-    if (cont) cont.insertBefore(b, cont.firstChild);
+    if (!__hasLocalSessions()) return;   // 복구할 로컬 세션이 없으면 옛 로그를 아예 안 불러옴
+    ensureOpLogs(logs => {
+      const list = scanRecoverableLogs(logs);
+      if (!list.length) return;
+      if (document.getElementById('__logRecoverBanner')) return;
+      const b = document.createElement('div');
+      b.id = '__logRecoverBanner';
+      b.style.cssText = 'background:#fff3cd;border:1px solid #f1c40f;border-radius:8px;padding:12px 14px;margin-bottom:12px;font-size:14px;color:#7d6608;';
+      b.innerHTML = `⚠️ 이 기기에 <b>저장 안 된 운행기록 ${list.length}건</b>이 있어요.`
+        + ` <button onclick="recoverLocalLogs()" style="margin-left:8px;background:#e67e22;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;">🔧 복구하기</button>`;
+      const cont = document.querySelector('.container');
+      if (cont) cont.insertBefore(b, cont.firstChild);
+    });
   } catch (e) {}
 }
 if (typeof onDataReady === 'function') onDataReady(() => setTimeout(maybeShowLogRecovery, 1500));
@@ -3185,7 +3216,8 @@ function __doFinishCourse() {
     try {
       fbDb.ref('/logs').push(logEntry);          // 타깃 저장: 다른 데이터 안 건드림, 덮어쓰기 없음
       if (_cache) { if (!Array.isArray(_cache.logs)) _cache.logs = _cache.logs ? Object.values(_cache.logs) : []; _cache.logs.push(logEntry); }
-    } catch (e) { console.warn('로그 저장 오류', e); fresh.logs = fresh.logs || []; fresh.logs.push(logEntry); saveData(fresh); }
+      if (Array.isArray(__opLogsCache)) __opLogsCache.push(logEntry);   // 이전행적 캐시도 최신 유지
+    } catch (e) { console.warn('로그 저장 오류, 재시도', e); try { fbDb.ref('/logs').push(logEntry); } catch (e2) { console.warn('로그 재시도 실패', e2); } }
   } else {
     if (!fresh.logs) fresh.logs = [];
     fresh.logs.push(logEntry);

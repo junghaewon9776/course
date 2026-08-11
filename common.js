@@ -1264,12 +1264,14 @@ function cmTotalXp(data, name) {
 }
 // 로그/민원 저장 직후 호출 → 참여자 진급 여부 확인하고 푸시 (이름 배열)
 function checkPromotionForNames(names) {
-  try {
-    if (typeof fbDb === 'undefined' || !names || !names.length) return;
-    const data = loadData();
-    // ⚠️ 데이터가 덜 받아진 상태(운행기록 미로딩 등)에서 계산하면 XP가 실제보다 낮게 나온다.
-    //    그 낮은 값으로 기준을 깎으면, 데이터가 온전한 폰이 다시 올리면서 진급 알림이 반복 발송됨.
-    //    → 로그가 없으면 아예 확인하지 않는다.
+  if (typeof fbDb === 'undefined' || !names || !names.length) return;
+  // 🪶 오늘의운영처럼 logs를 평소 동기화 안 하는 화면에서도 동작: logs가 캐시에 없으면 그때 한 번 불러와 계산.
+  const __logsSynced = !_partialNodes || _partialNodes.indexOf('logs') >= 0;
+  const __runPromo = (logsFetched) => {
+   try {
+    const __base = loadData();
+    const data = logsFetched ? Object.assign({}, __base, { logs: logsFetched }) : __base;
+    // ⚠️ 데이터가 덜 받아진 상태에서 계산하면 XP가 낮게 나와 기준을 깎아 반복 알림 → 로그 없으면 중단
     const __logCnt = data.logs ? (Array.isArray(data.logs) ? data.logs.length : Object.keys(data.logs).length) : 0;
     if (!__logCnt) return;
     const users = data.users || {};
@@ -1307,7 +1309,10 @@ function checkPromotionForNames(names) {
         }, false);
       }).catch(() => {});
     });
-  } catch (e) { console.warn('진급 확인 오류', e); }
+   } catch (e) { console.warn('진급 확인 오류', e); }
+  };
+  if (__logsSynced && _cache && _cache.logs) __runPromo(null);
+  else fetchLogsOnce().then(__runPromo).catch(() => {});
 }
 // 코스완료 로그 → 참여자 진급 확인
 function checkPromotionForLog(logEntry) {
@@ -1575,6 +1580,10 @@ function saveData(data, force) {
     const payload = { ...data };
     delete payload.live;    // driver 가 직접 ref('/live/...').set 으로 관리
     delete payload.photos;  // 현장사진은 별도 노드, saveData가 안 건드림
+    // 🛡 이 화면이 logs를 온전히 동기화하지 않는 경우(오늘의운영 등) 캐시엔 일부만 있으므로
+    //    saveData가 /logs를 통째로 덮어쓰면 전체 운행기록이 날아간다 → 절대 안 건드림.
+    //    (운행기록은 항상 fbDb.ref('/logs').push 로만 개별 저장/수정)
+    { const __ls = !_partialNodes || _partialNodes.indexOf('logs') >= 0; if (!__ls) delete payload.logs; }
     // 👁 표시 설정은 관리에서 /visibility 로만 저장한다.
     //    여기 포함시키면, 예전 데이터를 들고 있던 화면이 저장할 때 관리자가 켜고 끈 게 되돌아감.
     delete payload.visibility;
