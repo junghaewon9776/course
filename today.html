@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719i"></script>
+<script src="common.js?v=20260719j"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3145,31 +3145,36 @@ let __liveNotifLast = { key: null, at: 0 };
 let __liveNotifChannelReady = false, __liveNotifPermAsked = false;
 function __getLN() { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) || null; }
 async function updateLiveNotification(num, name, dist, doneCount, total, done) {
-  const P = __getLN();
-  if (!P) return;   // 앱이 아니면(웹) 스킵
-  const key = done ? 'done' : (num + '|' + name);
   const now = Date.now();
+  const key = done ? 'done' : (num + '|' + name);
   // 같은 거점이면 12초에 한 번만 갱신(거리 표시용). 거점 바뀌면 즉시.
   if (__liveNotifLast.key === key && now - __liveNotifLast.at < 12000) return;
+  const distTxt = formatDist(dist);
+  const crew = (currentSession && currentSession.crew) || {};
+  const crewLine = (crew.driver || crew.assist)
+    ? `🚗 운전 ${crew.driver || '-'}${crew.assist ? ' · 보조 ' + crew.assist : ''}` : '';
+  // 접힌 한 줄(안드로이드 알림은 마퀴 미지원 → 길면 …로 잘림)
+  const title = done ? '🚐 방역코스 · 모든 거점 완료 🎉' : `🚐 ${num}번 · ${name} · ${distTxt}`;
+  const text = done ? `${total} / ${total} 완료` : `${doneCount} / ${total} 거점 완료`;
+  // 펼치면 자세히
+  const big = done
+    ? `🎉 모든 거점 완료!\n✅ ${total} / ${total} 거점 다 돌았어요${crewLine ? '\n' + crewLine : ''}`
+    : `🎯 ${num}번 · ${name}\n📍 ${distTxt} 앞\n✅ ${doneCount} / ${total} 거점 완료${crewLine ? '\n' + crewLine : ''}`;
+  // ① '방역코스 운행 중' 알림(위치추적 서비스)을 같은 ID로 직접 바꿈 → 알림 1개로 실시간 갱신
+  const Ops = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.OpsNotify;
+  if (Ops && Ops.update) {
+    __liveNotifLast = { key: key, at: now };
+    try { await Ops.update({ title: title, text: text, big: big }); } catch (e) { console.warn('OpsNotify 오류', e); }
+    return;
+  }
+  // ② 폴백(OpsNotify 없는 구버전 앱): 별도 알림
+  const P = __getLN();
+  if (!P) return;
   __liveNotifLast = { key: key, at: now };
   try {
-    if (!__liveNotifChannelReady) {
-      try { await P.createChannel({ id: 'ops_live', name: '운행 안내', description: '운행 중 다음 거점 표시', importance: 2, visibility: 1, vibration: false }); } catch (e) {}
-      __liveNotifChannelReady = true;
-    }
+    if (!__liveNotifChannelReady) { try { await P.createChannel({ id: 'ops_live', name: '운행 안내', importance: 2, visibility: 1, vibration: false }); } catch (e) {} __liveNotifChannelReady = true; }
     if (!__liveNotifPermAsked) { __liveNotifPermAsked = true; try { await P.requestPermissions(); } catch (e) {} }
-    const distTxt = formatDist(dist);
-    // 접힌 상태는 '한 줄' — 제목에 다 넣고 내용줄은 비움. 펼치면 largeBody로 크게.
-    const title = done ? '🚐 방역코스 · 모든 거점 완료 🎉' : `🚐 ${num}번 · ${name} · ${distTxt}`;
-    const large = done
-      ? `🎉 모든 거점 완료!\n✅ ${total} / ${total} 거점 다 돌았어요`
-      : `🎯 ${num}번 · ${name}\n📍 ${distTxt} 앞\n✅ ${doneCount} / ${total} 거점 완료`;
-    await P.schedule({ notifications: [{
-      id: 4400, channelId: 'ops_live',
-      title: title,
-      body: '', largeBody: large, summaryText: `${doneCount}/${total} 완료`,
-      ongoing: !done, autoCancel: false, smallIcon: 'ic_stat_notify'
-    }] });
+    await P.schedule({ notifications: [{ id: 4400, channelId: 'ops_live', title: title, body: '', largeBody: big, summaryText: text, ongoing: !done, autoCancel: false, smallIcon: 'ic_stat_notify' }] });
   } catch (e) { console.warn('실시간 알림 오류', e); }
 }
 async function clearLiveNotification() {
