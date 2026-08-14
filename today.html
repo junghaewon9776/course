@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719k"></script>
+<script src="common.js?v=20260719l"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3073,17 +3073,23 @@ function updateNextInfo() {
   const done = new Set(currentSession.completions);
   const el = document.getElementById('nextInfo');
   if (!el) return;
-  const idx = anchors.findIndex(a => !done.has(a.id));   // 아직 안 한 것 중 제일 앞 번호 (50 끝나면 51)
   const total = anchors.length;
   const doneCount = anchors.reduce((s, a) => s + (done.has(a.id) ? 1 : 0), 0);
-  if (idx < 0) {
+  // 🎯 번호순이 아니라 "지금 위치에서 제일 가까운, 아직 안 한 거점"을 다음으로 (어느 방향/순서로 돌든 맞음)
+  let best = null;
+  anchors.forEach((a, i) => {
+    if (done.has(a.id)) return;
+    const d = distance(currentPos.lat, currentPos.lng, a.lat, a.lng);
+    if (!best || d < best.d) best = { a: a, i: i, d: d };
+  });
+  if (!best) {
     el.innerHTML = `<div style="background:#27ae60;color:#fff;border-radius:10px;padding:11px 12px;font-size:16px;font-weight:800;text-align:center;">🎉 모든 거점 완료! (${total}곳)</div>`;
     updateLiveNotification(0, '모든 거점 완료 🎉', 0, total, total, true);
     return;
   }
-  const next = anchors[idx];
-  const num = idx + 1;
-  const dist = distance(currentPos.lat, currentPos.lng, next.lat, next.lng);
+  const next = best.a;
+  const num = best.i + 1;   // 코스 순번(원래 번호)은 그대로 표시
+  const dist = best.d;
   updateLiveNotification(num, next.name, dist, doneCount, total, false);   // 📲 상태바 실시간 알림 갱신
   const nm = String(next.name || '').replace(/</g, '&lt;');
   // 이름 길면 노래 제목처럼 좌우로 흐르게 (짧으면 그대로)
