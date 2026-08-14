@@ -2324,10 +2324,11 @@ function __shortAddr(addr) {
 // 📢 안내 핑 마커 이미지 — 지정 색 원 + 표시 글자(없으면 📢)
 function noticeMarkerImage(color, label, scale) {
   const s = scale || 1.0;
-  const sz = Math.round(22 * s);   // 안내 핑(확성기) 마커 크기 — 작게 (예전 30 → 22)
+  const sz = Math.round(34 * s);   // 안내 핑(확성기) 마커 크기 — 클릭 쉽게 키움
   const txt = (label || '').slice(0, 3);
+  // 제목 글자는 검정 + 흰 테두리(어떤 색 위에서도 잘 보이게). 색은 원(범위)만 따라감.
   const inner = txt
-    ? `<text x="15" y="19" font-family="Arial,AppleGothic,sans-serif" font-size="${txt.length > 2 ? 8 : 11}" font-weight="bold" fill="#fff" text-anchor="middle">${txt.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`
+    ? `<text x="15" y="19" font-family="Arial,AppleGothic,sans-serif" font-size="${txt.length > 2 ? 8 : 11}" font-weight="bold" fill="#111" stroke="#fff" stroke-width="0.7" paint-order="stroke" text-anchor="middle">${txt.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`
     : `<text x="15" y="20" font-size="13" text-anchor="middle">📢</text>`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}" viewBox="0 0 30 30">
     <circle cx="15" cy="15" r="13" fill="${color || '#2980b9'}" stroke="#fff" stroke-width="2.5"/>
