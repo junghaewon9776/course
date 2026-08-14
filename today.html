@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719g"></script>
+<script src="common.js?v=20260719h"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3117,14 +3117,15 @@ async function updateLiveNotification(num, name, dist, doneCount, total, done) {
     }
     if (!__liveNotifPermAsked) { __liveNotifPermAsked = true; try { await P.requestPermissions(); } catch (e) {} }
     const distTxt = formatDist(dist);
-    const body = done ? `모든 거점 완료 🎉 (${total}곳)` : `${num}번 · ${name} · ${distTxt}`;
+    // 접힌 상태는 '한 줄' — 제목에 다 넣고 내용줄은 비움. 펼치면 largeBody로 크게.
+    const title = done ? '🚐 방역코스 · 모든 거점 완료 🎉' : `🚐 ${num}번 · ${name} · ${distTxt}`;
     const large = done
       ? `🎉 모든 거점 완료!\n✅ ${total} / ${total} 거점 다 돌았어요`
       : `🎯 ${num}번 · ${name}\n📍 ${distTxt} 앞\n✅ ${doneCount} / ${total} 거점 완료`;
     await P.schedule({ notifications: [{
       id: 4400, channelId: 'ops_live',
-      title: '🚐 방역코스 운행 중',
-      body: body, largeBody: large, summaryText: `${doneCount}/${total} 완료`,
+      title: title,
+      body: '', largeBody: large, summaryText: `${doneCount}/${total} 완료`,
       ongoing: !done, autoCancel: false, smallIcon: 'ic_stat_notify'
     }] });
   } catch (e) { console.warn('실시간 알림 오류', e); }
