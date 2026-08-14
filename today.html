@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719h"></script>
+<script src="common.js?v=20260719i"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1115,6 +1115,7 @@ function startSession(eventId, courseId, teamId, crew) {
   document.getElementById('startFormCard').style.display = 'none';
   document.getElementById('opPanel').style.display = 'block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
+  setTimeout(showBatteryTip, 1200);   // 🔋 화면 꺼도 계속 작동하려면 배터리 절전 빼라고 1회 안내
   // 미리보기에서 숨겨졌을 수 있는 UI 복원
   const toolbar = document.querySelector('.op-toolbar');
   if (toolbar) toolbar.style.display = '';
@@ -2410,6 +2411,8 @@ function showMapSettings() {
       <p style="font-size:11px;color:#888;margin:0 0 10px;">방역금지·민원 근접 시 음성 멘트</p>
       <button onclick="showVoicePicker()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#2980b9;color:#fff;">🗣 안내 목소리 고르기</button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">폰에 깔린 음성(남/여 등) 중 골라서 바꿔요</p>
+      <button onclick="localStorage.removeItem('__batteryTipDone');showBatteryTip();" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#c0392b;color:#fff;">🔋 배터리 설정 안내 (화면 꺼도 계속)</button>
+      <p style="font-size:11px;color:#888;margin:0 0 12px;">절전에서 빼야 화면 꺼도 음성·위치가 안 끊겨요</p>
       <button onclick="showPastTracks()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:4px;background:#8e44ad;color:#fff;">🛤 이전 행적 보기</button>
       <p style="font-size:11px;color:#888;margin:0 0 12px;">지난 운행 경로를 오늘 지도에 표시</p>
       <div style="display:flex;gap:6px;margin-bottom:6px;">
@@ -3096,6 +3099,45 @@ function updateNextInfo() {
 }
 function formatDist(m) {
   return m < 1000 ? `${Math.round(m)}m` : `${(m/1000).toFixed(2)}km`;
+}
+
+// ───────── 🔋 배터리 절전 해제 안내 (화면 꺼도 계속 작동하려면 필수) ─────────
+function showBatteryTip() {
+  if (localStorage.getItem('__batteryTipDone') === '1') return;
+  if (document.getElementById('__batteryTip')) return;
+  const ov = document.createElement('div');
+  ov.id = '__batteryTip';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:100002;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;';
+  ov.innerHTML = `<div style="background:#fff;border-radius:14px;max-width:390px;width:100%;padding:20px;">
+      <div style="font-size:18px;font-weight:800;color:#c0392b;margin-bottom:10px;">🔋 배터리 설정 꼭 확인!</div>
+      <div style="font-size:14px;color:#333;line-height:1.65;">
+        화면을 꺼도 <b>음성 안내·실시간 위치</b>가 끝까지 나오려면,<br>이 앱을 <b>배터리 절전에서 빼줘야</b> 해요.
+        <div style="background:#fdf2f0;border:1px solid #f5c6b8;border-radius:9px;padding:10px 12px;margin:12px 0;font-size:13px;">
+          <b>설정 → 배터리 → 방역코스 → “제한 없음”</b><br>
+          <span style="color:#777;font-size:12px;">삼성폰: 설정 → 배터리 → 백그라운드 사용 제한 → “제한 안 함” 목록에 방역코스 추가</span>
+        </div>
+        이거 안 하면 운행 중 앱이 꺼져서 <b>멘트가 멈출 수</b> 있어요.
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px;">
+        <button onclick="openBatterySettings()" style="flex:1;background:#c0392b;color:#fff;border:none;padding:12px;border-radius:9px;font-weight:800;font-size:14px;cursor:pointer;">🔧 설정 열기</button>
+        <button onclick="dismissBatteryTip()" style="flex:none;background:#ececec;color:#555;border:none;padding:12px 14px;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;">다시 안 보기</button>
+      </div>
+    </div>`;
+  ov.onclick = e => { if (e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+function dismissBatteryTip() {
+  localStorage.setItem('__batteryTipDone', '1');
+  const e = document.getElementById('__batteryTip'); if (e) e.remove();
+}
+function openBatterySettings() {
+  // 배터리 최적화 설정 화면 열기 시도(앱). 안 열리면 위 안내대로 직접.
+  try {
+    const f = document.createElement('iframe'); f.style.display = 'none';
+    f.src = 'intent:#Intent;action=android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS;end';
+    document.body.appendChild(f);
+    setTimeout(() => { try { f.remove(); } catch (e) {} }, 1500);
+  } catch (e) {}
 }
 
 // ───────── 📲 상태바 실시간 알림 (유튜브뮤직처럼 '방역코스 · 51번 신덕동 경로당') ─────────
