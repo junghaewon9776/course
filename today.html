@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719e"></script>
+<script src="common.js?v=20260719f"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3055,19 +3055,41 @@ function showNoSprayWarning(z, dist) {
   window.__noSprayHideTimer = setTimeout(() => { toast.style.display = 'none'; }, 8000);
 }
 
+function __ensureMarqueeStyle() {
+  if (document.getElementById('__mqStyle')) return;
+  const st = document.createElement('style'); st.id = '__mqStyle';
+  st.textContent = '@keyframes nextMq{from{transform:translateX(0)}to{transform:translateX(-50%)}}';
+  document.head.appendChild(st);
+}
 function updateNextInfo() {
   if (!currentSession || !currentPos) return;
+  __ensureMarqueeStyle();
   const data = loadData();
   const anchors = getCourseAnchors(data, currentSession.courseId);
   const done = new Set(currentSession.completions);
-  const next = anchors.find(a => !done.has(a.id));
   const el = document.getElementById('nextInfo');
-  if (!next) {
-    el.innerHTML = '🎉 모든 거점 완료!';
+  if (!el) return;
+  const idx = anchors.findIndex(a => !done.has(a.id));   // 아직 안 한 것 중 제일 앞 번호 (50 끝나면 51)
+  const total = anchors.length;
+  const doneCount = anchors.reduce((s, a) => s + (done.has(a.id) ? 1 : 0), 0);
+  if (idx < 0) {
+    el.innerHTML = `<div style="background:#27ae60;color:#fff;border-radius:10px;padding:11px 12px;font-size:16px;font-weight:800;text-align:center;">🎉 모든 거점 완료! (${total}곳)</div>`;
     return;
   }
+  const next = anchors[idx];
+  const num = idx + 1;
   const dist = distance(currentPos.lat, currentPos.lng, next.lat, next.lng);
-  el.innerHTML = `다음: <b>${next.name}</b> (${formatDist(dist)})`;
+  const nm = String(next.name || '').replace(/</g, '&lt;');
+  // 이름 길면 노래 제목처럼 좌우로 흐르게 (짧으면 그대로)
+  const longName = (next.name || '').length > 9;
+  const nameInner = longName
+    ? `<span style="display:inline-block;white-space:nowrap;animation:nextMq 9s linear infinite;">${nm}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${nm}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>`
+    : nm;
+  el.innerHTML = `<div style="background:#2c3e50;color:#fff;border-radius:10px;padding:9px 11px;display:flex;align-items:center;gap:8px;overflow:hidden;">
+      <span style="flex:none;background:#e67e22;color:#fff;font-weight:800;border-radius:8px;padding:3px 10px;font-size:16px;">${num}번</span>
+      <span style="flex:1;min-width:0;font-size:17px;font-weight:800;overflow:hidden;white-space:nowrap;">${nameInner}</span>
+      <span style="flex:none;font-size:14px;color:#ffd85e;font-weight:700;">${formatDist(dist)}</span>
+    </div>`;
 }
 function formatDist(m) {
   return m < 1000 ? `${Math.round(m)}m` : `${(m/1000).toFixed(2)}km`;
