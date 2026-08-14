@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719l"></script>
+<script src="common.js?v=20260719m"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3125,7 +3125,7 @@ function showBatteryTip() {
         이거 안 하면 운행 중 앱이 꺼져서 <b>멘트가 멈출 수</b> 있어요.
       </div>
       <div style="display:flex;gap:8px;margin-top:16px;">
-        <button onclick="openBatterySettings()" style="flex:1;background:#c0392b;color:#fff;border:none;padding:12px;border-radius:9px;font-weight:800;font-size:14px;cursor:pointer;">🔧 설정 열기</button>
+        <button onclick="document.getElementById('__batteryTip').remove()" style="flex:1;background:#c0392b;color:#fff;border:none;padding:12px;border-radius:9px;font-weight:800;font-size:14px;cursor:pointer;">확인</button>
         <button onclick="dismissBatteryTip()" style="flex:none;background:#ececec;color:#555;border:none;padding:12px 14px;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;">다시 안 보기</button>
       </div>
     </div>`;
