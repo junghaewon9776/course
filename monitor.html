@@ -199,7 +199,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260719a"></script>
+<script src="common.js?v=20260719b"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -324,7 +324,7 @@ function buildVehicleBadgesForCourse(courseId, courseColor) {
 
 // ─── 거점 InfoWindow 헬퍼 (토글 + 일관된 패딩) ───
 function attachAnchorInfoWindow(marker, content) {
-  const iw = new kakao.maps.InfoWindow({ removable: true, content });
+  const iw = new kakao.maps.InfoWindow({ removable: true, content, zIndex: 10000 });   // 핀/핑 위로 뜨게
   kakao.maps.event.addListener(marker, 'click', () => {
     // 같은 마커 다시 누르면 닫기
     if (window.__crsIw === iw && iw.getMap && iw.getMap()) {
@@ -340,14 +340,21 @@ function attachAnchorInfoWindow(marker, content) {
   });
   return iw;
 }
-function buildAnchorIwHtml({ headerColor, headerText, name, memo, naviUrl, vehicleBadges }) {
+function buildAnchorIwHtml({ headerColor, headerText, name, memo, naviUrl, vehicleBadges, lat, lng }) {
   const memoHtml = memo ? `<div style="margin-top:4px;color:#444;white-space:pre-wrap;font-size:11px;line-height:1.4;">${escapeHtml(memo)}</div>` : '';
+  const nm = String(name || '').replace(/'/g, '').replace(/</g, '');
+  const rvBtn = (typeof lat === 'number' && typeof lng === 'number')
+    ? `<button onclick="openRoadview(${lat},${lng},'${nm}')" style="flex:1;background:#16a085;color:#fff;border:none;padding:6px 4px;border-radius:5px;font-size:11px;text-decoration:none;font-weight:700;cursor:pointer;">${RV_ICON} 로드뷰</button>`
+    : '';
   return `<div style="padding:9px 11px 11px;font-size:11px;min-width:180px;max-width:260px;box-sizing:border-box;font-family:-apple-system,'Malgun Gothic',sans-serif;line-height:1.45;">
     <div style="font-weight:700;color:${headerColor};margin-bottom:3px;font-size:10px;">${headerText}</div>
     <div style="font-weight:700;color:#2c3e50;font-size:13px;word-break:keep-all;">${escapeHtml(name||'')}</div>
     ${memoHtml}
     ${vehicleBadges || ''}
-    <a href="${naviUrl}" target="_blank" style="display:inline-block;margin-top:7px;background:#3498db;color:#fff;padding:4px 10px;border-radius:4px;font-size:11px;text-decoration:none;font-weight:600;">🧭 길찾기</a>
+    <div style="display:flex;gap:6px;margin-top:7px;">
+      <a href="${naviUrl}" target="_blank" style="flex:1;text-align:center;background:#3498db;color:#fff;padding:6px 4px;border-radius:5px;font-size:11px;text-decoration:none;font-weight:700;">🧭 길찾기</a>
+      ${rvBtn}
+    </div>
   </div>`;
 }
 
@@ -421,6 +428,7 @@ function renderAllAnchorsAlwaysOn() {
           name: a.name,
           memo: a.memo,
           naviUrl,
+          lat: a.lat, lng: a.lng,
           vehicleBadges: ''
         }));
         __alwaysOnAnchors.push(marker);
@@ -902,6 +910,7 @@ function showAllCoursesOnMap() {
           name: a.name,
           memo: a.memo,
           naviUrl,
+          lat: a.lat, lng: a.lng,
           vehicleBadges: ''
         }));
         __courseQuickMarkers.push(marker);
@@ -988,6 +997,7 @@ function showCourseOnMap(courseId) {
       name: a.name,
       memo: a.memo,
       naviUrl,
+      lat: a.lat, lng: a.lng,
       vehicleBadges: buildVehicleBadgesForCourse(course.id, course.color)
     }));
     __courseQuickMarkers.push(marker);
@@ -1221,7 +1231,7 @@ function renderLive(live) {
     if (!m) {
       m = new kakao.maps.Marker({ position: pos, map, image: img, title: driver, zIndex: 50 });
       // 클릭 = InfoWindow 토글 + 그 마커 맨 위로 (zIndex 999)
-      const iw = new kakao.maps.InfoWindow({ content: buildVehicleInfoHtml(sess), removable: true });
+      const iw = new kakao.maps.InfoWindow({ content: buildVehicleInfoHtml(sess), removable: true, zIndex: 10000 });
       kakao.maps.event.addListener(m, 'click', () => {
         // 같은 마커 다시 누르면 닫기
         if (window.__monIw === iw && iw.getMap && iw.getMap()) {
@@ -1288,7 +1298,7 @@ function renderLive(live) {
           new kakao.maps.Size(22, 29), { offset: new kakao.maps.Point(11, 29) });
         pm = new kakao.maps.Marker({ position: ppos, map, image: img, zIndex: 30 });
         const t = new Date(p.at || Date.now()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-        const iw = new kakao.maps.InfoWindow({ removable: true,
+        const iw = new kakao.maps.InfoWindow({ removable: true, zIndex: 10000,
           content: `<div style="padding:7px 9px;font-size:12px;max-width:200px;">
             <div style="font-weight:700;color:${color};margin-bottom:2px;">📍 ${escapeHtml(p.by || '단원')}</div>
             ${p.memo ? `<div style="color:#444;white-space:pre-wrap;margin-bottom:3px;">${escapeHtml(p.memo)}</div>` : ''}
@@ -1622,7 +1632,7 @@ function drawCourseGroup(group) {
       const mk = new kakao.maps.Marker({ position: ppos, map, zIndex: 30,
         image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,'+encodeURIComponent(svg), new kakao.maps.Size(22,29), { offset:new kakao.maps.Point(11,29) }) });
       const t = new Date(p.at || log.startedAt || Date.now()).toLocaleTimeString('ko-KR', { hour:'2-digit', minute:'2-digit' });
-      const iw = new kakao.maps.InfoWindow({ removable:true,
+      const iw = new kakao.maps.InfoWindow({ removable:true, zIndex: 10000,
         content:`<div style="padding:6px 8px;font-size:12px;max-width:190px;"><div style="font-weight:700;color:${color};">📍 ${escapeHtml(who)} (${i+1})</div>${p.memo?'<div style="color:#444;white-space:pre-wrap;">'+escapeHtml(p.memo)+'</div>':''}<div style="color:#888;font-size:11px;">${t}</div></div>` });
       kakao.maps.event.addListener(mk, 'click', () => {
         if (window.__monIw && window.__monIw !== iw) { try{window.__monIw.close();}catch(e){} }
@@ -2210,7 +2220,7 @@ function drawLog(log) {
         new kakao.maps.Size(22, 29), { offset: new kakao.maps.Point(11, 29) })
     });
     const t = new Date(p.at || log.startedAt || Date.now()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
-    const iw = new kakao.maps.InfoWindow({ removable: true,
+    const iw = new kakao.maps.InfoWindow({ removable: true, zIndex: 10000,
       content: `<div style="padding:7px 9px;font-size:12px;max-width:200px;">
         <div style="font-weight:700;color:${logColor};margin-bottom:2px;">📍 ${escapeHtml(p.by || '단원')} (${i+1})</div>
         ${p.memo ? `<div style="color:#444;white-space:pre-wrap;margin-bottom:3px;">${escapeHtml(p.memo)}</div>` : ''}
