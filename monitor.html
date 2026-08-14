@@ -199,7 +199,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260719b"></script>
+<script src="common.js?v=20260719c"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -263,7 +263,7 @@ function initMonitorMap() {
   renderMonComplaintList();
   renderMonRequestList();
   // 줌 레벨별 마커 크기 자동 조절
-  setupMarkerZoomScale(map, () => [...__alwaysOnAnchors, ...__complaintMarkers, ...__requestMarkers, ...__noSprayMarkers]);
+  setupMarkerZoomScale(map, () => [...__alwaysOnAnchors, ...__complaintMarkers, ...__requestMarkers, ...__noSprayMarkers, ...(typeof logMarkers !== 'undefined' ? logMarkers : [])]);
   // 줌 바꾸면 차 마커도 즉시 다시 그려 크기 반영
   if (!window.__liveZoomHooked) {
     window.__liveZoomHooked = true;
@@ -2207,18 +2207,22 @@ function drawLog(log) {
   }
 
   // 📍 전단지 핑 (운행기록에 저장된 핑)
+  const __pinScale = (typeof getMarkerScale === 'function') ? getMarkerScale(map.getLevel()) : 1;  // 거점 핀과 같은 줌 배율 (재생 시 핑만 커 보이던 문제)
   (log.pins || []).forEach((p, i) => {
     if (typeof p.lat !== 'number') return;
     const ppos = new kakao.maps.LatLng(p.lat, p.lng);
     bounds.extend(ppos);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="29" viewBox="0 0 26 34">
+    const __pw = Math.max(12, Math.round(22 * __pinScale)), __ph = Math.max(16, Math.round(29 * __pinScale));
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${__pw}" height="${__ph}" viewBox="0 0 26 34">
       <path d="M13 0 C6 0 0 6 0 13 C0 22 13 34 13 34 C13 34 26 22 26 13 C26 6 20 0 13 0 Z" fill="${logColor}" stroke="white" stroke-width="2"/>
       <circle cx="13" cy="13" r="5" fill="white"/></svg>`;
     const marker = new kakao.maps.Marker({
       position: ppos, map, zIndex: 30,
       image: new kakao.maps.MarkerImage('data:image/svg+xml;utf8,' + encodeURIComponent(svg),
-        new kakao.maps.Size(22, 29), { offset: new kakao.maps.Point(11, 29) })
+        new kakao.maps.Size(__pw, __ph), { offset: new kakao.maps.Point(Math.round(__pw / 2), __ph) })
     });
+    // 줌 바뀌면 거점 핀처럼 자동 리스케일 (setBounds로 줌아웃돼도 핑만 크게 남던 문제 방지)
+    marker.__markerMeta = { type: 'pin', baseW: 22, baseH: 29, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="29" viewBox="0 0 26 34"><path d="M13 0 C6 0 0 6 0 13 C0 22 13 34 13 34 C13 34 26 22 26 13 C26 6 20 0 13 0 Z" fill="${logColor}" stroke="white" stroke-width="2"/><circle cx="13" cy="13" r="5" fill="white"/></svg>` };
     const t = new Date(p.at || log.startedAt || Date.now()).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
     const iw = new kakao.maps.InfoWindow({ removable: true, zIndex: 10000,
       content: `<div style="padding:7px 9px;font-size:12px;max-width:200px;">
