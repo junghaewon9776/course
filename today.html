@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719m"></script>
+<script src="common.js?v=20260719n"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3170,7 +3170,8 @@ async function updateLiveNotification(num, name, dist, doneCount, total, done) {
   const Ops = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.OpsNotify;
   if (Ops && Ops.update) {
     __liveNotifLast = { key: key, at: now };
-    try { await Ops.update({ title: title, text: text, big: big }); } catch (e) { console.warn('OpsNotify 오류', e); }
+    // media:true = 유튜브뮤직식 미디어 알림(상태바에 제목). 부작용 있으면 여기 false 로만 바꾸면 됨(재빌드 X)
+    try { await Ops.update({ title: title, text: text, big: big, media: !done }); } catch (e) { console.warn('OpsNotify 오류', e); }
     return;
   }
   // ② 폴백(OpsNotify 없는 구버전 앱): 별도 알림
@@ -3184,8 +3185,10 @@ async function updateLiveNotification(num, name, dist, doneCount, total, done) {
   } catch (e) { console.warn('실시간 알림 오류', e); }
 }
 async function clearLiveNotification() {
-  const P = __getLN();
   __liveNotifLast = { key: null, at: 0 };
+  const Ops = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.OpsNotify;
+  if (Ops && Ops.stop) { try { await Ops.stop(); } catch (e) {} }   // 미디어 세션 정리
+  const P = __getLN();
   if (!P) return;
   try { await P.cancel({ notifications: [{ id: 4400 }] }); } catch (e) {}
 }
