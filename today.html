@@ -3153,8 +3153,8 @@ async function updateLiveNotification(num, name, dist, doneCount, total, done) {
   const crew = (currentSession && currentSession.crew) || {};
   const crewLine = (crew.driver || crew.assist)
     ? `🚗 운전 ${crew.driver || '-'}${crew.assist ? ' · 보조 ' + crew.assist : ''}` : '';
-  // 접힌 한 줄 = 거점 이름만 (번호·거리는 펼치면 나옴 · 안드로이드 알림은 마퀴 미지원이라 짧게)
-  const title = done ? '🚐 모든 거점 완료 🎉' : `🚐 ${name}`;
+  // 접힌 한 줄 = 번호 + 거점 이름 (거리는 펼치면 나옴 · 안드로이드 알림은 마퀴 미지원이라 짧게)
+  const title = done ? '🚐 모든 거점 완료 🎉' : `🚐 ${num}번 · ${name}`;
   const text = '';
   // 펼치면 자세히
   const big = done
