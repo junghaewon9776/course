@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719j"></script>
+<script src="common.js?v=20260719k"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -3153,9 +3153,9 @@ async function updateLiveNotification(num, name, dist, doneCount, total, done) {
   const crew = (currentSession && currentSession.crew) || {};
   const crewLine = (crew.driver || crew.assist)
     ? `🚗 운전 ${crew.driver || '-'}${crew.assist ? ' · 보조 ' + crew.assist : ''}` : '';
-  // 접힌 한 줄(안드로이드 알림은 마퀴 미지원 → 길면 …로 잘림)
-  const title = done ? '🚐 방역코스 · 모든 거점 완료 🎉' : `🚐 ${num}번 · ${name} · ${distTxt}`;
-  const text = done ? `${total} / ${total} 완료` : `${doneCount} / ${total} 거점 완료`;
+  // 접힌 한 줄 = 거점 이름만 (번호·거리는 펼치면 나옴 · 안드로이드 알림은 마퀴 미지원이라 짧게)
+  const title = done ? '🚐 모든 거점 완료 🎉' : `🚐 ${name}`;
+  const text = '';
   // 펼치면 자세히
   const big = done
     ? `🎉 모든 거점 완료!\n✅ ${total} / ${total} 거점 다 돌았어요${crewLine ? '\n' + crewLine : ''}`
