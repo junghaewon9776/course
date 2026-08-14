@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719f"></script>
+<script src="common.js?v=20260719g"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -2210,6 +2210,7 @@ function stopGPS() {
   }
   watchId = null;
   releaseWakeLock();
+  clearLiveNotification();   // 📲 상태바 실시간 알림 내리기
   const btn = document.getElementById('gpsToggle');
   if (btn) btn.textContent = '📍 GPS 시작';
   document.getElementById('gpsStatus').textContent = 'GPS 중지됨';
@@ -3074,11 +3075,13 @@ function updateNextInfo() {
   const doneCount = anchors.reduce((s, a) => s + (done.has(a.id) ? 1 : 0), 0);
   if (idx < 0) {
     el.innerHTML = `<div style="background:#27ae60;color:#fff;border-radius:10px;padding:11px 12px;font-size:16px;font-weight:800;text-align:center;">🎉 모든 거점 완료! (${total}곳)</div>`;
+    updateLiveNotification(0, '모든 거점 완료 🎉', 0, total, total, true);
     return;
   }
   const next = anchors[idx];
   const num = idx + 1;
   const dist = distance(currentPos.lat, currentPos.lng, next.lat, next.lng);
+  updateLiveNotification(num, next.name, dist, doneCount, total, false);   // 📲 상태바 실시간 알림 갱신
   const nm = String(next.name || '').replace(/</g, '&lt;');
   // 이름 길면 노래 제목처럼 좌우로 흐르게 (짧으면 그대로)
   const longName = (next.name || '').length > 9;
@@ -3093,6 +3096,44 @@ function updateNextInfo() {
 }
 function formatDist(m) {
   return m < 1000 ? `${Math.round(m)}m` : `${(m/1000).toFixed(2)}km`;
+}
+
+// ───────── 📲 상태바 실시간 알림 (유튜브뮤직처럼 '방역코스 · 51번 신덕동 경로당') ─────────
+let __liveNotifLast = { key: null, at: 0 };
+let __liveNotifChannelReady = false, __liveNotifPermAsked = false;
+function __getLN() { return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.LocalNotifications) || null; }
+async function updateLiveNotification(num, name, dist, doneCount, total, done) {
+  const P = __getLN();
+  if (!P) return;   // 앱이 아니면(웹) 스킵
+  const key = done ? 'done' : (num + '|' + name);
+  const now = Date.now();
+  // 같은 거점이면 12초에 한 번만 갱신(거리 표시용). 거점 바뀌면 즉시.
+  if (__liveNotifLast.key === key && now - __liveNotifLast.at < 12000) return;
+  __liveNotifLast = { key: key, at: now };
+  try {
+    if (!__liveNotifChannelReady) {
+      try { await P.createChannel({ id: 'ops_live', name: '운행 안내', description: '운행 중 다음 거점 표시', importance: 2, visibility: 1, vibration: false }); } catch (e) {}
+      __liveNotifChannelReady = true;
+    }
+    if (!__liveNotifPermAsked) { __liveNotifPermAsked = true; try { await P.requestPermissions(); } catch (e) {} }
+    const distTxt = formatDist(dist);
+    const body = done ? `모든 거점 완료 🎉 (${total}곳)` : `${num}번 · ${name} · ${distTxt}`;
+    const large = done
+      ? `🎉 모든 거점 완료!\n✅ ${total} / ${total} 거점 다 돌았어요`
+      : `🎯 ${num}번 · ${name}\n📍 ${distTxt} 앞\n✅ ${doneCount} / ${total} 거점 완료`;
+    await P.schedule({ notifications: [{
+      id: 4400, channelId: 'ops_live',
+      title: '🚐 방역코스 운행 중',
+      body: body, largeBody: large, summaryText: `${doneCount}/${total} 완료`,
+      ongoing: !done, autoCancel: false, smallIcon: 'ic_stat_notify'
+    }] });
+  } catch (e) { console.warn('실시간 알림 오류', e); }
+}
+async function clearLiveNotification() {
+  const P = __getLN();
+  __liveNotifLast = { key: null, at: 0 };
+  if (!P) return;
+  try { await P.cancel({ notifications: [{ id: 4400 }] }); } catch (e) {}
 }
 
 // 🔧 날아간 운행로그 복구 — 이 기기 localStorage에 남은 "완료된" 세션을 /logs로 다시 저장
