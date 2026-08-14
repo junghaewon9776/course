@@ -2324,7 +2324,7 @@ function __shortAddr(addr) {
 // 📢 안내 핑 마커 이미지 — 지정 색 원 + 표시 글자(없으면 📢)
 function noticeMarkerImage(color, label, scale) {
   const s = scale || 1.0;
-  const sz = Math.round(30 * s);
+  const sz = Math.round(22 * s);   // 안내 핑(확성기) 마커 크기 — 작게 (예전 30 → 22)
   const txt = (label || '').slice(0, 3);
   const inner = txt
     ? `<text x="15" y="19" font-family="Arial,AppleGothic,sans-serif" font-size="${txt.length > 2 ? 8 : 11}" font-weight="bold" fill="#fff" text-anchor="middle">${txt.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text>`
