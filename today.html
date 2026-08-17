@@ -129,7 +129,7 @@
   // 지도·운영에 먼저 필요한 것만 오면 바로 화면 → 나머지(logs 등)는 도착하는 대로
   window.__SYNC_CORE = ['mapDefault','events','anchors','complaints','requests','noSprayZones','vehicles','teams','members','visibility','accessGate','eventConfig','schedules'];
 </script>
-<script src="common.js?v=20260719p"></script>
+<script src="common.js?v=20260719q"></script>
 <!-- 화면 에러 표시 (상단 빨간 띠) -->
 <style>#errBar{position:fixed;top:0;left:0;right:0;background:#c0392b;color:#fff;padding:8px;font-size:12px;z-index:99998;max-height:40vh;overflow:auto;white-space:pre-wrap;display:none;font-family:monospace;}
 @keyframes nspFlash{0%,100%{opacity:1;}50%{opacity:0.3;}}
@@ -1622,22 +1622,20 @@ function renderPins() {
   pinMarkers.forEach(m => { try { m.setMap(null); } catch(e){} });
   pinMarkers = [];
   const pins = (currentSession?.pins || []);
-  const scale = getMarkerScale(map.getLevel());
   pins.forEach((p, i) => {
     const pos = new kakao.maps.LatLng(p.lat, p.lng);
-    const baseW = 26, baseH = 34;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${baseW}" height="${baseH}" viewBox="0 0 26 34">
+    // 📍 핑은 줌 바꿔도 안 커지게 작은 고정 크기 (__markerMeta 안 붙여서 줌 스케일 대상 제외)
+    const w = 18, h = 24;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 26 34">
       <path d="M13 0 C6 0 0 6 0 13 C0 22 13 34 13 34 C13 34 26 22 26 13 C26 6 20 0 13 0 Z" fill="#16a085" stroke="white" stroke-width="2"/>
       <circle cx="13" cy="13" r="5" fill="white"/>
     </svg>`;
-    const w = Math.round(baseW * scale), h = Math.round(baseH * scale);
     const img = new kakao.maps.MarkerImage(
-      'data:image/svg+xml;utf8,' + encodeURIComponent(svg.replace(/width="\d+"/, `width="${w}"`).replace(/height="\d+"/, `height="${h}"`)),
+      'data:image/svg+xml;utf8,' + encodeURIComponent(svg),
       new kakao.maps.Size(w, h),
       { offset: new kakao.maps.Point(Math.round(w/2), h) }
     );
     const marker = new kakao.maps.Marker({ position: pos, map, image: img, zIndex: 20, draggable: true });
-    marker.__markerMeta = { type:'pin', svg, baseW, baseH };
     // 드래그로 핑 위치 이동
     kakao.maps.event.addListener(marker, 'dragend', () => {
       const np = marker.getPosition();
