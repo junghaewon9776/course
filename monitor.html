@@ -199,7 +199,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513s"></script>
-<script src="common.js?v=20260719t"></script>
+<script src="common.js?v=20260719u"></script>
 <script>
 let map, logMarkers = [], logTrack, selectedLogIdx = null;
 let __groupByCourse = false;        // 📁 코스로 묶어서 보기
@@ -1357,6 +1357,12 @@ function renderLive(live) {
   if (listEl) {
     listEl.innerHTML = items.map(it => {
       const elapsed = Math.round((now - (it.sess.startedAt || now)) / 60000);
+      // ⚠️ 끊김 감지: 마지막 위치 갱신이 90초 이상 없으면 = 앱이 멈춘/꺼진 것으로 표시
+      const __lu = it.sess.lastUpdate || it.sess.startedAt || 0;
+      const staleMs = now - __lu;
+      const isStale = staleMs > 90 * 1000;
+      const staleMin = Math.max(1, Math.round(staleMs / 60000));
+      const staleBadge = isStale ? `<div style="background:#e74c3c;color:#fff;font-size:11px;font-weight:800;padding:3px 8px;border-radius:6px;margin-top:3px;display:inline-block;">⚠️ 끊김 · ${staleMin}분째 위치 안 옴</div>` : '';
       const progress = (it.sess.totalCount > 0)
         ? `${it.sess.completedCount}/${it.sess.totalCount}`
         : '-';
@@ -1390,13 +1396,14 @@ function renderLive(live) {
         ? `<div style="background:${it.color};color:#fff;padding:3px 7px;border-radius:6px;font-weight:800;font-size:12px;flex:none;text-align:center;line-height:1.15;">${escapeHtml(hochaName)}</div>`
         : `<div style="background:${it.color};color:#fff;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex:none;">${(it.driver||'?').slice(0,1)}</div>`;
       return `
-        <div class="live-item" style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid #eee;${isFollowing ? 'background:#e8f8f5;' : ''}">
+        <div class="live-item" style="display:flex;align-items:center;gap:7px;padding:7px 8px;border-bottom:1px solid #eee;${isStale ? 'background:#fdecea;' : (isFollowing ? 'background:#e8f8f5;' : '')}">
           <div onclick="focusLiveMarker('${safeKey}')" style="cursor:pointer;display:flex;align-items:center;gap:7px;flex:1;min-width:0;">
             ${leftBadge}
             <div style="flex:1;min-width:0;line-height:1.45;">
               <div class="name" style="font-weight:700;color:#2c3e50;font-size:13px;">${(it.event && it.course) ? escapeHtml(it.event.name) + ' · ' + escapeHtml(it.course.name) + (it.course.detail ? ' <span style="font-weight:400;color:#666;font-size:11px;">(' + escapeHtml(it.course.detail) + ')</span>' : '') : ''}${it.team ? ' · ' + escapeHtml(it.team.name) : ''}</div>
               <div style="font-size:11px;color:#34495e;">운전 ${it.sess.crew?.driverPhone ? '<a href="tel:' + escapeHtml(it.sess.crew.driverPhone) + '" style="color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞' + escapeHtml(it.driver) + '</a>' : escapeHtml(it.driver)}${it.sess.crew?.assist ? ' / 보조 ' + (it.sess.crew?.assistPhone ? '<a href="tel:' + escapeHtml(it.sess.crew.assistPhone) + '" style="color:#2980b9;text-decoration:none;" onclick="event.stopPropagation();">📞' + escapeHtml(it.sess.crew.assist) + '</a>' : escapeHtml(it.sess.crew.assist)) : ''}${veh ? ' · 🚐 ' + escapeHtml(veh) : ''}</div>
               <div class="sub" style="font-size:11px;color:#7f8c8d;">진행 ${progress} · ${elapsed}분${nextLabel}${nextEta}${remainEta}${it.sess.device ? ' · 로컬: ' + escapeHtml(it.sess.device) : ''}</div>
+              ${staleBadge}
             </div>
           </div>
           <div class="live-btns" style="display:flex;flex-direction:column;gap:3px;flex:none;">
