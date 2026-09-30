@@ -95,15 +95,22 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260719y"></script>
+<script src="common.js?v=20260719z"></script>
 <script>
 let __fuelRuns = [];   // 다운로드용 캐시
 
+let __fuelCloudT = null;
 function loadFuelCfg() {
   let c = {};
   try { c = JSON.parse(localStorage.getItem('__fuelCfg') || '{}'); } catch (e) {}
+  // ☁ 클라우드(Firebase)에 저장된 게 더 최신이면 그걸 사용 → 캐시 지워도/다른 기기여도 유지
+  try {
+    const fc = (typeof _cache !== 'undefined' && _cache && _cache.fuelConfig) || null;
+    if (fc && (Number(fc.__t) || 0) >= (Number(c.__t) || 0)) c = fc;
+  } catch (e) {}
   const yr = new Date().getFullYear();
   return {
+    __t: c.__t || 0,
     from: c.from || (yr + '-06-01'),
     to: c.to || (yr + '-10-31'),
     budget: c.budget || 9600000,
@@ -113,7 +120,14 @@ function loadFuelCfg() {
     amts: c.amts || {}        // {logKey:{d,g}}  운행별 금액(수정분)
   };
 }
-function saveFuelCfg(c) { try { localStorage.setItem('__fuelCfg', JSON.stringify(c)); } catch (e) {} }
+function saveFuelCfg(c) {
+  c.__t = Date.now();
+  try { localStorage.setItem('__fuelCfg', JSON.stringify(c)); } catch (e) {}   // 기기 저장(즉시)
+  clearTimeout(__fuelCloudT);   // 클라우드 저장(1.5초 모아서) → 초기화·기기변경에도 유지
+  __fuelCloudT = setTimeout(function () {
+    try { if (typeof fbDb !== 'undefined') fbDb.ref('/fuelConfig').set(c); } catch (e) {}
+  }, 1500);
+}
 function saveCfgFromUI() {
   const c = loadFuelCfg();
   c.from = document.getElementById('fFrom').value || c.from;
