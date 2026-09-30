@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>⛽ 기름값 정산</title>
+  <link rel="stylesheet" href="style.css?v=20260611b">
+  <style>
+    .fuel-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+    .fuel-tbl th, .fuel-tbl td { border:1px solid #e0e0e0; padding:6px 8px; text-align:right; white-space:nowrap; }
+    .fuel-tbl th { background:#f3eefa; text-align:center; position:sticky; top:0; }
+    .fuel-tbl td.l { text-align:left; }
+    .fuel-wrap { overflow-x:auto; max-height:60vh; overflow-y:auto; }
+    .sumbox { display:flex; flex-wrap:wrap; gap:10px; }
+    .sumcard { flex:1; min-width:130px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; }
+    .sumcard .lab { font-size:11px; color:#888; }
+    .sumcard .val { font-size:18px; font-weight:800; color:#2c3e50; }
+    .price-row { display:flex; align-items:center; gap:8px; margin:5px 0; flex-wrap:wrap; }
+    .price-row input { width:100px; }
+    @media print { header, nav, .no-print { display:none !important; } .fuel-wrap { max-height:none; overflow:visible; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>⛽ 기름값 정산 <span style="font-size:13px;font-weight:400;color:#e74c3c;">(예상·제출용 · 관리자)</span></h1>
+  <nav>
+    <a href="index.html">홈</a>
+    <a href="admin.html">관리</a>
+    <a href="members.html">인원</a>
+    <a href="today.html">오늘운영</a>
+    <a href="monitor.html">모니터링</a>
+    <a href="monitor.html?logs=1">운행기록</a>
+    <a href="stats.html">통계</a>
+    <a href="fuel.html" class="active">기름정산</a>
+    <a href="#" onclick="adminLogout();return false;">로그아웃</a>
+  </nav>
+</header>
+
+<div class="container">
+  <!-- 설정 -->
+  <div class="card no-print">
+    <h2>⚙️ 설정</h2>
+    <div class="price-row">
+      <label style="margin:0;">기간</label>
+      <input type="date" id="fFrom" onchange="saveCfgFromUI();renderFuel()">
+      <span>~</span>
+      <input type="date" id="fTo" onchange="saveCfgFromUI();renderFuel()">
+    </div>
+    <div class="price-row">
+      <label style="margin:0;">연비 (km당 L)</label>
+      <input type="number" id="fKmpl" step="0.1" placeholder="예: 8" onchange="saveCfgFromUI();renderFuel()">
+      <span style="font-size:12px;color:#888;">← 1L로 몇 km 가는지 (예: 8이면 8km/L)</span>
+    </div>
+    <div class="price-row">
+      <label style="margin:0;">예산 (원)</label>
+      <input type="number" id="fBudget" step="10000" placeholder="9600000" onchange="saveCfgFromUI();renderFuel()">
+      <span style="font-size:12px;color:#888;">6~10월 예산</span>
+    </div>
+    <div style="margin-top:10px;">
+      <div style="font-weight:700;color:#2c3e50;margin-bottom:4px;">📅 월별 평균 단가 (원/L) — 오피넷 월평균 참고해서 입력, +α는 여기서 조정</div>
+      <div id="priceTable"></div>
+    </div>
+  </div>
+
+  <!-- 요약 -->
+  <div class="card">
+    <h2>📊 요약</h2>
+    <div class="sumbox" id="fuelSummary"></div>
+    <div style="margin-top:10px;" class="no-print">
+      <button class="small" style="background:#2e7d32;color:#fff;" onclick="downloadCsv()">📥 엑셀(CSV) 다운로드</button>
+      <button class="small" style="background:#34495e;color:#fff;" onclick="window.print()">🖨 인쇄</button>
+    </div>
+  </div>
+
+  <!-- 표 -->
+  <div class="card">
+    <h2>🚐 운행별 예상 기름값 <span id="fuelCount" class="muted"></span></h2>
+    <div class="fuel-wrap">
+      <table class="fuel-tbl" id="fuelTable"></table>
+    </div>
+    <p class="muted" style="font-size:11px;margin-top:6px;">※ 리터 = 거리 ÷ 연비. 금액 = 리터 × 그 달 단가. <b>예상치</b>라 엑셀로 받아서 최종 조정·제출하세요.</p>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js?v=20260513t"></script>
+<script src="common.js?v=20260719w"></script>
+<script>
+let __fuelRows = [];   // 다운로드용 캐시
+
+function loadFuelCfg() {
+  let c = {};
+  try { c = JSON.parse(localStorage.getItem('__fuelCfg') || '{}'); } catch (e) {}
+  const yr = new Date().getFullYear();
+  return {
+    from: c.from || (yr + '-06-01'),
+    to: c.to || (yr + '-10-31'),
+    kmpl: c.kmpl || 8,
+    budget: c.budget || 9600000,
+    prices: c.prices || {}   // {'2026-6': {d: 1550, g: 1650}}
+  };
+}
+function saveFuelCfg(c) { try { localStorage.setItem('__fuelCfg', JSON.stringify(c)); } catch (e) {} }
+function saveCfgFromUI() {
+  const c = loadFuelCfg();
+  c.from = document.getElementById('fFrom').value || c.from;
+  c.to = document.getElementById('fTo').value || c.to;
+  c.kmpl = parseFloat(document.getElementById('fKmpl').value) || c.kmpl;
+  c.budget = parseInt(document.getElementById('fBudget').value, 10) || c.budget;
+  saveFuelCfg(c);
+}
+function setPrice(ym, kind, val) {
+  const c = loadFuelCfg();
+  if (!c.prices[ym]) c.prices[ym] = { d: 0, g: 0 };
+  c.prices[ym][kind] = parseFloat(val) || 0;
+  saveFuelCfg(c);
+  renderFuel();
+}
+function won(n) { return Math.round(n).toLocaleString('ko-KR') + '원'; }
+function trackKm(track) {
+  if (!Array.isArray(track) || track.length < 2) return 0;
+  let d = 0;
+  for (let i = 1; i < track.length; i++) d += distance(track[i-1][0], track[i-1][1], track[i][0], track[i][1]);
+  return d / 1000;
+}
+// from~to 사이의 달 목록 ('2026-6' 형태)
+function monthsBetween(from, to) {
+  const out = [];
+  const a = new Date(from + 'T00:00:00'), b = new Date(to + 'T00:00:00');
+  if (isNaN(a) || isNaN(b)) return out;
+  let y = a.getFullYear(), m = a.getMonth();
+  while (y < b.getFullYear() || (y === b.getFullYear() && m <= b.getMonth())) {
+    out.push(y + '-' + (m + 1));
+    m++; if (m > 11) { m = 0; y++; }
+  }
+  return out;
+}
+
+function renderPriceTable(cfg) {
+  const el = document.getElementById('priceTable');
+  const months = monthsBetween(cfg.from, cfg.to);
+  if (!months.length) { el.innerHTML = '<span style="color:#aaa;">기간을 정하세요</span>'; return; }
+  el.innerHTML = months.map(ym => {
+    const p = cfg.prices[ym] || { d: '', g: '' };
+    const [y, m] = ym.split('-');
+    return `<div class="price-row" style="border-bottom:1px dashed #eee;padding-bottom:5px;">
+      <span style="width:64px;font-weight:700;">${y}.${m}월</span>
+      <label style="margin:0;font-size:12px;">경유</label>
+      <input type="number" step="1" value="${p.d || ''}" placeholder="1550" oninput="setPrice('${ym}','d',this.value)">
+      <label style="margin:0;font-size:12px;">휘발유</label>
+      <input type="number" step="1" value="${p.g || ''}" placeholder="1650" oninput="setPrice('${ym}','g',this.value)">
+    </div>`;
+  }).join('');
+}
+
+function renderFuel() {
+  const cfg = loadFuelCfg();
+  // 입력칸 값 반영
+  document.getElementById('fFrom').value = cfg.from;
+  document.getElementById('fTo').value = cfg.to;
+  document.getElementById('fKmpl').value = cfg.kmpl;
+  document.getElementById('fBudget').value = cfg.budget;
+  renderPriceTable(cfg);
+
+  const data = loadData();
+  const fromMs = new Date(cfg.from + 'T00:00:00').getTime();
+  const toMs = new Date(cfg.to + 'T23:59:59').getTime();
+  const runs = (data.logs || [])
+    .filter(l => (typeof isRunLog === 'function' ? isRunLog(l) : (l && l.startedAt)) && !l.hidden && l.finishedAt)
+    .filter(l => { const t = l.startedAt || l.finishedAt || 0; return t >= fromMs && t <= toMs; })
+    .sort((a, b) => (a.startedAt || a.finishedAt || 0) - (b.startedAt || b.finishedAt || 0));
+
+  let totKm = 0, totL = 0, totD = 0, totG = 0;
+  const rows = runs.map(l => {
+    const t = l.startedAt || l.finishedAt || 0;
+    const d = new Date(t);
+    const ym = d.getFullYear() + '-' + (d.getMonth() + 1);
+    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
+    const km = trackKm(l.track);
+    const liters = cfg.kmpl > 0 ? km / cfg.kmpl : 0;
+    const p = cfg.prices[ym] || { d: 0, g: 0 };
+    const dAmt = liters * (p.d || 0), gAmt = liters * (p.g || 0);
+    totKm += km; totL += liters; totD += dAmt; totG += gAmt;
+    const ev = (typeof getEvent === 'function' && getEvent(data, l.eventId)) || {};
+    const co = (typeof getCourse === 'function' && getCourse(data, l.courseId)) || {};
+    const driver = (l.crew && l.crew.driver) || '';
+    return { dateStr, ym, ev: ev.name || '', co: co.name || '', driver, km, liters, dPrice: p.d || 0, dAmt, gPrice: p.g || 0, gAmt };
+  });
+  __fuelRows = rows;
+
+  document.getElementById('fuelCount').textContent = `(${rows.length}건)`;
+  // 표
+  const tbl = document.getElementById('fuelTable');
+  tbl.innerHTML = `<thead><tr>
+      <th>날짜</th><th>행사·코스</th><th>운전</th><th>거리(km)</th><th>리터(L)</th>
+      <th>경유단가</th><th>경유금액</th><th>휘발유단가</th><th>휘발유금액</th>
+    </tr></thead><tbody>` +
+    (rows.length ? rows.map(r => `<tr>
+      <td>${r.dateStr}</td>
+      <td class="l">${escFuel(r.ev)}${r.co ? ' · ' + escFuel(r.co) : ''}</td>
+      <td class="l">${escFuel(r.driver)}</td>
+      <td>${r.km.toFixed(1)}</td>
+      <td>${r.liters.toFixed(1)}</td>
+      <td>${r.dPrice ? r.dPrice.toLocaleString() : '-'}</td>
+      <td>${won(r.dAmt)}</td>
+      <td>${r.gPrice ? r.gPrice.toLocaleString() : '-'}</td>
+      <td>${won(r.gAmt)}</td>
+    </tr>`).join('') : '<tr><td colspan="9" style="text-align:center;color:#aaa;padding:20px;">이 기간에 운행기록이 없습니다</td></tr>') +
+    `</tbody><tfoot><tr style="font-weight:800;background:#faf7ff;">
+      <td colspan="3">합계</td><td>${totKm.toFixed(1)}</td><td>${totL.toFixed(1)}</td>
+      <td>-</td><td>${won(totD)}</td><td>-</td><td>${won(totG)}</td>
+    </tr></tfoot>`;
+
+  // 요약
+  const budget = cfg.budget || 0;
+  const needD = totL > 0 ? budget / totL : 0;
+  const needG = needD;
+  const diffD = totD - budget, diffG = totG - budget;
+  const diffTxt = (v) => v === 0 ? '딱 맞음' : (v > 0 ? `예산보다 <b style="color:#e74c3c;">+${won(v)}</b> 초과` : `예산보다 <b style="color:#2980b9;">${won(-v)}</b> 남음`);
+  document.getElementById('fuelSummary').innerHTML = `
+    <div class="sumcard"><div class="lab">총 거리</div><div class="val">${totKm.toFixed(0)} km</div></div>
+    <div class="sumcard"><div class="lab">총 주유량(추정)</div><div class="val">${totL.toFixed(0)} L</div></div>
+    <div class="sumcard" style="border-color:#f39c12;"><div class="lab">경유 예상총액</div><div class="val">${won(totD)}</div><div style="font-size:11px;margin-top:2px;">${diffTxt(diffD)}</div></div>
+    <div class="sumcard" style="border-color:#27ae60;"><div class="lab">휘발유 예상총액</div><div class="val">${won(totG)}</div><div style="font-size:11px;margin-top:2px;">${diffTxt(diffG)}</div></div>
+    <div class="sumcard" style="border-color:#8e44ad;"><div class="lab">예산</div><div class="val">${won(budget)}</div><div style="font-size:11px;margin-top:2px;color:#888;">예산 딱 맞추려면 평균 <b>${needD ? Math.round(needD).toLocaleString() : '-'}원/L</b></div></div>
+  `;
+}
+function escFuel(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+// 📥 엑셀에서 열리는 CSV 다운로드 (UTF-8 BOM → 한글 안 깨짐)
+function downloadCsv() {
+  const cfg = loadFuelCfg();
+  const head = ['날짜', '행사', '코스', '운전', '거리(km)', '리터(L)', '경유단가', '경유금액', '휘발유단가', '휘발유금액'];
+  const lines = [head.join(',')];
+  let totKm = 0, totL = 0, totD = 0, totG = 0;
+  __fuelRows.forEach(r => {
+    totKm += r.km; totL += r.liters; totD += r.dAmt; totG += r.gAmt;
+    lines.push([r.dateStr, csvSafe(r.ev), csvSafe(r.co), csvSafe(r.driver), r.km.toFixed(1), r.liters.toFixed(1), Math.round(r.dPrice), Math.round(r.dAmt), Math.round(r.gPrice), Math.round(r.gAmt)].join(','));
+  });
+  lines.push(['합계', '', '', '', totKm.toFixed(1), totL.toFixed(1), '', Math.round(totD), '', Math.round(totG)].join(','));
+  lines.push([]);
+  lines.push(['예산', cfg.budget]);
+  const csv = '﻿' + lines.join('\r\n');
+  try {
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `기름값정산_${cfg.from}_${cfg.to}.csv`;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  } catch (e) { alert('다운로드 실패: ' + e.message); }
+}
+function csvSafe(s) { s = String(s || ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+
+// 관리자만 접근
+checkAdminAuth().then(ok => { if (ok) onDataReady(renderFuel); });
+</script>
+</body>
+</html>
