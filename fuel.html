@@ -9,17 +9,19 @@
   <title>⛽ 기름값 정산</title>
   <link rel="stylesheet" href="style.css?v=20260611b">
   <style>
-    .fuel-tbl { width:100%; border-collapse:collapse; font-size:13px; }
-    .fuel-tbl th, .fuel-tbl td { border:1px solid #e0e0e0; padding:6px 8px; text-align:right; white-space:nowrap; }
-    .fuel-tbl th { background:#f3eefa; text-align:center; position:sticky; top:0; }
+    .fuel-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+    .fuel-tbl th, .fuel-tbl td { border:1px solid #e0e0e0; padding:5px 6px; text-align:right; white-space:nowrap; }
+    .fuel-tbl th { background:#f3eefa; text-align:center; position:sticky; top:0; z-index:1; }
     .fuel-tbl td.l { text-align:left; }
-    .fuel-wrap { overflow-x:auto; max-height:60vh; overflow-y:auto; }
+    .fuel-tbl input { width:82px; text-align:right; padding:3px 4px; }
+    .fuel-wrap { overflow:auto; max-height:62vh; }
     .sumbox { display:flex; flex-wrap:wrap; gap:10px; }
-    .sumcard { flex:1; min-width:130px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; }
+    .sumcard { flex:1; min-width:140px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; }
     .sumcard .lab { font-size:11px; color:#888; }
     .sumcard .val { font-size:18px; font-weight:800; color:#2c3e50; }
     .price-row { display:flex; align-items:center; gap:8px; margin:5px 0; flex-wrap:wrap; }
     .price-row input { width:110px; }
+    .grp-d { background:#fff8ec; } .grp-g { background:#eefaf0; }
     @media print { header, nav, .no-print { display:none !important; } .fuel-wrap { max-height:none; overflow:visible; } }
   </style>
 </head>
@@ -51,17 +53,21 @@
     </div>
     <div class="price-row">
       <label style="margin:0;">예산 (원)</label>
-      <input type="number" id="fBudget" step="10000" placeholder="9600000" onchange="saveCfgFromUI();renderFuel()">
-      <span style="font-size:12px;color:#888;">6~10월 예산 (참고용 — 엑셀에서 금액 맞추기)</span>
+      <input type="number" id="fBudget" step="10000" placeholder="9600000" onchange="saveCfgFromUI();renderRunOnly()">
+    </div>
+    <div class="price-row">
+      <label style="margin:0;">운행당 기본금액</label>
+      경유 <input type="number" id="fDefD" step="1000" placeholder="200000" onchange="saveCfgFromUI();renderRunOnly()" style="width:100px;">
+      휘발유 <input type="number" id="fDefG" step="1000" placeholder="17000" onchange="saveCfgFromUI();renderRunOnly()" style="width:100px;">
+      <button class="small gray" onclick="resetAmts()">↺ 전부 기본금액으로</button>
     </div>
     <div style="margin-top:10px;">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
-        <div style="font-weight:700;color:#2c3e50;">📅 월별 평균 단가 (원/L)</div>
-        <button class="small" style="background:#2980b9;color:#fff;" onclick="fillDefaultPrices()">🔄 기본 시세 불러오기</button>
-        <a href="https://www.opinet.co.kr/user/dopospdrg/dopOsPdrgSelect.do" target="_blank" style="font-size:12px;color:#2980b9;">오피넷 시세 보기 ↗</a>
+        <div style="font-weight:700;color:#2c3e50;">📅 월별 단가 (원/L) — 오피넷 평균 + α</div>
+        <button class="small" style="background:#2980b9;color:#fff;" onclick="fillDefaultPrices()">🔄 기본 시세 채우기</button>
+        <a href="https://www.opinet.co.kr/user/dopospdrg/dopOsPdrgSelect.do" target="_blank" style="font-size:12px;color:#2980b9;">오피넷 시세 ↗</a>
       </div>
       <div id="priceTable"></div>
-      <p class="muted" style="font-size:11px;margin-top:4px;">※ "기본 시세 불러오기"는 <b>대략값</b>을 채워줘요. 정확한 월평균은 오피넷에서 확인해 조정하고, 여기에 <b>+α</b> 해서 맞추세요.</p>
     </div>
   </div>
 
@@ -70,18 +76,18 @@
     <h2>📊 요약</h2>
     <div class="sumbox" id="fuelSummary"></div>
     <div style="margin-top:10px;" class="no-print">
-      <button class="small" style="background:#2e7d32;color:#fff;" onclick="downloadCsv()">📥 엑셀(CSV) 다운로드</button>
+      <button class="small" style="background:#2e7d32;color:#fff;" onclick="downloadCsv()">📥 엑셀(CSV) 다운로드 (제출양식)</button>
       <button class="small" style="background:#34495e;color:#fff;" onclick="window.print()">🖨 인쇄</button>
     </div>
   </div>
 
   <!-- 표 -->
   <div class="card">
-    <h2>🚐 운행 목록 · 날짜별 단가 <span id="fuelCount" class="muted"></span></h2>
+    <h2>🚐 운행별 기름값 <span id="fuelCount" class="muted"></span></h2>
     <div class="fuel-wrap">
       <table class="fuel-tbl" id="fuelTable"></table>
     </div>
-    <p class="muted" style="font-size:11px;margin-top:6px;">※ 리터·금액은 <b>엑셀로 받아서</b> 직접 채우세요 (경유=기름통 / 휘발유=기계). 거리(km)는 참고용.</p>
+    <p class="muted" style="font-size:11px;margin-top:6px;">※ <b>금액 넣으면 리터 자동</b> / <b>리터 넣으면 금액 자동</b> (그 달 단가 기준). 경유=기름통, 휘발유=기계.</p>
   </div>
 </div>
 
@@ -89,9 +95,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js?v=20260513t"></script>
-<script src="common.js?v=20260719x"></script>
+<script src="common.js?v=20260719y"></script>
 <script>
-let __fuelRows = [];
+let __fuelRuns = [];   // 다운로드용 캐시
 
 function loadFuelCfg() {
   let c = {};
@@ -101,7 +107,10 @@ function loadFuelCfg() {
     from: c.from || (yr + '-06-01'),
     to: c.to || (yr + '-10-31'),
     budget: c.budget || 9600000,
-    prices: c.prices || {}   // {'2026-6': {d: 1600, g: 1700}}
+    defD: (c.defD != null ? c.defD : 200000),
+    defG: (c.defG != null ? c.defG : 17000),
+    prices: c.prices || {},   // {'2026-6':{d,g}}
+    amts: c.amts || {}        // {logKey:{d,g}}  운행별 금액(수정분)
   };
 }
 function saveFuelCfg(c) { try { localStorage.setItem('__fuelCfg', JSON.stringify(c)); } catch (e) {} }
@@ -110,6 +119,8 @@ function saveCfgFromUI() {
   c.from = document.getElementById('fFrom').value || c.from;
   c.to = document.getElementById('fTo').value || c.to;
   c.budget = parseInt(document.getElementById('fBudget').value, 10) || c.budget;
+  c.defD = parseInt(document.getElementById('fDefD').value, 10); if (isNaN(c.defD)) c.defD = 200000;
+  c.defG = parseInt(document.getElementById('fDefG').value, 10); if (isNaN(c.defG)) c.defG = 17000;
   saveFuelCfg(c);
 }
 function setPrice(ym, kind, val) {
@@ -117,39 +128,41 @@ function setPrice(ym, kind, val) {
   if (!c.prices[ym]) c.prices[ym] = { d: 0, g: 0 };
   c.prices[ym][kind] = parseFloat(val) || 0;
   saveFuelCfg(c);
-  renderRunOnly();   // ⚠️ 단가표는 다시 그리지 않음(포커스 유지) — 운행표·요약만 갱신
+  renderRunOnly();   // 단가표는 다시 안 그림(포커스 유지)
 }
-// 🔄 대략 기본 시세 채우기 (비어있는 달만) — 실제 월평균은 사용자가 조정
+// 운행별 금액/리터 양방향: field 'amt'(금액 직접) 또는 'lit'(리터 직접→금액 역산)
+function setRun(key, kind, field, val, price) {
+  const c = loadFuelCfg();
+  if (!c.amts[key]) c.amts[key] = {};
+  const num = parseFloat(val) || 0;
+  c.amts[key][kind] = (field === 'lit') ? Math.round(num * (price || 0)) : Math.round(num);
+  saveFuelCfg(c);
+  renderRunOnly();
+}
+function resetAmts() {
+  if (!confirm('모든 운행의 금액을 기본금액으로 되돌릴까요? (직접 수정한 값 사라짐)')) return;
+  const c = loadFuelCfg(); c.amts = {}; saveFuelCfg(c); renderRunOnly();
+}
 function fillDefaultPrices() {
   const c = loadFuelCfg();
-  const months = monthsBetween(c.from, c.to);
-  const DEF = { d: 1600, g: 1700 };   // 대략값 (원/L)
-  months.forEach(ym => {
+  monthsBetween(c.from, c.to).forEach(ym => {
     if (!c.prices[ym]) c.prices[ym] = { d: 0, g: 0 };
-    if (!c.prices[ym].d) c.prices[ym].d = DEF.d;
-    if (!c.prices[ym].g) c.prices[ym].g = DEF.g;
+    if (!c.prices[ym].d) c.prices[ym].d = 1600;
+    if (!c.prices[ym].g) c.prices[ym].g = 1700;
   });
-  saveFuelCfg(c);
-  renderFuel();
+  saveFuelCfg(c); renderFuel();
 }
-function won(n) { return Math.round(n).toLocaleString('ko-KR') + '원'; }
-function trackKm(track) {
-  if (!Array.isArray(track) || track.length < 2) return 0;
-  let d = 0;
-  for (let i = 1; i < track.length; i++) d += distance(track[i-1][0], track[i-1][1], track[i][0], track[i][1]);
-  return d / 1000;
-}
+function won(n) { return Math.round(n).toLocaleString('ko-KR'); }
+function trackKm(t) { if (!Array.isArray(t) || t.length < 2) return 0; let d = 0; for (let i = 1; i < t.length; i++) d += distance(t[i-1][0], t[i-1][1], t[i][0], t[i][1]); return d / 1000; }
+function courseNo(name) { const m = String(name || '').match(/(\d+)/); return m ? parseInt(m[1], 10) : 0; }
 function monthsBetween(from, to) {
-  const out = [];
-  const a = new Date(from + 'T00:00:00'), b = new Date(to + 'T00:00:00');
+  const out = []; const a = new Date(from + 'T00:00:00'), b = new Date(to + 'T00:00:00');
   if (isNaN(a) || isNaN(b)) return out;
   let y = a.getFullYear(), m = a.getMonth();
-  while (y < b.getFullYear() || (y === b.getFullYear() && m <= b.getMonth())) {
-    out.push(y + '-' + (m + 1));
-    m++; if (m > 11) { m = 0; y++; }
-  }
+  while (y < b.getFullYear() || (y === b.getFullYear() && m <= b.getMonth())) { out.push(y + '-' + (m + 1)); m++; if (m > 11) { m = 0; y++; } }
   return out;
 }
+function escF(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
 function renderPriceTable(cfg) {
   const el = document.getElementById('priceTable');
@@ -168,90 +181,119 @@ function renderPriceTable(cfg) {
   }).join('');
 }
 
+function collectRuns(cfg) {
+  const data = loadData();
+  const fromMs = new Date(cfg.from + 'T00:00:00').getTime();
+  const toMs = new Date(cfg.to + 'T23:59:59').getTime();
+  return (data.logs || [])
+    .filter(l => (typeof isRunLog === 'function' ? isRunLog(l) : (l && l.startedAt)) && !l.hidden && l.finishedAt)
+    .filter(l => { const t = l.startedAt || l.finishedAt || 0; return t >= fromMs && t <= toMs; })
+    .sort((a, b) => (a.startedAt || a.finishedAt || 0) - (b.startedAt || b.finishedAt || 0))
+    .map(l => {
+      const t = l.startedAt || l.finishedAt || 0; const d = new Date(t);
+      const ym = d.getFullYear() + '-' + (d.getMonth() + 1);
+      const co = (typeof getCourse === 'function' && getCourse(data, l.courseId)) || {};
+      const ev = (typeof getEvent === 'function' && getEvent(data, l.eventId)) || {};
+      const team = (typeof getTeam === 'function' && getTeam(data, l.teamId)) || {};
+      const p = cfg.prices[ym] || { d: 0, g: 0 };
+      const am = cfg.amts[l.key] || {};
+      const amtD = am.d != null ? am.d : cfg.defD;
+      const amtG = am.g != null ? am.g : cfg.defG;
+      return {
+        key: l.key || (t + ''), t, mon: d.getMonth() + 1,
+        dateStr: `${d.getMonth() + 1}/${d.getDate()}`,
+        ev: ev.name || '', co: co.name || '', cno: courseNo(co.name),
+        jo: team.name || '', driver: (l.crew && l.crew.driver) || '', assist: (l.crew && l.crew.assist) || '',
+        km: trackKm(l.track),
+        pD: p.d || 0, pG: p.g || 0,
+        amtD, amtG,
+        litD: p.d ? amtD / p.d : 0, litG: p.g ? amtG / p.g : 0
+      };
+    });
+}
+
 function renderFuel() {
   const cfg = loadFuelCfg();
   document.getElementById('fFrom').value = cfg.from;
   document.getElementById('fTo').value = cfg.to;
   document.getElementById('fBudget').value = cfg.budget;
+  document.getElementById('fDefD').value = cfg.defD;
+  document.getElementById('fDefG').value = cfg.defG;
   renderPriceTable(cfg);
   renderRunOnly(cfg);
 }
 function renderRunOnly(cfg) {
   cfg = cfg || loadFuelCfg();
-  const data = loadData();
-  const fromMs = new Date(cfg.from + 'T00:00:00').getTime();
-  const toMs = new Date(cfg.to + 'T23:59:59').getTime();
-  const runs = (data.logs || [])
-    .filter(l => (typeof isRunLog === 'function' ? isRunLog(l) : (l && l.startedAt)) && !l.hidden && l.finishedAt)
-    .filter(l => { const t = l.startedAt || l.finishedAt || 0; return t >= fromMs && t <= toMs; })
-    .sort((a, b) => (a.startedAt || a.finishedAt || 0) - (b.startedAt || b.finishedAt || 0));
+  const runs = collectRuns(cfg);
+  __fuelRuns = runs;
+  let totD = 0, totG = 0, totLD = 0, totLG = 0;
+  runs.forEach(r => { totD += r.amtD; totG += r.amtG; totLD += r.litD; totLG += r.litG; });
 
-  let totKm = 0;
-  const rows = runs.map(l => {
-    const t = l.startedAt || l.finishedAt || 0;
-    const d = new Date(t);
-    const ym = d.getFullYear() + '-' + (d.getMonth() + 1);
-    const dateStr = `${d.getMonth() + 1}/${d.getDate()}`;
-    const km = trackKm(l.track);
-    totKm += km;
-    const p = cfg.prices[ym] || { d: 0, g: 0 };
-    const ev = (typeof getEvent === 'function' && getEvent(data, l.eventId)) || {};
-    const co = (typeof getCourse === 'function' && getCourse(data, l.courseId)) || {};
-    const driver = (l.crew && l.crew.driver) || '';
-    return { dateStr, ym, ev: ev.name || '', co: co.name || '', driver, km, dPrice: p.d || 0, gPrice: p.g || 0 };
-  });
-  __fuelRows = rows;
-
-  document.getElementById('fuelCount').textContent = `(${rows.length}건)`;
+  document.getElementById('fuelCount').textContent = `(${runs.length}건)`;
   const tbl = document.getElementById('fuelTable');
   tbl.innerHTML = `<thead><tr>
-      <th>날짜</th><th>행사·코스</th><th>운전</th><th>거리(km)</th>
-      <th>경유단가</th><th>휘발유단가</th>
+      <th>날짜</th><th>행사·코스</th><th>조</th><th>운전/보조</th>
+      <th class="grp-d">경유단가</th><th class="grp-d">경유리터</th><th class="grp-d">경유금액</th>
+      <th class="grp-g">휘발유단가</th><th class="grp-g">휘발유리터</th><th class="grp-g">휘발유금액</th>
     </tr></thead><tbody>` +
-    (rows.length ? rows.map(r => `<tr>
+    (runs.length ? runs.map(r => `<tr>
       <td>${r.dateStr}</td>
-      <td class="l">${escFuel(r.ev)}${r.co ? ' · ' + escFuel(r.co) : ''}</td>
-      <td class="l">${escFuel(r.driver)}</td>
-      <td>${r.km.toFixed(1)}</td>
-      <td>${r.dPrice ? r.dPrice.toLocaleString() : '-'}</td>
-      <td>${r.gPrice ? r.gPrice.toLocaleString() : '-'}</td>
-    </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:20px;">이 기간에 운행기록이 없습니다</td></tr>') +
+      <td class="l">${escF(r.ev)}${r.co ? ' · ' + escF(r.co) : ''}</td>
+      <td>${escF(r.jo)}</td>
+      <td class="l">${escF(r.driver)}${r.assist ? '/' + escF(r.assist) : ''}</td>
+      <td class="grp-d">${r.pD ? r.pD.toLocaleString() : '<span style="color:#e74c3c;">단가?</span>'}</td>
+      <td class="grp-d"><input type="number" step="0.1" value="${r.litD ? r.litD.toFixed(1) : ''}" onchange="setRun('${r.key}','d','lit',this.value,${r.pD})"></td>
+      <td class="grp-d"><input type="number" step="1000" value="${r.amtD || ''}" onchange="setRun('${r.key}','d','amt',this.value,${r.pD})"></td>
+      <td class="grp-g">${r.pG ? r.pG.toLocaleString() : '<span style="color:#e74c3c;">단가?</span>'}</td>
+      <td class="grp-g"><input type="number" step="0.1" value="${r.litG ? r.litG.toFixed(1) : ''}" onchange="setRun('${r.key}','g','lit',this.value,${r.pG})"></td>
+      <td class="grp-g"><input type="number" step="1000" value="${r.amtG || ''}" onchange="setRun('${r.key}','g','amt',this.value,${r.pG})"></td>
+    </tr>`).join('') : '<tr><td colspan="10" style="text-align:center;color:#aaa;padding:20px;">이 기간에 운행기록이 없습니다</td></tr>') +
     `</tbody><tfoot><tr style="font-weight:800;background:#faf7ff;">
-      <td colspan="3">합계 ${rows.length}건</td><td>${totKm.toFixed(1)}</td><td colspan="2"></td>
+      <td colspan="4">합계 ${runs.length}건</td>
+      <td class="grp-d">-</td><td class="grp-d">${totLD.toFixed(1)}L</td><td class="grp-d">${won(totD)}</td>
+      <td class="grp-g">-</td><td class="grp-g">${totLG.toFixed(1)}L</td><td class="grp-g">${won(totG)}</td>
     </tr></tfoot>`;
 
+  const grand = totD + totG;
+  const budget = cfg.budget || 0;
+  const diff = grand - budget;
+  const diffTxt = diff === 0 ? '<b>딱 맞음</b>' : (diff > 0 ? `예산보다 <b style="color:#e74c3c;">+${won(diff)}원</b> 초과` : `예산보다 <b style="color:#2980b9;">${won(-diff)}원</b> 남음`);
   document.getElementById('fuelSummary').innerHTML = `
-    <div class="sumcard"><div class="lab">운행 건수</div><div class="val">${rows.length}건</div></div>
-    <div class="sumcard"><div class="lab">총 거리(참고)</div><div class="val">${totKm.toFixed(0)} km</div></div>
-    <div class="sumcard" style="border-color:#8e44ad;"><div class="lab">예산</div><div class="val">${won(cfg.budget)}</div><div style="font-size:11px;margin-top:2px;color:#888;">엑셀에서 리터·금액 채워 맞추기</div></div>
+    <div class="sumcard" style="border-color:#f39c12;"><div class="lab">경유 합계</div><div class="val">${won(totD)}원</div><div style="font-size:11px;color:#888;">${totLD.toFixed(0)}L</div></div>
+    <div class="sumcard" style="border-color:#27ae60;"><div class="lab">휘발유 합계</div><div class="val">${won(totG)}원</div><div style="font-size:11px;color:#888;">${totLG.toFixed(0)}L</div></div>
+    <div class="sumcard" style="border-color:#8e44ad;"><div class="lab">총 합계</div><div class="val">${won(grand)}원</div></div>
+    <div class="sumcard"><div class="lab">예산 ${won(budget)}원 대비</div><div class="val" style="font-size:14px;">${diffTxt}</div></div>
   `;
 }
-function escFuel(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-// 📥 엑셀에서 열리는 CSV (UTF-8 BOM). 리터·금액은 빈칸으로 두어 엑셀에서 채우게.
+// 📥 제출양식(거래명세서) 컬럼으로 CSV — 운행 1건 = 경유·휘발유 2줄
 function downloadCsv() {
   const cfg = loadFuelCfg();
-  const head = ['날짜', '행사', '코스', '운전', '거리(km)', '경유단가', '경유리터', '경유금액', '휘발유단가', '휘발유리터', '휘발유금액'];
+  const head = ['월', '일자', '방역자', '조', '1코스', '2코스', '3코스', '총계', '유종', '단가', '리터', '금액'];
   const lines = [head.join(',')];
-  let totKm = 0;
-  __fuelRows.forEach(r => {
-    totKm += r.km;
-    lines.push([r.dateStr, csvSafe(r.ev), csvSafe(r.co), csvSafe(r.driver), r.km.toFixed(1), Math.round(r.dPrice), '', '', Math.round(r.gPrice), '', ''].join(','));
+  let lastMon = '', totD = 0, totG = 0;
+  __fuelRuns.forEach(r => {
+    totD += r.amtD; totG += r.amtG;
+    const monCell = (r.mon !== lastMon) ? (r.mon + '월') : ''; lastMon = r.mon;
+    const c1 = r.cno === 1 ? 1 : '', c2 = r.cno === 2 ? 1 : '', c3 = r.cno === 3 ? 1 : '';
+    lines.push([monCell, csvS(r.dateStr), csvS(r.driver), csvS(r.jo), c1, c2, c3, 1, '경유', Math.round(r.pD), r.litD.toFixed(1), Math.round(r.amtD)].join(','));
+    lines.push(['', '', csvS(r.assist), csvS(r.jo), c1, c2, c3, 1, '휘발유', Math.round(r.pG), r.litG.toFixed(1), Math.round(r.amtG)].join(','));
   });
-  lines.push(['합계', '', '', '', totKm.toFixed(1), '', '', '', '', '', ''].join(','));
   lines.push([]);
-  lines.push(['예산', cfg.budget].join(','));
+  lines.push(['합계금액', '', '', '', '', '', '', '', '', '', '', Math.round(totD + totG)].join(','));
+  lines.push(['경유합계', '', '', '', '', '', '', '', '', '', '', Math.round(totD)].join(','));
+  lines.push(['휘발유합계', '', '', '', '', '', '', '', '', '', '', Math.round(totG)].join(','));
   const csv = '﻿' + lines.join('\r\n');
   try {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `기름값정산_${cfg.from}_${cfg.to}.csv`;
+    a.download = `유류비내역서_${cfg.from}_${cfg.to}.csv`;
     document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   } catch (e) { alert('다운로드 실패: ' + e.message); }
 }
-function csvSafe(s) { s = String(s || ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+function csvS(s) { s = String(s || ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
 
 checkAdminAuth().then(ok => { if (ok) onDataReady(renderFuel); });
 </script>
