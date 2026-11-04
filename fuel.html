@@ -629,7 +629,7 @@ function stmtCopyHtml(s, v, b, who, rowsMin) {
   const ROWS = Math.max(s.rows.length, rowsMin || 8);
   let tr = '';
   for (let i = 0; i < ROWS; i++) { const r = s.rows[i];
-    tr += r ? `<tr><td>${escF(r.date)}</td><td class="l">${escF(r.item)}</td><td></td><td>${r.qty ? qFmt(r.qty, loadFuelCfg()) : ''}</td><td>${comma(r.price)}</td><td>${comma(r.sup)}</td><td>${comma(r.vat)}</td></tr>` : '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'; }
+    tr += r ? `<tr><td>${escF(r.date)}</td><td class="l">${escF(r.item)}</td><td></td><td>${r.qty ? qFmt(r.qty, loadFuelCfg()) : ''}</td><td>${comma(r.price)}</td><td>${comma(r.sup)}</td><td>${comma(r.vat)}</td><td style="font-weight:700;">${comma(r.amt)}</td></tr>` : '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'; }
   return `<div class="copy${who ? '' : ' one'}"><div class="ttl">거 래 명 세 표${who ? ` <span>(${who} 보관용)</span>` : ''}</div>
   <table class="hd"><tr>
     <td style="width:46%;vertical-align:top;padding:0;border:none;"><table class="in">
@@ -646,9 +646,9 @@ function stmtCopyHtml(s, v, b, who, rowsMin) {
       <tr><th>전 화</th><td colspan="3">${escF(v.tel || '')}</td></tr></table></td>
   </tr></table>
   <table class="sum"><tr><th>합계금액</th><td>금 ${korMoney(s.tot.amt)}원정 &nbsp; (₩${comma(s.tot.amt)})</td><th style="width:90px;">부가세 포함</th></tr></table>
-  <table class="it"><thead><tr><th style="width:10%">월/일</th><th>품 목</th><th style="width:8%">규격</th><th style="width:13%">수량(L)</th><th style="width:10%">단가</th><th style="width:15%">공급가액</th><th style="width:13%">세액</th></tr></thead>
+  <table class="it"><thead><tr><th style="width:8%">월/일</th><th>품 목</th><th style="width:6%">규격</th><th style="width:12%">수량(L)</th><th style="width:8%">단가</th><th style="width:14%">공급가액</th><th style="width:11%">세액</th><th style="width:14%">합계</th></tr></thead>
   <tbody>${tr}</tbody>
-  <tfoot><tr><th colspan="5">계</th><th>${comma(s.tot.sup)}</th><th>${comma(s.tot.vat)}</th></tr></tfoot></table></div>`;
+  <tfoot><tr><th colspan="5">계</th><th>${comma(s.tot.sup)}</th><th>${comma(s.tot.vat)}</th><th style="font-size:13px;">${comma(s.tot.amt)}</th></tr></tfoot></table></div>`;
 }
 function printStmt(which) {
   loadVendors(() => {
