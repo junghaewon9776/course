@@ -82,6 +82,19 @@
     <div style="overflow-x:auto;"><table class="mon-tbl" id="monTable"></table></div>
   </div>
 
+  <!-- 월별 결제 · 거래명세표 -->
+  <div class="card no-print">
+    <h2>🧾 월별 결제 · 거래명세표</h2>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+      <button class="small" style="background:#8e44ad;color:#fff;" onclick="openVendors()">🏪 주유소(공급자) 관리</button>
+      <button class="small" style="background:#2c3e50;color:#fff;" onclick="openBuyer()">🏢 우리 단체(공급받는자)</button>
+      <button class="small" style="background:#b45309;color:#fff;" onclick="fillReceipts()">🧾 영수증 금액 넣기 (6~10월)</button>
+      <button class="small" style="background:#1e3a8a;color:#fff;" onclick="printStmt('all')">🖨 거래명세표 전체 출력</button>
+    </div>
+    <div style="overflow-x:auto;"><table class="mon-tbl" id="payTable"></table></div>
+    <p class="muted" style="font-size:11px;margin-top:6px;">※ <b>실제 결제금액</b>(카드 영수증)을 넣으면 운행 합계와 비교해요. 다르면 <b>⚖ 맞추기</b>를 누르면 그 달 운행 금액을 비율대로 고쳐서 딱 맞춰요.<br>※ 거래명세표는 영수증처럼 <b>리터 = 금액 ÷ 단가</b>, <b>공급가액 = 금액 ÷ 1.1</b>(올림), 세액 = 나머지로 계산해요.</p>
+  </div>
+
   <!-- 요약 -->
   <div class="card">
     <h2>📊 전체 요약</h2>
@@ -131,7 +144,17 @@ function loadFuelCfg() {
     defD: (c.defD != null ? c.defD : 200000),
     defG: (c.defG != null ? c.defG : 17000),
     prices: c.prices || {},   // {'2026-6':{d,g}}
-    amts: c.amts || {}        // {logKey:{d,g,pd,pg}}  운행별 금액·단가(수정분)
+    amts: c.amts || {},       // {logKey:{d,g,pd,pg}}  운행별 금액·단가(수정분)
+    paid: c.paid || {},       // {'2026-6': 1953000}  실제 결제금액(카드 영수증)
+    pday: c.pday || {},       // {'2026-6': '2026-06-30'}  명세표 날짜
+    sprice: c.sprice || {},   // {'2026-6': 1855}  명세표 단가(영수증 단가)
+    vend: c.vend || {},       // {'2026-6': vendorId}  그 달 공급자(주유소)
+    smode: c.smode || {},     // {'2026-6': 'one'|'runs'}  한 줄(영수증처럼) / 운행별
+    buyer: c.buyer || {},     // 공급받는자 {nm, biz, ceo, addr, tel}
+    // 기름 계산용 날짜만 따로 (실제 방역기록은 그대로)
+    dt: c.dt || {},           // {logKey: 'YYYY-MM-DD'}  날짜 바꾼 운행
+    ex: c.ex || {},           // {logKey: true}  계산에서 뺀 운행
+    extra: c.extra || {}      // {xKey: {date, ev, jo, driver, assist}}  계산에만 더한 운행
   };
 }
 function saveFuelCfg(c) {
@@ -211,36 +234,67 @@ function renderPriceTable(cfg) {
   }).join('');
 }
 
-function collectRuns(cfg) {
+function ymd(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+// 기름 계산할 운행 목록 — 방역기록 + (계산용) 날짜 바꾸기·빼기·더하기. 실제 기록은 안 건드림
+//   all=true 면 뺀 운행도 같이 (표에서 「다시 넣기」 보이려고), r.out=true 로 표시
+function collectRuns(cfg, all) {
   const data = loadData();
   const fromMs = new Date(cfg.from + 'T00:00:00').getTime();
   const toMs = new Date(cfg.to + 'T23:59:59').getTime();
-  return (data.logs || [])
+  const base = (data.logs || [])
     .filter(l => (typeof isRunLog === 'function' ? isRunLog(l) : (l && l.startedAt)) && !l.hidden && l.finishedAt)
-    .filter(l => { const t = l.startedAt || l.finishedAt || 0; return t >= fromMs && t <= toMs; })
-    .sort((a, b) => (a.startedAt || a.finishedAt || 0) - (b.startedAt || b.finishedAt || 0))
     .map(l => {
-      const t = l.startedAt || l.finishedAt || 0; const d = new Date(t);
-      const ym = d.getFullYear() + '-' + (d.getMonth() + 1);
+      const t0 = l.startedAt || l.finishedAt || 0, key = l.key || (t0 + '');
       const co = (typeof getCourse === 'function' && getCourse(data, l.courseId)) || {};
       const ev = (typeof getEvent === 'function' && getEvent(data, l.eventId)) || {};
       const team = (typeof getTeam === 'function' && getTeam(data, l.teamId)) || {};
+      return { key, t0, orig: ymd(new Date(t0)), ev: ev.name || '', co: co.name || '', jo: team.name || '',
+        driver: (l.crew && l.crew.driver) || '', assist: (l.crew && l.crew.assist) || '' };
+    });
+  Object.keys(cfg.extra).forEach(k => { const x = cfg.extra[k] || {};
+    base.push({ key: k, extra: true, t0: new Date((x.date || cfg.from) + 'T12:00:00').getTime(), orig: x.date || cfg.from, ev: x.ev || '(직접 더함)', co: x.co || '', jo: x.jo || '', driver: x.driver || '', assist: x.assist || '' }); });
+  return base.map(b => {
+      const date = cfg.dt[b.key] || b.orig, d = new Date(date + 'T12:00:00');
+      return Object.assign(b, { date, moved: !!cfg.dt[b.key] && cfg.dt[b.key] !== b.orig, out: !!cfg.ex[b.key], t: d.getTime() + (b.t0 % 86400000) / 1e6 });
+    })
+    .filter(b => b.t >= fromMs && b.t <= toMs && (all || !b.out))
+    .sort((a, b) => a.t - b.t)
+    .map(b => {
+      const d = new Date(b.date + 'T12:00:00');
+      const ym = d.getFullYear() + '-' + (d.getMonth() + 1);
       const mp = cfg.prices[ym] || { d: 0, g: 0 };
-      const am = cfg.amts[l.key] || {};
+      const am = cfg.amts[b.key] || {};
       const pD = am.pd != null ? am.pd : (mp.d || 0);   // 단가: 운행 수정값 우선, 없으면 그 달 값
       const pG = am.pg != null ? am.pg : (mp.g || 0);
       const amtD = am.d != null ? am.d : cfg.defD;       // 금액: 운행 수정값 우선, 없으면 기본금액
       const amtG = am.g != null ? am.g : cfg.defG;
-      return {
-        key: l.key || (t + ''), t, mon: d.getMonth() + 1, ym,
+      return Object.assign(b, {
+        mon: d.getMonth() + 1, ym,
         dateStr: `${d.getMonth() + 1}/${d.getDate()}`,
-        ev: ev.name || '', co: co.name || '', cno: courseNo(co.name),
-        jo: team.name || '', driver: (l.crew && l.crew.driver) || '', assist: (l.crew && l.crew.assist) || '',
+        cno: courseNo(b.co),
         pD, pG, amtD, amtG,
         litD: pD ? amtD / pD : 0, litG: pG ? amtG / pG : 0
-      };
+      });
     });
 }
+// 📅 계산용 날짜 바꾸기 / 빼기 / 다시 넣기 / 더하기 (방역기록은 그대로)
+function setRunDate(key, v) { const c = loadFuelCfg(); const r = (__fuelAll || []).find(x => x.key === key);
+  if (c.extra[key]) c.extra[key].date = v; else if (!v || (r && v === r.orig)) delete c.dt[key]; else c.dt[key] = v;
+  saveFuelCfg(c); renderRunOnly(); }
+function exRun(key) { const c = loadFuelCfg();
+  if (c.extra[key]) { if (!confirm('직접 더한 이 운행을 지울까요?')) return; delete c.extra[key]; delete c.amts[key]; }
+  else c.ex[key] = true;
+  saveFuelCfg(c); renderRunOnly(); }
+function inRun(key) { const c = loadFuelCfg(); delete c.ex[key]; saveFuelCfg(c); renderRunOnly(); }
+function addRun() {
+  const c = loadFuelCfg();
+  const date = prompt('더할 운행 날짜 (예: 2026-07-15)\n※ 기름 계산에만 들어가요. 방역기록은 안 바뀌어요', c.from); if (!date) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date.trim())) { alert('날짜는 2026-07-15 모양으로 넣어 주세요'); return; }
+  const ev = prompt('메모 (행사·코스 등, 비워도 돼요)', '') || '';
+  c.extra['x' + Date.now().toString(36)] = { date: date.trim(), ev: ev.trim() || '(직접 더함)' };
+  saveFuelCfg(c); renderRunOnly();
+}
+let __fuelAll = [];
 
 function renderFuel() {
   const cfg = loadFuelCfg();
@@ -256,6 +310,7 @@ function renderRunOnly(cfg) {
   cfg = cfg || loadFuelCfg();
   const runs = collectRuns(cfg);
   __fuelRuns = runs;
+  __fuelAll = collectRuns(cfg, true);
   let totD = 0, totG = 0, totLD = 0, totLG = 0;
   const byMon = {};
   runs.forEach(r => {
@@ -282,31 +337,21 @@ function renderRunOnly(cfg) {
       <td>${comma(totD + totG)}원</td>
     </tr></tfoot>`;
 
+  renderPayTable(cfg, runs);
+
   // 운행별 상세
-  document.getElementById('fuelCount').textContent = `(${runs.length}건)`;
+  const nOut = __fuelAll.filter(r => r.out).length, nMv = __fuelAll.filter(r => r.moved).length, nX = __fuelAll.filter(r => r.extra).length;
+  document.getElementById('fuelCount').innerHTML = `(${runs.length}건${nMv ? ` · 날짜 바꾼 ${nMv}` : ''}${nX ? ` · 더한 ${nX}` : ''}${nOut ? ` · 뺀 ${nOut}` : ''}) <button class="small" style="background:#16a34a;color:#fff;margin-left:6px;" onclick="addRun()">➕ 운행 더하기</button>`;
   const tbl = document.getElementById('fuelTable');
+  const runRow = r => r.out
+    ? `<tr style="background:#f3f4f6;color:#9ca3af;text-decoration:line-through;"><td>${r.dateStr}</td><td class="l">${escF(r.ev)}${r.co ? ' · ' + escF(r.co) : ''}</td><td>${escF(r.jo)}</td><td class="l">${escF(r.driver)}</td><td colspan="6" style="text-align:center;text-decoration:none;">계산에서 뺌 <button class="small" style="background:#2563eb;color:#fff;text-decoration:none;" onclick="inRun('${r.key}')">↩ 다시 넣기</button></td></tr>`
+    : runRowHtml(r);
   tbl.innerHTML = `<thead><tr>
-      <th>날짜</th><th>행사·코스</th><th>조</th><th>운전/보조</th>
+      <th>날짜 <span style="font-weight:400;font-size:10px;">(계산용)</span></th><th>행사·코스</th><th>조</th><th>운전/보조</th>
       <th class="grp-d">경유단가</th><th class="grp-d">경유리터</th><th class="grp-d">경유금액</th>
       <th class="grp-g">휘발유단가</th><th class="grp-g">휘발유리터</th><th class="grp-g">휘발유금액</th>
     </tr></thead><tbody>` +
-    (runs.length ? runs.map(r => `<tr>
-      <td>${r.dateStr}</td>
-      <td class="l">${escF(r.ev)}${r.co ? ' · ' + escF(r.co) : ''}</td>
-      <td>${escF(r.jo)}</td>
-      <td class="l">${escF(r.driver)}${r.assist ? '/' + escF(r.assist) : ''}</td>
-      <td class="grp-d"><input type="text" inputmode="numeric" value="${comma(r.pD)}" onchange="setRun('${r.key}','d','price',this.value,0)"></td>
-      <td class="grp-d"><input class="lit" type="number" step="0.1" value="${r.litD ? r.litD.toFixed(1) : ''}" onchange="setRun('${r.key}','d','lit',this.value,${r.pD})"></td>
-      <td class="grp-d"><input type="text" inputmode="numeric" value="${comma(r.amtD)}" onchange="setRun('${r.key}','d','amt',this.value,0)"></td>
-      <td class="grp-g"><input type="text" inputmode="numeric" value="${comma(r.pG)}" onchange="setRun('${r.key}','g','price',this.value,0)"></td>
-      <td class="grp-g"><input class="lit" type="number" step="0.1" value="${r.litG ? r.litG.toFixed(1) : ''}" onchange="setRun('${r.key}','g','lit',this.value,${r.pG})"></td>
-      <td class="grp-g"><input type="text" inputmode="numeric" value="${comma(r.amtG)}" onchange="setRun('${r.key}','g','amt',this.value,0)"></td>
-    </tr>`).join('') : '<tr><td colspan="10" style="text-align:center;color:#aaa;padding:20px;">이 기간에 운행기록이 없습니다</td></tr>') +
-    `</tbody><tfoot><tr style="font-weight:800;background:#faf7ff;">
-      <td colspan="4">합계 ${runs.length}건</td>
-      <td class="grp-d">-</td><td class="grp-d">${totLD.toFixed(1)}L</td><td class="grp-d">${comma(totD)}원</td>
-      <td class="grp-g">-</td><td class="grp-g">${totLG.toFixed(1)}L</td><td class="grp-g">${comma(totG)}원</td>
-    </tr></tfoot>`;
+    (__fuelAll.length ? __fuelAll.map(runRow).join('') : '<tr><td colspan="10" style="text-align:center;color:#aaa;padding:20px;">이 기간에 운행기록이 없습니다</td></tr>') + `</tbody>` + runFoot(runs, totLD, totD, totLG, totG);
 
   // 전체 요약
   const grand = totD + totG, budget = cfg.budget || 0, diff = grand - budget;
@@ -317,6 +362,30 @@ function renderRunOnly(cfg) {
     <div class="sumcard" style="border-color:#8e44ad;"><div class="lab">총 합계</div><div class="val">${comma(grand)}원</div></div>
     <div class="sumcard"><div class="lab">예산 ${comma(budget)}원 대비</div><div class="val" style="font-size:14px;">${diffTxt}</div></div>
   `;
+}
+
+// 운행별 상세 한 줄 — 날짜는 계산용으로 바꿀 수 있음(방역기록은 그대로), 🗑 계산에서 빼기
+function runRowHtml(r) {
+  const tag = r.extra ? ' <span style="font-size:10px;color:#16a34a;font-weight:700;">더함</span>' : (r.moved ? ` <span style="font-size:10px;color:#b45309;font-weight:700;" title="원래 ${r.orig}">바꿈</span>` : '');
+  return `<tr${r.moved || r.extra ? ' style="background:#fffbeb;"' : ''}>
+      <td style="white-space:nowrap;"><input type="date" value="${r.date}" style="width:128px;" onchange="setRunDate('${r.key}',this.value)" title="${r.extra ? '직접 더한 운행' : '원래 날짜 ' + r.orig}">${tag} <button class="small" style="background:#dc2626;color:#fff;padding:1px 6px;" title="${r.extra ? '지우기' : '계산에서 빼기'}" onclick="exRun('${r.key}')">🗑</button></td>
+      <td class="l">${escF(r.ev)}${r.co ? ' · ' + escF(r.co) : ''}</td>
+      <td>${escF(r.jo)}</td>
+      <td class="l">${escF(r.driver)}${r.assist ? '/' + escF(r.assist) : ''}</td>
+      <td class="grp-d"><input type="text" inputmode="numeric" value="${comma(r.pD)}" onchange="setRun('${r.key}','d','price',this.value,0)"></td>
+      <td class="grp-d"><input class="lit" type="number" step="0.1" value="${r.litD ? r.litD.toFixed(1) : ''}" onchange="setRun('${r.key}','d','lit',this.value,${r.pD})"></td>
+      <td class="grp-d"><input type="text" inputmode="numeric" value="${comma(r.amtD)}" onchange="setRun('${r.key}','d','amt',this.value,0)"></td>
+      <td class="grp-g"><input type="text" inputmode="numeric" value="${comma(r.pG)}" onchange="setRun('${r.key}','g','price',this.value,0)"></td>
+      <td class="grp-g"><input class="lit" type="number" step="0.1" value="${r.litG ? r.litG.toFixed(1) : ''}" onchange="setRun('${r.key}','g','lit',this.value,${r.pG})"></td>
+      <td class="grp-g"><input type="text" inputmode="numeric" value="${comma(r.amtG)}" onchange="setRun('${r.key}','g','amt',this.value,0)"></td>
+    </tr>`;
+}
+function runFoot(runs, totLD, totD, totLG, totG) {
+  return `<tfoot><tr style="font-weight:800;background:#faf7ff;">
+      <td colspan="4">합계 ${runs.length}건 (뺀 운행 제외)</td>
+      <td class="grp-d">-</td><td class="grp-d">${totLD.toFixed(1)}L</td><td class="grp-d">${comma(totD)}원</td>
+      <td class="grp-g">-</td><td class="grp-g">${totLG.toFixed(1)}L</td><td class="grp-g">${comma(totG)}원</td>
+    </tr></tfoot>`;
 }
 
 // 📥 제출양식 CSV — 운행 1건 = 경유·휘발유 2줄
@@ -347,6 +416,247 @@ function downloadCsv() {
   } catch (e) { alert('다운로드 실패: ' + e.message); }
 }
 function csvS(s) { s = String(s || ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+
+// ═══════════════ 🧾 월별 결제 · 거래명세표 ═══════════════
+// 카드 영수증 (현대주유소 · 경유 1,855원/L) — 「영수증 금액 넣기」로 한 번에
+const FUEL_RECEIPTS = { 6: 1953000, 7: 3038000, 8: 2387000, 9: 1953000, 10: 269000 };
+const FUEL_RECEIPT_PRICE = 1855;
+let __vend = null;   // /fuelVendors {id:{nm,biz,ceo,addr,up,jong,tel,seal}}
+
+function ymLabel(ym) { const p = ym.split('-'); return p[0] + '.' + p[1] + '월'; }
+function monthEnd(ym) { const p = ym.split('-').map(Number); const d = new Date(p[0], p[1], 0); return p[0] + '-' + String(p[1]).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+function loadVendors(cb) {
+  if (__vend) return cb && cb(__vend);
+  const c = (typeof _cache !== 'undefined' && _cache && _cache.fuelVendors) || null;
+  if (c) { __vend = c; return cb && cb(__vend); }
+  try { fbDb.ref('/fuelVendors').once('value').then(s => { __vend = s.val() || {}; cb && cb(__vend); }).catch(() => { __vend = {}; cb && cb(__vend); }); } catch (e) { __vend = {}; cb && cb(__vend); }
+}
+function vendList() { return Object.keys(__vend || {}).map(id => Object.assign({ id }, __vend[id])); }
+
+function renderPayTable(cfg, runs) {
+  const el = document.getElementById('payTable'); if (!el) return;
+  if (!__vend) { loadVendors(() => renderPayTable(loadFuelCfg(), __fuelRuns)); }
+  const months = monthsBetween(cfg.from, cfg.to);
+  const sys = {}; runs.forEach(r => { sys[r.ym] = (sys[r.ym] || 0) + r.amtD + r.amtG; });
+  const vl = vendList();
+  const vOpt = (sel) => '<option value="">— 주유소 고르기 —</option>' + vl.map(v => `<option value="${v.id}"${v.id === sel ? ' selected' : ''}>${escF(v.nm)}</option>`).join('');
+  el.innerHTML = `<thead><tr><th>월</th><th>운행 합계</th><th>실제 결제금액</th><th>차이</th><th>명세표 날짜</th><th>단가(원/L)</th><th>주유소</th><th>명세표 줄</th><th></th></tr></thead><tbody>` +
+    months.map(ym => {
+      const s = sys[ym] || 0, p = cfg.paid[ym], diff = p ? s - p : 0;
+      const dTxt = !p ? '<span style="color:#aaa;">-</span>' : (diff === 0 ? '<b style="color:#16a34a;">✅ 맞음</b>' : `<b style="color:#dc2626;">${diff > 0 ? '+' : ''}${comma(diff)}</b>`);
+      const pr = cfg.sprice[ym] || (cfg.prices[ym] && cfg.prices[ym].d) || '';
+      return `<tr>
+        <td style="text-align:center;font-weight:700;">${ymLabel(ym)}</td>
+        <td>${comma(s)}원</td>
+        <td><input type="text" inputmode="numeric" style="width:110px;text-align:right;" value="${p ? comma(p) : ''}" placeholder="영수증 금액" onchange="setPay('${ym}','paid',this.value)"></td>
+        <td>${dTxt}</td>
+        <td><input type="date" value="${cfg.pday[ym] || monthEnd(ym)}" onchange="setPay('${ym}','pday',this.value)"></td>
+        <td><input type="text" inputmode="numeric" style="width:70px;text-align:right;" value="${pr ? comma(pr) : ''}" placeholder="1,855" onchange="setPay('${ym}','sprice',this.value)"></td>
+        <td><select onchange="setPay('${ym}','vend',this.value)" style="max-width:150px;">${vOpt(cfg.vend[ym] || (vl[0] && vl[0].id) || '')}</select></td>
+        <td><select onchange="setPay('${ym}','smode',this.value)"><option value="one"${(cfg.smode[ym] || 'one') === 'one' ? ' selected' : ''}>한 줄 (영수증처럼)</option><option value="runs"${cfg.smode[ym] === 'runs' ? ' selected' : ''}>운행별</option></select></td>
+        <td style="white-space:nowrap;">${p && diff !== 0 ? `<button class="small" style="background:#b45309;color:#fff;" onclick="matchMonth('${ym}')">⚖ 맞추기</button> ` : ''}<button class="small" style="background:#1e3a8a;color:#fff;" onclick="printStmt('${ym}')">🧾 명세표</button></td>
+      </tr>`;
+    }).join('') + '</tbody>';
+}
+function setPay(ym, field, val) {
+  const c = loadFuelCfg();
+  if (field === 'paid' || field === 'sprice') { const n = num(val); if (n) c[field][ym] = n; else delete c[field][ym]; }
+  else if (val) c[field][ym] = val; else delete c[field][ym];
+  saveFuelCfg(c); renderRunOnly();
+}
+function fillReceipts() {
+  const c = loadFuelCfg(), yr = (c.from || '').slice(0, 4) || new Date().getFullYear();
+  const lines = Object.keys(FUEL_RECEIPTS).map(m => `${m}월 ${comma(FUEL_RECEIPTS[m])}원`).join('\n');
+  if (!confirm(`카드 영수증 금액을 넣을까요? (단가 ${comma(FUEL_RECEIPT_PRICE)}원/L)\n\n${lines}`)) return;
+  Object.keys(FUEL_RECEIPTS).forEach(m => { const ym = yr + '-' + m; c.paid[ym] = FUEL_RECEIPTS[m]; c.sprice[ym] = FUEL_RECEIPT_PRICE; });
+  saveFuelCfg(c); renderRunOnly();
+}
+// ⚖ 그 달 운행 금액을 비율대로 고쳐서 결제금액과 딱 맞춤 (끝자리는 마지막 운행 경유에서 맞춤)
+function matchMonth(ym) {
+  const c = loadFuelCfg(), target = c.paid[ym];
+  const rs = __fuelRuns.filter(r => r.ym === ym);
+  const tot = rs.reduce((s, r) => s + r.amtD + r.amtG, 0);
+  if (!target || !rs.length) { alert('그 달 운행이나 결제금액이 없어요'); return; }
+  if (!tot) { alert('운행 금액이 0원이라 비율로 맞출 수 없어요'); return; }
+  if (!confirm(`${ymLabel(ym)} 운행 ${rs.length}건 합계 ${comma(tot)}원 → ${comma(target)}원으로 맞출까요?\n(각 운행 금액을 같은 비율로 바꿔요. 리터는 단가에 맞게 따라 바뀌어요)`)) return;
+  const f = target / tot; let sum = 0;
+  rs.forEach(r => { const a = c.amts[r.key] = c.amts[r.key] || {}; a.d = Math.round(r.amtD * f); a.g = Math.round(r.amtG * f); sum += a.d + a.g; });
+  const last = c.amts[rs[rs.length - 1].key]; last.d += target - sum;
+  saveFuelCfg(c); renderRunOnly();
+}
+
+// ── 간단 팝업 ──
+function fPop(html) {
+  let o = document.getElementById('fPop'); if (o) o.remove();
+  o = document.createElement('div'); o.id = 'fPop';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:30px 10px';
+  o.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:640px;width:100%;padding:16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.3)">' + html + '</div>';
+  o.addEventListener('click', e => { if (e.target === o) o.remove(); });
+  document.body.appendChild(o);
+}
+function fPopClose() { const o = document.getElementById('fPop'); if (o) o.remove(); }
+const V_FIELDS = [['nm', '상호 (주유소 이름)', '현대주유소'], ['biz', '사업자등록번호', '000-00-00000'], ['ceo', '대표자', ''], ['addr', '주소', '전라남도 영광군 홍농읍 …'], ['up', '업태', '도소매'], ['jong', '종목', '석유류'], ['tel', '전화', '061-000-0000']];
+
+// 🏪 주유소(공급자) — 한솔건축 「업체 여러 개」처럼: 상호·사업자번호·대표·직인 그림
+function openVendors() {
+  loadVendors(() => {
+    const vl = vendList();
+    let h = '<h3 style="margin:0 0 6px;">🏪 주유소 (공급자) <button class="small gray" style="float:right" onclick="fPopClose()">닫기</button></h3>';
+    h += '<p class="muted" style="font-size:12px;margin:0 0 10px;">거래명세표의 <b>공급자</b>로 찍히는 곳이에요. 여러 곳을 등록해 두고 달마다 골라요. 직인(도장) 사진을 올리면 명세표 (인) 자리에 찍혀요.</p>';
+    h += vl.length ? vl.map(v => `<div style="display:flex;align-items:center;gap:10px;border:1px solid #e5e7eb;border-radius:8px;padding:8px;margin-bottom:6px;">
+      <div style="width:54px;height:54px;border:1px dashed #ddd;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#fff">${v.seal ? `<img src="${v.seal}" style="max-width:50px;max-height:50px">` : '<span style="font-size:10px;color:#bbb">직인 없음</span>'}</div>
+      <div style="flex:1;font-size:13px;"><b>${escF(v.nm)}</b><br><span class="muted">${escF(v.biz || '')} · 대표 ${escF(v.ceo || '-')}</span></div>
+      <button class="small" style="background:#2980b9;color:#fff;" onclick="editVendor('${v.id}')">✏️ 수정</button></div>`).join('') : '<div class="muted" style="padding:14px;text-align:center;">아직 없어요</div>';
+    h += '<button class="small" style="background:#16a34a;color:#fff;margin-top:6px;" onclick="editVendor(\'\')">+ 주유소 추가</button>';
+    if (!vl.some(v => (v.biz || '').replace(/-/g, '') === FUEL_HYUNDAI.biz.replace(/-/g, '')))
+      h += ' <button class="small" style="background:#b45309;color:#fff;margin-top:6px;" onclick="addHyundai()">⛽ 현대주유소 바로 등록 (사업자등록증)</button>';
+    fPop(h);
+  });
+}
+// 사업자등록증 (2018-04-16 서광주세무서) — 전화·직인은 수정에서 넣기
+const FUEL_HYUNDAI = { nm: '현대주유소', biz: '879-22-00621', ceo: '홍서경', addr: '전라남도 영광군 홍농읍 연우로 334', up: '도매 및 소매업', jong: '주유소', tel: '', seal: '' };
+function addHyundai() {
+  const id = 'v' + Date.now().toString(36);
+  fbDb.ref('/fuelVendors/' + id).set(FUEL_HYUNDAI).then(() => { __vend = __vend || {}; __vend[id] = Object.assign({}, FUEL_HYUNDAI); editVendor(id); renderRunOnly(); })
+    .catch(e => alert('저장 실패: ' + e.message));
+}
+function editVendor(id) {
+  const v = (id && __vend[id]) || {};
+  let h = `<h3 style="margin:0 0 10px;">${id ? '✏️ 주유소 수정' : '+ 주유소 추가'} <button class="small gray" style="float:right" onclick="openVendors()">◀ 목록</button></h3>`;
+  h += V_FIELDS.map(f => `<label style="display:block;font-size:12px;margin:6px 0 2px;">${f[1]}</label><input id="vf_${f[0]}" value="${escF(v[f[0]] || '')}" placeholder="${f[2]}" style="width:100%;">`).join('');
+  h += `<label style="display:block;font-size:12px;margin:10px 0 2px;">직인 (도장) 사진 — 흰 바탕은 자동으로 투명하게</label>
+    <div style="display:flex;align-items:center;gap:10px;"><div id="vfSealBox" style="width:70px;height:70px;border:1px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;background:#fff">${v.seal ? `<img src="${v.seal}" style="max-width:66px;max-height:66px">` : ''}</div>
+    <input type="file" accept="image/*" onchange="vendSealPick(this)"></div><input type="hidden" id="vf_seal" value="">`;
+  h += `<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:14px;">${id ? `<button class="small" style="background:#dc2626;color:#fff;" onclick="delVendor('${id}')">삭제</button>` : ''}<button class="small" style="background:#16a34a;color:#fff;" onclick="saveVendor('${id}')">💾 저장</button></div>`;
+  fPop(h);
+  window.__vfSeal = v.seal || '';
+}
+function vendSealPick(inp) {
+  const f = inp.files && inp.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { const img = new Image(); img.onload = () => {
+    const M = 700, r = Math.min(1, M / Math.max(img.width, img.height)), w = Math.round(img.width * r), h = Math.round(img.height * r);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h; const cx = cv.getContext('2d'); cx.drawImage(img, 0, 0, w, h);
+    const d = cx.getImageData(0, 0, w, h), p = d.data; let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let i = 0; i < p.length; i += 4) {
+      const R = p[i], G = p[i + 1], B = p[i + 2], light = (R + G + B) / 3, red = R - (G + B) / 2;
+      const a = light > 215 && red < 40 ? 0 : light > 175 && red < 25 ? Math.round((215 - light) / 40 * 255) : 255;
+      p[i + 3] = Math.min(p[i + 3], a);
+      if (a > 40) { const px = (i / 4) % w, py = Math.floor(i / 4 / w); if (px < x0) x0 = px; if (px > x1) x1 = px; if (py < y0) y0 = py; if (py > y1) y1 = py; }
+    }
+    if (x1 < 0) { alert('도장을 못 찾았어요 — 흰 바탕에 찍힌 사진으로 해 주세요'); return; }
+    cx.putImageData(d, 0, 0);
+    const pad = 4, cw = x1 - x0 + 1 + pad * 2, ch = y1 - y0 + 1 + pad * 2, k = Math.min(1, 300 / Math.max(cw, ch));
+    const o = document.createElement('canvas'); o.width = Math.round(cw * k); o.height = Math.round(ch * k);
+    o.getContext('2d').drawImage(cv, x0 - pad, y0 - pad, cw, ch, 0, 0, o.width, o.height);
+    window.__vfSeal = o.toDataURL('image/png');
+    document.getElementById('vfSealBox').innerHTML = `<img src="${window.__vfSeal}" style="max-width:66px;max-height:66px">`;
+  }; img.src = rd.result; };
+  rd.readAsDataURL(f);
+}
+function saveVendor(id) {
+  const v = {}; V_FIELDS.forEach(f => { v[f[0]] = document.getElementById('vf_' + f[0]).value.trim(); });
+  if (!v.nm) { alert('상호를 넣어 주세요'); return; }
+  v.seal = window.__vfSeal || '';
+  id = id || ('v' + Date.now().toString(36));
+  fbDb.ref('/fuelVendors/' + id).set(v).then(() => { __vend = __vend || {}; __vend[id] = v; openVendors(); renderRunOnly(); })
+    .catch(e => alert('저장 실패: ' + e.message));
+}
+function delVendor(id) {
+  if (!confirm((__vend[id] && __vend[id].nm) + ' 을(를) 지울까요?')) return;
+  fbDb.ref('/fuelVendors/' + id).remove().then(() => { delete __vend[id]; openVendors(); renderRunOnly(); }).catch(e => alert('실패: ' + e.message));
+}
+// 🏢 공급받는자 (우리 단체)
+const B_FIELDS = [['nm', '상호 (단체 이름)', ''], ['biz', '사업자(고유)번호', ''], ['ceo', '대표자', ''], ['addr', '주소', ''], ['tel', '전화', '']];
+function openBuyer() {
+  const b = loadFuelCfg().buyer || {};
+  let h = '<h3 style="margin:0 0 10px;">🏢 공급받는자 (우리 단체) <button class="small gray" style="float:right" onclick="fPopClose()">닫기</button></h3>';
+  h += B_FIELDS.map(f => `<label style="display:block;font-size:12px;margin:6px 0 2px;">${f[1]}</label><input id="bf_${f[0]}" value="${escF(b[f[0]] || '')}" style="width:100%;">`).join('');
+  h += '<div style="text-align:right;margin-top:14px;"><button class="small" style="background:#16a34a;color:#fff;" onclick="saveBuyer()">💾 저장</button></div>';
+  fPop(h);
+}
+function saveBuyer() { const c = loadFuelCfg(); c.buyer = {}; B_FIELDS.forEach(f => { c.buyer[f[0]] = document.getElementById('bf_' + f[0]).value.trim(); }); saveFuelCfg(c); fPopClose(); }
+
+// 숫자 → 한글 금액 (일백구십오만삼천)
+function korMoney(n) {
+  n = Math.round(n); if (!n) return '영';
+  const d = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'], u = ['', '십', '백', '천'], big = ['', '만', '억', '조'];
+  let s = '', g = 0;
+  while (n > 0) { const part = n % 10000; n = Math.floor(n / 10000);
+    if (part) { let p = '', q = part; for (let i = 0; i < 4 && q > 0; i++) { const x = q % 10; q = Math.floor(q / 10); if (x) p = d[x] + u[i] + p; } s = p + big[g] + s; }
+    g++; }
+  return s;
+}
+// 한 달 명세표 줄 계산 — 영수증과 같은 방식: 리터 = 금액÷단가(소수 셋째 자리 버림), 공급가 = 금액÷1.1 올림
+function stmtOf(ym, cfg) {
+  const rs = __fuelRuns.filter(r => r.ym === ym);
+  const sysTot = rs.reduce((s, r) => s + r.amtD + r.amtG, 0);
+  const paid = cfg.paid[ym] || sysTot;
+  const price = cfg.sprice[ym] || (cfg.prices[ym] && cfg.prices[ym].d) || FUEL_RECEIPT_PRICE;
+  const day = cfg.pday[ym] || monthEnd(ym);
+  const line = (date, item, amt, pr) => { const sup = Math.ceil(amt / 1.1); return { date, item, qty: pr ? Math.floor(amt / pr * 1000) / 1000 : 0, price: pr, sup, vat: amt - sup, amt }; };
+  let rows = [];
+  if ((cfg.smode[ym] || 'one') === 'runs' && rs.length) {
+    rs.forEach(r => { if (r.amtD) rows.push(line(r.dateStr, '경유', r.amtD, r.pD)); if (r.amtG) rows.push(line(r.dateStr, '휘발유', r.amtG, r.pG)); });
+  } else rows = [line(day.slice(5).replace('-', '/'), '경유', paid, price)];
+  const tot = rows.reduce((a, r) => ({ sup: a.sup + r.sup, vat: a.vat + r.vat, amt: a.amt + r.amt }), { sup: 0, vat: 0, amt: 0 });
+  return { ym, rows, tot, day, paid, sysTot, warn: (cfg.smode[ym] === 'runs' && cfg.paid[ym] && sysTot !== cfg.paid[ym]) ? '운행 합계가 결제금액과 달라요 — ⚖ 맞추기를 먼저 해 주세요' : '' };
+}
+function stmtCopyHtml(s, v, b, who) {
+  const seal = v.seal ? `<img src="${v.seal}" style="position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:46px;height:46px;object-fit:contain;opacity:.92">` : '';
+  const ROWS = Math.max(s.rows.length, 8);
+  let tr = '';
+  for (let i = 0; i < ROWS; i++) { const r = s.rows[i];
+    tr += r ? `<tr><td>${escF(r.date)}</td><td class="l">${escF(r.item)}</td><td></td><td>${r.qty ? r.qty.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : ''}</td><td>${comma(r.price)}</td><td>${comma(r.sup)}</td><td>${comma(r.vat)}</td></tr>` : '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'; }
+  return `<div class="copy"><div class="ttl">거 래 명 세 표 <span>(${who} 보관용)</span></div>
+  <table class="hd"><tr>
+    <td style="width:46%;vertical-align:top;padding:0;border:none;"><table class="in">
+      <tr><th>일 자</th><td>${s.day.replace(/-/g, '. ')}</td></tr>
+      <tr><th>공급받는자</th><td style="font-size:15px;font-weight:800;">${escF(b.nm || '')} <span style="font-weight:400;font-size:12px;">귀하</span></td></tr>
+      ${b.biz ? `<tr><th>등록번호</th><td>${escF(b.biz)}</td></tr>` : ''}${b.addr ? `<tr><th>주 소</th><td>${escF(b.addr)}</td></tr>` : ''}
+      <tr><td colspan="2" style="padding:8px 6px;font-size:12px;">아래와 같이 계산합니다.</td></tr>
+    </table></td>
+    <td style="width:54%;vertical-align:top;padding:0;border:none;"><table class="in sup"><tr><th rowspan="5" class="vt">공<br>급<br>자</th>
+      <th>등록번호</th><td colspan="3" style="font-weight:800;letter-spacing:1px;">${escF(v.biz || '')}</td></tr>
+      <tr><th>상 호</th><td>${escF(v.nm || '')}</td><th>성 명</th><td style="position:relative;padding-right:30px;">${escF(v.ceo || '')} (인)${seal}</td></tr>
+      <tr><th>주 소</th><td colspan="3">${escF(v.addr || '')}</td></tr>
+      <tr><th>업 태</th><td>${escF(v.up || '')}</td><th>종 목</th><td>${escF(v.jong || '')}</td></tr>
+      <tr><th>전 화</th><td colspan="3">${escF(v.tel || '')}</td></tr></table></td>
+  </tr></table>
+  <table class="sum"><tr><th>합계금액</th><td>금 ${korMoney(s.tot.amt)}원정 &nbsp; (₩${comma(s.tot.amt)})</td><th style="width:90px;">부가세 포함</th></tr></table>
+  <table class="it"><thead><tr><th style="width:10%">월/일</th><th>품 목</th><th style="width:8%">규격</th><th style="width:13%">수량(L)</th><th style="width:10%">단가</th><th style="width:15%">공급가액</th><th style="width:13%">세액</th></tr></thead>
+  <tbody>${tr}</tbody>
+  <tfoot><tr><th colspan="5">계</th><th>${comma(s.tot.sup)}</th><th>${comma(s.tot.vat)}</th></tr></tfoot></table></div>`;
+}
+function printStmt(which) {
+  loadVendors(() => {
+    const cfg = loadFuelCfg(), b = cfg.buyer || {}, vl = vendList();
+    const months = which === 'all' ? monthsBetween(cfg.from, cfg.to).filter(ym => cfg.paid[ym] || __fuelRuns.some(r => r.ym === ym)) : [which];
+    if (!months.length) { alert('출력할 달이 없어요'); return; }
+    const warns = [];
+    const pages = months.map(ym => {
+      const s = stmtOf(ym, cfg), v = __vend[cfg.vend[ym]] || vl[0] || {};
+      if (!v.nm) warns.push(ymLabel(ym) + ': 주유소(공급자)가 없어요');
+      if (s.warn) warns.push(ymLabel(ym) + ': ' + s.warn);
+      return `<div class="page">${stmtCopyHtml(s, v, b, '공급받는자')}<div class="cut">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>${stmtCopyHtml(s, v, b, '공급자')}</div>`;
+    });
+    if (!b.nm) warns.push('🏢 공급받는자(우리 단체) 이름이 비어 있어요');
+    if (warns.length && !confirm('확인해 주세요:\n\n' + warns.join('\n') + '\n\n그래도 출력할까요?')) return;
+    const w = window.open('', '_blank'); if (!w) { alert('팝업이 막혔어요 — 허용 후 다시'); return; }
+    w.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>거래명세표</title><style>
+      @page{size:A4;margin:9mm} body{font-family:"Malgun Gothic",sans-serif;color:#111;margin:0}
+      .tb{position:sticky;top:0;background:#1e293b;padding:8px;text-align:center}.tb button{padding:8px 18px;font-weight:700;border:none;border-radius:6px;background:#2563eb;color:#fff;font-size:14px}
+      .page{page-break-after:always;padding:4px 0}.page:last-child{page-break-after:auto}
+      .copy{border:2px solid #1e3a8a;padding:8px;margin:4px 0}.ttl{text-align:center;font-size:22px;font-weight:900;letter-spacing:6px;color:#1e3a8a;margin:2px 0 8px}.ttl span{font-size:11px;letter-spacing:0;font-weight:400;color:#555}
+      table{border-collapse:collapse;width:100%} td,th{border:1px solid #1e3a8a;padding:4px 5px;font-size:12px} th{background:#eef2fb;font-weight:700;white-space:nowrap}
+      .hd{margin-bottom:6px}.hd>tbody>tr>td{border:none}.in th{width:70px}.sup .vt{width:20px;text-align:center;line-height:1.3}
+      .sum{margin:6px 0}.sum th{width:80px}.sum td{font-size:14px;font-weight:800}
+      .it td{text-align:right;height:18px}.it td.l{text-align:left}.it td:first-child{text-align:center}.it tfoot th{text-align:right}
+      .cut{text-align:center;color:#999;font-size:11px;margin:8px 0;letter-spacing:2px}
+      @media print{.tb{display:none}}</style></head><body><div class="tb"><button onclick="window.print()">🖨 인쇄 / PDF 저장</button></div>${pages.join('')}</body></html>`);
+    w.document.close();
+  });
+}
 
 checkAdminAuth().then(ok => { if (ok) onDataReady(renderFuel); });
 </script>
