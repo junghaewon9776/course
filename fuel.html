@@ -90,6 +90,7 @@
       <button class="small" style="background:#2c3e50;color:#fff;" onclick="openBuyer()">🏢 우리 단체(공급받는자)</button>
       <button class="small" style="background:#b45309;color:#fff;" onclick="fillReceipts()">🧾 영수증 금액 넣기 (6~10월)</button>
       <button class="small" style="background:#1e3a8a;color:#fff;" onclick="printStmt('all')">🖨 거래명세표 전체 출력</button>
+      <label style="margin:0;font-size:13px;display:flex;align-items:center;gap:4px;">명세표 <select id="stmtCopies" onchange="setCopies(this.value)"><option value="2">2장 (공급자용·공급받는자용)</option><option value="1">1장</option></select></label>
     </div>
     <div style="overflow-x:auto;"><table class="mon-tbl" id="payTable"></table></div>
     <p class="muted" style="font-size:11px;margin-top:6px;">※ <b>실제 결제금액</b>(카드 영수증)을 넣으면 운행 합계와 비교해요. 다르면 <b>⚖ 맞추기</b>를 누르면 그 달 운행 금액을 비율대로 고쳐서 딱 맞춰요.<br>※ 거래명세표는 영수증처럼 <b>리터 = 금액 ÷ 단가</b>, <b>공급가액 = 금액 ÷ 1.1</b>(올림), 세액 = 나머지로 계산해요.</p>
@@ -151,6 +152,7 @@ function loadFuelCfg() {
     vend: c.vend || {},       // {'2026-6': vendorId}  그 달 공급자(주유소)
     smode: c.smode || {},     // {'2026-6': 'one'|'runs'}  한 줄(영수증처럼) / 운행별
     buyer: c.buyer || {},     // 공급받는자 {nm, biz, ceo, addr, tel}
+    copies: c.copies === '1' ? '1' : '2',   // 명세표 한 쪽에 2장(보관용 둘) / 1장
     // 기름 계산용 날짜만 따로 (실제 방역기록은 그대로)
     dt: c.dt || {},           // {logKey: 'YYYY-MM-DD'}  날짜 바꾼 운행
     ex: c.ex || {},           // {logKey: true}  계산에서 뺀 운행
@@ -433,8 +435,10 @@ function loadVendors(cb) {
 }
 function vendList() { return Object.keys(__vend || {}).map(id => Object.assign({ id }, __vend[id])); }
 
+function setCopies(v) { const c = loadFuelCfg(); c.copies = v === '1' ? '1' : '2'; saveFuelCfg(c); }
 function renderPayTable(cfg, runs) {
   const el = document.getElementById('payTable'); if (!el) return;
+  const cs = document.getElementById('stmtCopies'); if (cs) cs.value = cfg.copies;
   if (!__vend) { loadVendors(() => renderPayTable(loadFuelCfg(), __fuelRuns)); }
   const months = monthsBetween(cfg.from, cfg.to);
   const sys = {}; runs.forEach(r => { sys[r.ym] = (sys[r.ym] || 0) + r.amtD + r.amtG; });
@@ -602,13 +606,13 @@ function stmtOf(ym, cfg) {
   const tot = rows.reduce((a, r) => ({ sup: a.sup + r.sup, vat: a.vat + r.vat, amt: a.amt + r.amt }), { sup: 0, vat: 0, amt: 0 });
   return { ym, rows, tot, day, paid, sysTot, warn: (cfg.smode[ym] === 'runs' && cfg.paid[ym] && sysTot !== cfg.paid[ym]) ? '운행 합계가 결제금액과 달라요 — ⚖ 맞추기를 먼저 해 주세요' : '' };
 }
-function stmtCopyHtml(s, v, b, who) {
+function stmtCopyHtml(s, v, b, who, rowsMin) {
   const seal = v.seal ? `<img src="${v.seal}" style="position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:46px;height:46px;object-fit:contain;opacity:.92">` : '';
-  const ROWS = Math.max(s.rows.length, 8);
+  const ROWS = Math.max(s.rows.length, rowsMin || 8);
   let tr = '';
   for (let i = 0; i < ROWS; i++) { const r = s.rows[i];
     tr += r ? `<tr><td>${escF(r.date)}</td><td class="l">${escF(r.item)}</td><td></td><td>${r.qty ? r.qty.toLocaleString('ko-KR', { minimumFractionDigits: 3, maximumFractionDigits: 3 }) : ''}</td><td>${comma(r.price)}</td><td>${comma(r.sup)}</td><td>${comma(r.vat)}</td></tr>` : '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'; }
-  return `<div class="copy"><div class="ttl">거 래 명 세 표 <span>(${who} 보관용)</span></div>
+  return `<div class="copy${who ? '' : ' one'}"><div class="ttl">거 래 명 세 표${who ? ` <span>(${who} 보관용)</span>` : ''}</div>
   <table class="hd"><tr>
     <td style="width:46%;vertical-align:top;padding:0;border:none;"><table class="in">
       <tr><th>일 자</th><td>${s.day.replace(/-/g, '. ')}</td></tr>
@@ -638,7 +642,9 @@ function printStmt(which) {
       const s = stmtOf(ym, cfg), v = __vend[cfg.vend[ym]] || vl[0] || {};
       if (!v.nm) warns.push(ymLabel(ym) + ': 주유소(공급자)가 없어요');
       if (s.warn) warns.push(ymLabel(ym) + ': ' + s.warn);
-      return `<div class="page">${stmtCopyHtml(s, v, b, '공급받는자')}<div class="cut">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>${stmtCopyHtml(s, v, b, '공급자')}</div>`;
+      return cfg.copies === '1'
+        ? `<div class="page">${stmtCopyHtml(s, v, b, '', 22)}</div>`
+        : `<div class="page">${stmtCopyHtml(s, v, b, '공급받는자')}<div class="cut">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>${stmtCopyHtml(s, v, b, '공급자')}</div>`;
     });
     if (!b.nm) warns.push('🏢 공급받는자(우리 단체) 이름이 비어 있어요');
     if (warns.length && !confirm('확인해 주세요:\n\n' + warns.join('\n') + '\n\n그래도 출력할까요?')) return;
@@ -653,6 +659,7 @@ function printStmt(which) {
       .sum{margin:6px 0}.sum th{width:80px}.sum td{font-size:14px;font-weight:800}
       .it td{text-align:right;height:18px}.it td.l{text-align:left}.it td:first-child{text-align:center}.it tfoot th{text-align:right}
       .cut{text-align:center;color:#999;font-size:11px;margin:8px 0;letter-spacing:2px}
+      .copy.one{padding:12px}.copy.one .ttl{font-size:28px;margin:6px 0 14px}.copy.one td,.copy.one th{font-size:13px;padding:6px}.copy.one .it td{height:24px}
       @media print{.tb{display:none}}</style></head><body><div class="tb"><button onclick="window.print()">🖨 인쇄 / PDF 저장</button></div>${pages.join('')}</body></html>`);
     w.document.close();
   });
