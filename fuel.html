@@ -27,6 +27,10 @@
     .mon-tbl th, .mon-tbl td { border:1px solid #e0e0e0; padding:6px 8px; text-align:right; }
     .mon-tbl th { background:#eef3fb; text-align:center; }
     @media print { header, nav, .no-print { display:none !important; } .fuel-wrap { max-height:none; overflow:visible; } }
+    /* 🔒 확정(결산) 중 — 고치는 칸·단추는 흐리게 막고, 명세표 출력은 그대로 */
+    .fuel-locked .container > .card:first-child input, .fuel-locked .container > .card:first-child button,
+    .fuel-locked #payTable input, .fuel-locked #payTable select, .fuel-locked #fuelTable input, .fuel-locked #fuelTable button,
+    .fuel-locked [onclick*="addRun"], .fuel-locked #stmtCopies, .fuel-locked #stmtQdec, .fuel-locked #stmtQround { pointer-events:none; opacity:.5; }
   </style>
 </head>
 <body>
@@ -81,6 +85,18 @@
   <div class="card">
     <h2>📅 월별 마감</h2>
     <div style="overflow-x:auto;"><table class="mon-tbl" id="monTable"></table></div>
+  </div>
+
+  <!-- 📌 결산 확정 · 기록 -->
+  <div class="card no-print" id="closeCard">
+    <h2>📌 결산 확정 · 지난 결산</h2>
+    <div id="lockBar"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;">
+      <button class="small" style="background:#7c2d12;color:#fff;" onclick="closeNow()">📌 지금 내용으로 확정 (결산)</button>
+      <button class="small" style="background:#0f766e;color:#fff;" onclick="newSettle()">🆕 새 정산 시작</button>
+    </div>
+    <div style="overflow-x:auto;"><table class="mon-tbl" id="closeTable"></table></div>
+    <p class="muted" style="font-size:11px;margin-top:6px;">※ <b>확정</b>하면 그때 내용(운행·금액·날짜·결제금액·명세표 설정)이 통째로 저장되고 <b>수정이 막혀요</b>. 고칠 땐 🔓 수정 풀기.<br>※ 지난 결산은 계속 쌓여요 — <b>📋 이걸로 다시 열기</b>로 그때 내용을 불러와 고치거나 이어서 쓸 수 있어요 (지금 내용은 자동으로 한 번 저장해 둬요).</p>
   </div>
 
   <!-- 월별 결제 · 거래명세표 -->
@@ -160,10 +176,13 @@ function loadFuelCfg() {
     // 기름 계산용 날짜만 따로 (실제 방역기록은 그대로)
     dt: c.dt || {},           // {logKey: 'YYYY-MM-DD'}  날짜 바꾼 운행
     ex: c.ex || {},           // {logKey: true}  계산에서 뺀 운행
-    extra: c.extra || {}      // {xKey: {date, ev, jo, driver, assist}}  계산에만 더한 운행
+    extra: c.extra || {},     // {xKey: {date, ev, jo, driver, assist}}  계산에만 더한 운행
+    lock: c.lock || null      // 📌 확정(결산) {id, label, at} — 있으면 수정 막힘
   };
 }
-function saveFuelCfg(c) {
+function saveFuelCfg(c, force) {
+  // 🔒 확정(결산)된 동안은 못 바꿈 — 🔓 수정 풀기 / 새 정산 시작만 force 로
+  if (!force && c.lock) { alert(`🔒 「${c.lock.label || '결산'}」 확정돼서 지금은 못 바꿔요.\n바꾸려면 위 📌 결산 칸에서 🔓 수정 풀기를 눌러 주세요.`); renderFuel(); return; }
   c.__t = Date.now();
   try { localStorage.setItem('__fuelCfg', JSON.stringify(c)); } catch (e) {}
   clearTimeout(__fuelCloudT);
@@ -481,7 +500,98 @@ function payTip(more, cfg) {
   if (more < 0) return `<div style="font-size:11px;color:#2563eb;font-weight:700;line-height:1.4;margin-top:2px;">💡 운행이 ${comma(-more)}원 많아요<br>→ 몇 운행 금액을 조금씩 줄이면 돼요</div>`;
   return '';
 }
+// ═══════════════ 📌 결산 확정 · 지난 결산 (/fuelClosings/{id}) ═══════════════
+let __closings = null;
+function loadClosings(cb) {
+  try { fbDb.ref('/fuelClosings').once('value').then(s => { __closings = s.val() || {}; cb && cb(); }).catch(() => { __closings = {}; cb && cb(); }); } catch (e) { __closings = {}; cb && cb(); }
+}
+// 지금 계산을 통째로 저장 (설정 + 월별 요약)
+function snapNow(label, kind) {
+  const c = loadFuelCfg(), cfg = JSON.parse(JSON.stringify(c)); delete cfg.lock;
+  const months = {}; let tot = 0;
+  __fuelRuns.forEach(r => { const m = months[r.ym] = months[r.ym] || { n: 0, d: 0, g: 0 }; m.n++; m.d += r.amtD; m.g += r.amtG; tot += r.amtD + r.amtG; });
+  Object.keys(months).forEach(ym => { if (c.paid[ym]) months[ym].paid = c.paid[ym]; });
+  const id = 'c' + Date.now().toString(36);
+  const snap = { at: new Date().toISOString(), label: label || '결산', kind: kind || 'close', from: c.from, to: c.to, n: __fuelRuns.length, tot, months, cfg };
+  return fbDb.ref('/fuelClosings/' + id).set(snap).then(() => { __closings = __closings || {}; __closings[id] = snap; return id; });
+}
+function closeNow() {
+  const c = loadFuelCfg();
+  if (c.lock) { alert('이미 확정돼 있어요. 고치려면 🔓 수정 풀기 먼저.'); return; }
+  const lab = prompt('📌 이 결산 이름', (c.from || '').slice(0, 4) + ' 방역 기름정산 (' + (c.from || '').slice(5) + ' ~ ' + (c.to || '').slice(5) + ')'); if (lab === null) return;
+  const bad = monthsBetween(c.from, c.to).filter(ym => { const s = __fuelRuns.filter(r => r.ym === ym).reduce((a, r) => a + r.amtD + r.amtG, 0); return c.paid[ym] && s !== c.paid[ym]; });
+  if (bad.length && !confirm('결제금액과 안 맞는 달이 있어요: ' + bad.map(ymLabel).join(', ') + '\n그래도 확정할까요?')) return;
+  const pw = prompt('🔒 잠금 비밀번호 (수정 풀 때 물어봐요 · 비우면 비밀번호 없이)', ''); if (pw === null) return;
+  if (pw.trim() && pw.trim().length < 4) { alert('비밀번호는 4자 이상으로 해 주세요'); return; }
+  if (pw.trim() && prompt('한 번 더 쳐 주세요') !== pw) { alert('두 번 친 게 달라요'); return; }
+  snapNow(lab.trim() || '결산', 'close').then(id => {
+    const c2 = loadFuelCfg(); c2.lock = { id, label: lab.trim() || '결산', at: new Date().toISOString() }; if (pw.trim()) c2.lock.pw = lockHash(pw.trim()); saveFuelCfg(c2, true);
+    renderFuel(); alert('📌 확정했어요 — 지금부터 수정이 막혀요. 지난 결산 목록에 저장됐어요.');
+  }).catch(e => alert('저장 실패: ' + e.message));
+}
+// 잠금 비밀번호 — 글자 그대로 말고 암호값으로
+function lockHash(s) { s = 'fuel-lock:' + String(s || ''); let h = 5381; for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0; return 'p' + h.toString(36); }
+function unlockNow() {
+  const c = loadFuelCfg(); if (!c.lock) return;
+  if (c.lock.pw) { const v = prompt('🔒 잠금 비밀번호'); if (v === null) return; if (lockHash(v.trim()) !== c.lock.pw) { alert('비밀번호가 틀렸어요'); return; } }
+  if (!confirm(`🔓 「${c.lock.label}」 확정을 풀고 다시 고칠까요?\n(확정 때 저장한 내용은 지난 결산에 그대로 남아요)`)) return;
+  c.lock = null; saveFuelCfg(c, true); renderFuel();
+}
+// 📋 지난 결산 다시 열기 — 지금 내용은 자동 저장 후 그때 설정으로 바꿈
+function reopenClose(id) {
+  const s = __closings && __closings[id]; if (!s) return;
+  if (!confirm(`📋 「${s.label}」(${String(s.at).slice(0, 10)}) 내용을 다시 열까요?\n\n· 지금 화면 내용은 「자동 저장」으로 지난 결산에 먼저 남겨요\n· 다시 연 내용은 수정할 수 있어요 (확정 풀린 상태)`)) return;
+  snapNow('자동 저장 (다시 열기 전)', 'auto').then(() => {
+    const c = JSON.parse(JSON.stringify(s.cfg)); c.lock = null; saveFuelCfg(c, true); renderFuel(); alert('📋 다시 열었어요');
+  }).catch(e => alert('실패: ' + e.message));
+}
+// 🆕 새 정산 — 운행 금액·날짜 편집·결제금액 비우기 (주유소·우리 단체·기본금액·명세표 설정은 그대로)
+function newSettle() {
+  const c = loadFuelCfg();
+  const from = prompt('🆕 새 정산 기간 시작 (예: 2027-06-01)\n지금 내용은 「자동 저장」으로 지난 결산에 먼저 남겨요', ((Number((c.from || '').slice(0, 4)) || new Date().getFullYear()) + 1) + '-06-01'); if (!from) return;
+  const to = prompt('끝 (예: 2027-10-31)', from.slice(0, 4) + '-10-31'); if (!to) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) { alert('날짜는 2027-06-01 모양으로'); return; }
+  snapNow('자동 저장 (새 정산 시작 전)', 'auto').then(() => {
+    const n = loadFuelCfg();
+    Object.assign(n, { from, to, amts: {}, dt: {}, ex: {}, extra: {}, paid: {}, pday: {}, sprice: {}, vend: {}, smode: {}, lock: null });
+    saveFuelCfg(n, true); renderFuel(); alert('🆕 새 정산을 시작했어요');
+  }).catch(e => alert('실패: ' + e.message));
+}
+function delClose(id) {
+  const s = __closings && __closings[id]; if (!s) return;
+  const c = loadFuelCfg();
+  if (c.lock && c.lock.id === id) { alert('지금 확정 중인 결산이라 못 지워요. 🔓 수정 풀기 먼저.'); return; }
+  if (!confirm(`🗑 「${s.label}」(${String(s.at).slice(0, 10)}) 기록을 지울까요? 되돌릴 수 없어요.`)) return;
+  fbDb.ref('/fuelClosings/' + id).remove().then(() => { delete __closings[id]; renderCloseCard(loadFuelCfg()); }).catch(e => alert('실패: ' + e.message));
+}
+function viewClose(id) {
+  const s = __closings && __closings[id]; if (!s) return;
+  const ms = Object.keys(s.months || {}).sort((a, b) => { const x = a.split('-').map(Number), y = b.split('-').map(Number); return x[0] - y[0] || x[1] - y[1]; });
+  let h = `<h3 style="margin:0 0 6px;">👁 ${escF(s.label)} <button class="small gray" style="float:right" onclick="fPopClose()">닫기</button></h3><div class="muted" style="font-size:12px;margin-bottom:8px;">${String(s.at).replace('T', ' ').slice(0, 16)} 저장 · 기간 ${s.from} ~ ${s.to}</div>`;
+  h += '<table class="mon-tbl"><thead><tr><th>월</th><th>건수</th><th>경유</th><th>휘발유</th><th>합계</th><th>결제금액</th></tr></thead><tbody>' +
+    ms.map(ym => { const m = s.months[ym]; return `<tr><td style="text-align:center;">${ymLabel(ym)}</td><td>${m.n}건</td><td>${comma(m.d)}</td><td>${comma(m.g)}</td><td style="font-weight:700;">${comma(m.d + m.g)}</td><td>${m.paid ? comma(m.paid) + (m.paid === m.d + m.g ? ' ✅' : ' ⚠') : '-'}</td></tr>`; }).join('') +
+    `</tbody><tfoot><tr style="font-weight:800;background:#eef3fb;"><td style="text-align:center;">합계</td><td>${s.n}건</td><td colspan="2"></td><td>${comma(s.tot)}</td><td></td></tr></tfoot></table>`;
+  h += `<div style="text-align:right;margin-top:10px;"><button class="small" style="background:#1e3a8a;color:#fff;" onclick="fPopClose();reopenClose('${id}')">📋 이걸로 다시 열기</button></div>`;
+  fPop(h);
+}
+function renderCloseCard(cfg) {
+  const lb = document.getElementById('lockBar'); if (!lb) return;
+  document.body.classList.toggle('fuel-locked', !!cfg.lock);
+  lb.innerHTML = cfg.lock
+    ? `<div style="background:#fef2f2;border:2px solid #dc2626;border-radius:10px;padding:10px 12px;font-weight:700;color:#7f1d1d;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">🔒 「${escF(cfg.lock.label)}」 확정됨 (${String(cfg.lock.at).slice(0, 10)})${cfg.lock.pw ? " · 🔑 비밀번호 잠금" : ""} — 수정이 막혀 있어요. 명세표 출력은 돼요.<button class="small" style="background:#dc2626;color:#fff;margin-left:auto;" onclick="unlockNow()">🔓 수정 풀기</button></div>`
+    : '<div class="muted" style="font-size:12.5px;">✏️ 지금은 고칠 수 있는 상태예요. 다 맞추면 📌 확정하세요.</div>';
+  const t = document.getElementById('closeTable');
+  if (!__closings) { t.innerHTML = '<tr><td style="color:#aaa;">📡 지난 결산 불러오는 중...</td></tr>'; loadClosings(() => renderCloseCard(loadFuelCfg())); return; }
+  const ids = Object.keys(__closings).sort((a, b) => String(__closings[b].at).localeCompare(String(__closings[a].at)));
+  t.innerHTML = '<thead><tr><th>저장한 때</th><th>이름</th><th>기간</th><th>건수</th><th>총 합계</th><th></th></tr></thead><tbody>' +
+    (ids.length ? ids.map(id => { const s = __closings[id], on = cfg.lock && cfg.lock.id === id;
+      return `<tr${s.kind === 'auto' ? ' style="color:#64748b;"' : ''}><td style="text-align:center;white-space:nowrap;">${String(s.at).replace('T', ' ').slice(0, 16)}</td>
+        <td style="text-align:left;">${s.kind === 'auto' ? '💾 ' : '📌 '}${escF(s.label)}${on ? ' <b style="color:#dc2626;">(지금 확정)</b>' : ''}</td><td style="white-space:nowrap;">${s.from} ~ ${s.to}</td><td>${s.n}건</td><td style="font-weight:700;">${comma(s.tot)}원</td>
+        <td class="keep" style="white-space:nowrap;"><button class="small" style="background:#475569;color:#fff;" onclick="viewClose('${id}')">👁 보기</button> <button class="small" style="background:#1e3a8a;color:#fff;" onclick="reopenClose('${id}')">📋 다시 열기</button> <button class="small" style="background:#dc2626;color:#fff;" onclick="delClose('${id}')">🗑</button></td></tr>`; }).join('')
+      : '<tr><td colspan="6" style="text-align:center;color:#aaa;padding:12px;">아직 확정한 결산이 없어요</td></tr>') + '</tbody>';
+}
 function renderPayTable(cfg, runs) {
+  renderCloseCard(cfg);
   const el = document.getElementById('payTable'); if (!el) return;
   const cs = document.getElementById('stmtCopies'); if (cs) cs.value = cfg.copies;
   const qd = document.getElementById('stmtQdec'); if (qd) qd.value = String(cfg.qdec);
