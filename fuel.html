@@ -65,6 +65,18 @@
       휘발유 <input type="text" inputmode="numeric" id="fDefG" placeholder="17,000" onchange="saveCfgFromUI();renderRunOnly()" style="width:110px;">
       <button class="small gray" onclick="resetAmts()">↺ 전부 기본값으로</button>
     </div>
+    <div class="price-row">
+      <label style="margin:0;">⛽ 기름통 최대 (운행 1번에 넣을 수 있는 리터)</label>
+      경유 <input type="text" inputmode="decimal" id="fCapD" placeholder="예: 200" onchange="saveCfgFromUI();renderRunOnly()" style="width:80px;">L
+      휘발유 <input type="text" inputmode="decimal" id="fCapG" placeholder="예: 20" onchange="saveCfgFromUI();renderRunOnly()" style="width:80px;">L
+      <span class="muted" style="font-size:11px;">비우면 한도 없음 · ⚖ 맞추기가 이 한도를 안 넘게 나눠요</span>
+    </div>
+    <div class="price-row">
+      <label style="margin:0;">💰 운행 1번 최대 금액 (하루 한 명 도는 만큼)</label>
+      경유 <input type="text" inputmode="numeric" id="fCapWD" placeholder="예: 250,000" onchange="saveCfgFromUI();renderRunOnly()" style="width:110px;">원
+      휘발유 <input type="text" inputmode="numeric" id="fCapWG" placeholder="예: 30,000" onchange="saveCfgFromUI();renderRunOnly()" style="width:110px;">원
+      <span class="muted" style="font-size:11px;">리터 한도와 둘 다 있으면 더 작은 쪽</span>
+    </div>
     <div style="margin-top:10px;">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
         <div style="font-weight:700;color:#2c3e50;">📅 월별 평균 단가 (원/L) — 오피넷 평균 + α</div>
@@ -159,6 +171,8 @@ function loadFuelCfg() {
     qdec: [0, 1, 2, 3].indexOf(Number(c.qdec)) >= 0 && c.qdec !== '' && c.qdec != null ? Number(c.qdec) : 3,   // 명세표 리터 소수 자리
     qround: c.qround === 'round' ? 'round' : 'floor',                                                         // 버림(절삭) / 반올림
     unit: [1, 10, 100, 1000].indexOf(Number(c.unit)) >= 0 ? Number(c.unit) : 1000,                           // ⚖ 맞추기 운행 금액 원 맞춤 단위
+    capD: Number(c.capD) || 0, capG: Number(c.capG) || 0,                                                     // 기름통 최대 리터 (0 = 한도 없음)
+    capWD: Number(c.capWD) || 0, capWG: Number(c.capWG) || 0,                                                 // 운행 1번 최대 금액(원)
     // 기름 계산용 날짜만 따로 (실제 방역기록은 그대로)
     dt: c.dt || {},           // {logKey: 'YYYY-MM-DD'}  날짜 바꾼 운행
     ex: c.ex || {},           // {logKey: true}  계산에서 뺀 운행
@@ -178,6 +192,10 @@ function saveCfgFromUI() {
   c.budget = num(document.getElementById('fBudget').value) || c.budget;
   const dd = num(document.getElementById('fDefD').value); c.defD = dd || 200000;
   const dg = num(document.getElementById('fDefG').value); c.defG = dg || 17000;
+  c.capD = fnum(document.getElementById('fCapD').value) || 0;
+  c.capG = fnum(document.getElementById('fCapG').value) || 0;
+  c.capWD = num(document.getElementById('fCapWD').value) || 0;
+  c.capWG = num(document.getElementById('fCapWG').value) || 0;
   saveFuelCfg(c);
 }
 function setPrice(ym, kind, val) {
@@ -311,6 +329,10 @@ function renderFuel() {
   document.getElementById('fBudget').value = comma(cfg.budget);
   document.getElementById('fDefD').value = comma(cfg.defD);
   document.getElementById('fDefG').value = comma(cfg.defG);
+  document.getElementById('fCapD').value = cfg.capD || '';
+  document.getElementById('fCapG').value = cfg.capG || '';
+  document.getElementById('fCapWD').value = cfg.capWD ? comma(cfg.capWD) : '';
+  document.getElementById('fCapWG').value = cfg.capWG ? comma(cfg.capWG) : '';
   renderPriceTable(cfg);
   renderRunOnly(cfg);
 }
@@ -460,7 +482,9 @@ function renderPayTable(cfg, runs) {
   el.innerHTML = `<thead><tr><th>월</th><th>운행 합계</th><th>실제 결제금액</th><th>차이</th><th>명세표 날짜</th><th>단가(원/L)</th><th>주유소</th><th>명세표 줄</th><th></th></tr></thead><tbody>` +
     months.map(ym => {
       const s = sys[ym] || 0, p = cfg.paid[ym], diff = p ? s - p : 0;
-      const dTxt = !p ? '<span style="color:#aaa;">-</span>' : (diff === 0 ? '<b style="color:#16a34a;">✅ 맞음</b>' : `<b style="color:#dc2626;">${diff > 0 ? '+' : ''}${comma(diff)}</b>`);
+      let dTxt = !p ? '<span style="color:#aaa;">-</span>' : (diff === 0 ? '<b style="color:#16a34a;">✅ 맞음</b>' : `<b style="color:#dc2626;">${diff > 0 ? '+' : ''}${comma(diff)}</b>`);
+      if (p && (cfg.capD || cfg.capG || cfg.capWD || cfg.capWG)) { const rm = runs.filter(r => r.ym === ym), pl = rm.length ? planMatch(rm, p, cfg) : { short: p, needRuns: 1 };
+        if (pl.short > 0) dTxt += `<div style="font-size:11px;color:#b45309;font-weight:700;">⛽ 기름통 한도로 ${comma(pl.short)}원 모자람 → 운행 ${pl.needRuns || '?'}일 더</div>`; }
       const pr = cfg.sprice[ym] || (cfg.prices[ym] && cfg.prices[ym].d) || '';
       return `<tr>
         <td style="text-align:center;font-weight:700;">${ymLabel(ym)}</td>
@@ -495,13 +519,51 @@ function matchMonth(ym) {
   const tot = rs.reduce((s, r) => s + r.amtD + r.amtG, 0);
   if (!target || !rs.length) { alert('그 달 운행이나 결제금액이 없어요'); return; }
   if (!tot) { alert('운행 금액이 0원이라 비율로 맞출 수 없어요'); return; }
-  if (!confirm(`${ymLabel(ym)} 운행 ${rs.length}건 합계 ${comma(tot)}원 → ${comma(target)}원으로 맞출까요?\n\n· 각 운행 금액을 같은 비율로 나눠서 ${comma(c.unit || 1)}원 단위로 깔끔하게\n· 남는 끝돈은 마지막 운행에 붙여서 합계는 딱 ${comma(target)}원`)) return;
-  // 운행 금액은 「원 맞춤 단위」(1·10·100·1,000원)로 깔끔하게, 남는 끝돈은 마지막 운행 경유에 붙여서 합계는 딱 맞게
-  const U = c.unit || 1, f = target / tot; let sum = 0;
-  const rd = x => Math.round(x / U) * U;
-  rs.forEach(r => { const a = c.amts[r.key] = c.amts[r.key] || {}; a.d = rd(r.amtD * f); a.g = rd(r.amtG * f); sum += a.d + a.g; });
-  const last = c.amts[rs[rs.length - 1].key]; last.d += target - sum;
+  const plan = planMatch(rs, target, c);
+  if (plan.short > 0) {
+    alert(`⛽ 기름통 한도 때문에 ${ymLabel(ym)}은 최대 ${comma(target - plan.short)}원까지만 넣을 수 있어요.\n\n모자라는 돈: ${comma(plan.short)}원\n→ 운행을 ${plan.needRuns}일 더 넣어 주세요 (운행별 상세 ➕ 운행 더하기)\n   또는 기름통 최대 리터를 확인해 주세요.`);
+    return;
+  }
+  if (!confirm(`${ymLabel(ym)} 운행 ${rs.length}건 합계 ${comma(tot)}원 → ${comma(target)}원으로 맞출까요?\n\n· 각 운행 금액을 같은 비율로 나눠서 ${comma(c.unit || 1)}원 단위로 깔끔하게` + (c.capD || c.capG || c.capWD || c.capWG ? `\n· 운행 1번 한도(기름통 리터·최대 금액)를 안 넘게` : '') + `\n· 남는 끝돈은 자리 있는 운행에 붙여서 합계는 딱 ${comma(target)}원`)) return;
+  plan.slots.forEach(s => { const a = c.amts[s.key] = c.amts[s.key] || {}; a[s.k] = s.v; });
   saveFuelCfg(c); renderRunOnly();
+}
+// ⚖ 나누기 계획 — 비율대로 나누되 기름통 한도(리터 × 단가)를 안 넘게, 원 맞춤 단위로, 끝돈은 자리 있는 칸에
+//   돌려줌: {slots:[{key,k,v}], short: 모자라는 돈, needRuns: 더 필요한 운행 수}
+function planMatch(rs, target, c) {
+  const U = c.unit || 1, slots = [];
+  // 한 칸(운행 × 기름 종류) 최대 금액 = 리터 한도 × 단가 와 금액 한도 중 작은 쪽 (원 맞춤 단위로 내림)
+  const capOf = (lit, won, pr) => { let m = Infinity; if (lit && pr) m = Math.min(m, lit * pr); if (won) m = Math.min(m, won); return m === Infinity ? m : Math.floor(m / U) * U; };
+  rs.forEach(r => {
+    slots.push({ key: r.key, k: 'd', w: r.amtD || 0, cap: capOf(c.capD, c.capWD, r.pD) });
+    slots.push({ key: r.key, k: 'g', w: r.amtG || 0, cap: capOf(c.capG, c.capWG, r.pG) });
+  });
+  let ws = slots.reduce((s, x) => s + x.w, 0);
+  if (!ws) { slots.forEach(x => { x.w = 1; }); ws = slots.length; }
+  const room = slots.reduce((s, x) => s + x.cap, 0);
+  if (room < target) {
+    const r0 = rs[0] || {}, cd = capOf(c.capD, c.capWD, r0.pD), cg = capOf(c.capG, c.capWG, r0.pG);
+    const perRun = (cd === Infinity ? 0 : cd) + (cg === Infinity ? 0 : cg);
+    return { slots: [], short: target - room, needRuns: perRun ? Math.ceil((target - room) / perRun) : 1 };
+  }
+  // 물 채우기: 한도에 걸린 칸은 한도로 고정, 남은 돈은 나머지 칸에 비율대로 다시
+  slots.forEach(x => { x.v = 0; x.fix = false; });
+  for (let it = 0; it < 30; it++) {
+    const free = slots.filter(x => !x.fix), left = target - slots.filter(x => x.fix).reduce((s, x) => s + x.v, 0);
+    const fw = free.reduce((s, x) => s + x.w, 0) || free.length;
+    let over = false;
+    free.forEach(x => { x.v = left * (fw ? (x.w || (fw === free.length ? 1 : 0)) / fw : 0); if (x.v > x.cap) { x.v = x.cap; x.fix = true; over = true; } });
+    if (!over) break;
+  }
+  // 원 맞춤 단위로 (한도 칸은 내림), 끝돈은 자리 있는 칸부터
+  slots.forEach(x => { x.v = x.v >= x.cap ? x.cap : Math.round(x.v / U) * U; if (x.v > x.cap) x.v = x.cap; });
+  let rest = target - slots.reduce((s, x) => s + x.v, 0);
+  for (let i = slots.length - 1; i >= 0 && rest !== 0; i--) {
+    const x = slots[i]; if (!x.w && rest > 0 && slots.some(y => y.w)) continue;
+    const add = rest > 0 ? Math.min(rest, x.cap - x.v) : Math.max(rest, -x.v);
+    x.v += add; rest -= add;
+  }
+  return { slots: slots.map(x => ({ key: x.key, k: x.k, v: x.v })), short: rest > 0 ? rest : 0, needRuns: 0 };
 }
 
 // ── 간단 팝업 ──
