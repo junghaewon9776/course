@@ -359,14 +359,31 @@ function renderRunOnly(cfg) {
   document.getElementById('fuelCount').innerHTML = `(${runs.length}건${nMv ? ` · 날짜 바꾼 ${nMv}` : ''}${nX ? ` · 더한 ${nX}` : ''}${nOut ? ` · 뺀 ${nOut}` : ''}) <button class="small" style="background:#16a34a;color:#fff;margin-left:6px;" onclick="addRun()">➕ 운행 더하기</button>`;
   const tbl = document.getElementById('fuelTable');
   const runRow = r => r.out
-    ? `<tr style="background:#f3f4f6;color:#9ca3af;text-decoration:line-through;"><td>${r.dateStr}</td><td class="l">${escF(r.ev)}${r.co ? ' · ' + escF(r.co) : ''}</td><td>${escF(r.jo)}</td><td class="l">${escF(r.driver)}</td><td colspan="6" style="text-align:center;text-decoration:none;">계산에서 뺌 <button class="small" style="background:#2563eb;color:#fff;text-decoration:none;" onclick="inRun('${r.key}')">↩ 다시 넣기</button></td></tr>`
+    ? `<tr style="background:#f3f4f6;color:#9ca3af;text-decoration:line-through;"><td>${r.dateStr}</td><td class="l">${escF(r.ev)}${r.co ? ' · ' + escF(r.co) : ''}</td><td>${escF(r.jo)}</td><td class="l">${escF(r.driver)}</td><td colspan="8" style="text-align:center;text-decoration:none;">계산에서 뺌 <button class="small" style="background:#2563eb;color:#fff;text-decoration:none;" onclick="inRun('${r.key}')">↩ 다시 넣기</button></td></tr>`
     : runRowHtml(r);
+  // 줄마다 합계·누적, 달이 바뀔 때 월별 소계 줄
+  let body = '', cum = 0, mon = null, ms = null;
+  const subRow = () => {
+    if (!ms) return '';
+    const p = cfg.paid[ms.ym], df = p ? ms.d + ms.g - p : null;
+    return `<tr style="background:#eef3fb;font-weight:800;"><td colspan="4" style="text-align:left;">📅 ${ymLabel(ms.ym)} 소계 · ${ms.n}건${p ? ` <span style="font-weight:700;color:${df === 0 ? '#16a34a' : '#dc2626'};">(결제 ${comma(p)}원 · ${df === 0 ? '✅ 맞음' : (df > 0 ? '+' : '') + comma(df)})</span>` : ''}</td>
+      <td class="grp-d">-</td><td class="grp-d">${ms.ld.toFixed(1)}L</td><td class="grp-d">${comma(ms.d)}</td>
+      <td class="grp-g">-</td><td class="grp-g">${ms.lg.toFixed(1)}L</td><td class="grp-g">${comma(ms.g)}</td>
+      <td>${comma(ms.d + ms.g)}</td><td>${comma(cum)}</td></tr>`;
+  };
+  __fuelAll.forEach(r => {
+    if (r.ym !== mon) { body += subRow(); mon = r.ym; ms = { ym: r.ym, n: 0, d: 0, g: 0, ld: 0, lg: 0 }; }
+    if (!r.out) { cum += r.amtD + r.amtG; ms.n++; ms.d += r.amtD; ms.g += r.amtG; ms.ld += r.litD; ms.lg += r.litG; }
+    body += r.out ? runRow(r) : runRowHtml(r, cum);
+  });
+  body += subRow();
   tbl.innerHTML = `<thead><tr>
       <th>날짜 <span style="font-weight:400;font-size:10px;">(계산용)</span></th><th>행사·코스</th><th>조</th><th>운전/보조</th>
       <th class="grp-d">경유단가</th><th class="grp-d">경유리터</th><th class="grp-d">경유금액</th>
       <th class="grp-g">휘발유단가</th><th class="grp-g">휘발유리터</th><th class="grp-g">휘발유금액</th>
+      <th>합계</th><th>누적</th>
     </tr></thead><tbody>` +
-    (__fuelAll.length ? __fuelAll.map(runRow).join('') : '<tr><td colspan="10" style="text-align:center;color:#aaa;padding:20px;">이 기간에 운행기록이 없습니다</td></tr>') + `</tbody>` + runFoot(runs, totLD, totD, totLG, totG);
+    (__fuelAll.length ? body : '<tr><td colspan="12" style="text-align:center;color:#aaa;padding:20px;">이 기간에 운행기록이 없습니다</td></tr>') + `</tbody>` + runFoot(runs, totLD, totD, totLG, totG);
 
   // 전체 요약
   const grand = totD + totG, budget = cfg.budget || 0, diff = grand - budget;
@@ -380,7 +397,7 @@ function renderRunOnly(cfg) {
 }
 
 // 운행별 상세 한 줄 — 날짜는 계산용으로 바꿀 수 있음(방역기록은 그대로), 🗑 계산에서 빼기
-function runRowHtml(r) {
+function runRowHtml(r, cum) {
   const tag = r.extra ? ' <span style="font-size:10px;color:#16a34a;font-weight:700;">더함</span>' : (r.moved ? ` <span style="font-size:10px;color:#b45309;font-weight:700;" title="원래 ${r.orig}">바꿈</span>` : '');
   return `<tr${r.moved || r.extra ? ' style="background:#fffbeb;"' : ''}>
       <td style="white-space:nowrap;"><input type="date" value="${r.date}" style="width:128px;" onchange="setRunDate('${r.key}',this.value)" title="${r.extra ? '직접 더한 운행' : '원래 날짜 ' + r.orig}">${tag} <button class="small" style="background:#dc2626;color:#fff;padding:1px 6px;" title="${r.extra ? '지우기' : '계산에서 빼기'}" onclick="exRun('${r.key}')">🗑</button></td>
@@ -393,13 +410,16 @@ function runRowHtml(r) {
       <td class="grp-g"><input type="text" inputmode="numeric" value="${comma(r.pG)}" onchange="setRun('${r.key}','g','price',this.value,0)"></td>
       <td class="grp-g"><input class="lit" type="number" step="0.1" value="${r.litG ? r.litG.toFixed(1) : ''}" onchange="setRun('${r.key}','g','lit',this.value,${r.pG})"></td>
       <td class="grp-g"><input type="text" inputmode="numeric" value="${comma(r.amtG)}" onchange="setRun('${r.key}','g','amt',this.value,0)"></td>
+      <td style="font-weight:700;">${comma(r.amtD + r.amtG)}</td>
+      <td style="color:#475569;">${cum != null ? comma(cum) : ''}</td>
     </tr>`;
 }
 function runFoot(runs, totLD, totD, totLG, totG) {
   return `<tfoot><tr style="font-weight:800;background:#faf7ff;">
-      <td colspan="4">합계 ${runs.length}건 (뺀 운행 제외)</td>
+      <td colspan="4">전체 합계 ${runs.length}건 (뺀 운행 제외)</td>
       <td class="grp-d">-</td><td class="grp-d">${totLD.toFixed(1)}L</td><td class="grp-d">${comma(totD)}원</td>
       <td class="grp-g">-</td><td class="grp-g">${totLG.toFixed(1)}L</td><td class="grp-g">${comma(totG)}원</td>
+      <td>${comma(totD + totG)}원</td><td></td>
     </tr></tfoot>`;
 }
 
