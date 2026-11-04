@@ -61,8 +61,9 @@
     </div>
     <div class="price-row">
       <label style="margin:0;">운행당 기본금액</label>
-      경유 <input type="text" inputmode="numeric" id="fDefD" placeholder="200,000" onchange="saveCfgFromUI();renderRunOnly()" style="width:110px;">
+      경유 <input type="text" inputmode="numeric" id="fDefD" placeholder="230,000" onchange="saveCfgFromUI();renderRunOnly()" style="width:110px;">
       휘발유 <input type="text" inputmode="numeric" id="fDefG" placeholder="17,000" onchange="saveCfgFromUI();renderRunOnly()" style="width:110px;">
+      <button class="small" style="background:#2563eb;color:#fff;" onclick="unifyAmts()">🔁 모든 운행 금액 통일</button>
       <button class="small gray" onclick="resetAmts()">↺ 전부 기본값으로</button>
     </div>
     <div style="margin-top:10px;">
@@ -144,7 +145,7 @@ function loadFuelCfg() {
     from: c.from || (yr + '-06-01'),
     to: c.to || (yr + '-10-31'),
     budget: c.budget || 9600000,
-    defD: (c.defD != null ? c.defD : 200000),
+    defD: (c.defD != null ? c.defD : 230000),
     defG: (c.defG != null ? c.defG : 17000),
     prices: c.prices || {},   // {'2026-6':{d,g}}
     amts: c.amts || {},       // {logKey:{d,g,pd,pg}}  운행별 금액·단가(수정분)
@@ -174,7 +175,7 @@ function saveCfgFromUI() {
   c.from = document.getElementById('fFrom').value || c.from;
   c.to = document.getElementById('fTo').value || c.to;
   c.budget = num(document.getElementById('fBudget').value) || c.budget;
-  const dd = num(document.getElementById('fDefD').value); c.defD = dd || 200000;
+  const dd = num(document.getElementById('fDefD').value); c.defD = dd || 230000;
   const dg = num(document.getElementById('fDefG').value); c.defG = dg || 17000;
   saveFuelCfg(c);
 }
@@ -194,6 +195,15 @@ function setRun(key, kind, field, val, price) {
   else c.amts[key][kind] = num(val);
   saveFuelCfg(c);
   renderRunOnly();
+}
+// 🔁 모든 운행 금액 통일 — 경유·휘발유 금액만 한 값으로 (운행별로 고친 단가는 그대로)
+function unifyAmts() {
+  const d = num(prompt('모든 운행 경유 금액 (원)', '230,000')); if (!d) return;
+  const g = num(prompt('모든 운행 휘발유 금액 (원)', '17,000')); if (!g) return;
+  if (!confirm(`모든 운행을 경유 ${comma(d)}원 · 휘발유 ${comma(g)}원으로 통일할까요?\n(운행별로 고친 금액은 사라지고, 고친 단가는 그대로)`)) return;
+  const c = loadFuelCfg(); c.defD = d; c.defG = g;
+  Object.keys(c.amts).forEach(k => { const a = c.amts[k]; delete a.d; delete a.g; if (a.pd == null && a.pg == null) delete c.amts[k]; });
+  saveFuelCfg(c); renderFuel();
 }
 function resetAmts() {
   if (!confirm('모든 운행의 단가·금액을 기본값으로 되돌릴까요? (직접 수정한 값 사라짐)')) return;
@@ -440,7 +450,7 @@ function loadVendors(cb) {
 function vendList() { return Object.keys(__vend || {}).map(id => Object.assign({ id }, __vend[id])); }
 
 function setCopies(v) { const c = loadFuelCfg(); c.copies = v === '1' ? '1' : '2'; saveFuelCfg(c); }
-function setQ(k, v) { const c = loadFuelCfg(); c[k] = k === 'qdec' ? Number(v) : v; saveFuelCfg(c); }
+function setQ(k, v) { const c = loadFuelCfg(); c[k] = (k === 'qdec' || k === 'unit') ? Number(v) : v; saveFuelCfg(c); }
 // 리터 자르기 — 소수 dec 자리에서 버림 또는 반올림
 function qCut(x, cfg) { const k = Math.pow(10, cfg.qdec); return (cfg.qround === 'round' ? Math.round(x * k + 1e-9) : Math.floor(x * k + 1e-9)) / k; }
 function qFmt(x, cfg) { return x.toLocaleString('ko-KR', { minimumFractionDigits: cfg.qdec, maximumFractionDigits: cfg.qdec }); }
@@ -485,6 +495,7 @@ function fillReceipts() {
   Object.keys(FUEL_RECEIPTS).forEach(m => { const ym = yr + '-' + m; c.paid[ym] = FUEL_RECEIPTS[m]; c.sprice[ym] = FUEL_RECEIPT_PRICE; });
   saveFuelCfg(c); renderRunOnly();
 }
+
 // ── 간단 팝업 ──
 function fPop(html) {
   let o = document.getElementById('fPop'); if (o) o.remove();
