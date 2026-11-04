@@ -89,7 +89,6 @@
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
       <button class="small" style="background:#8e44ad;color:#fff;" onclick="openVendors()">🏪 주유소(공급자) 관리</button>
       <button class="small" style="background:#2c3e50;color:#fff;" onclick="openBuyer()">🏢 우리 단체(공급받는자)</button>
-      <button class="small" style="background:#b45309;color:#fff;" onclick="fillReceipts()">🧾 영수증 금액 넣기 (6~10월)</button>
       <button class="small" style="background:#1e3a8a;color:#fff;" onclick="printStmt('all')">🖨 거래명세표 전체 출력</button>
       <label style="margin:0;font-size:13px;display:flex;align-items:center;gap:4px;">명세표 <select id="stmtCopies" onchange="setCopies(this.value)"><option value="2">2장 (공급자용·공급받는자용)</option><option value="1">1장</option></select></label>
       <label style="margin:0;font-size:13px;display:flex;align-items:center;gap:4px;">리터 소수점 <select id="stmtQdec" onchange="setQ('qdec',this.value)"><option value="3">셋째 자리 (영수증처럼)</option><option value="2">둘째 자리</option><option value="1">첫째 자리</option><option value="0">없음 (정수)</option></select>
@@ -434,9 +433,6 @@ function downloadCsv() {
 function csvS(s) { s = String(s || ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
 
 // ═══════════════ 🧾 월별 결제 · 거래명세표 ═══════════════
-// 카드 영수증 (현대주유소 · 경유 1,855원/L) — 「영수증 금액 넣기」로 한 번에
-const FUEL_RECEIPTS = { 6: 1953000, 7: 3038000, 8: 2387000, 9: 1953000, 10: 269000 };
-const FUEL_RECEIPT_PRICE = 1855;
 let __vend = null;   // /fuelVendors {id:{nm,biz,ceo,addr,up,jong,tel,seal}}
 
 function ymLabel(ym) { const p = ym.split('-'); return p[0] + '.' + p[1] + '월'; }
@@ -497,13 +493,6 @@ function setPay(ym, field, val) {
   const c = loadFuelCfg();
   if (field === 'paid' || field === 'sprice') { const n = num(val); if (n) c[field][ym] = n; else delete c[field][ym]; }
   else if (val) c[field][ym] = val; else delete c[field][ym];
-  saveFuelCfg(c); renderRunOnly();
-}
-function fillReceipts() {
-  const c = loadFuelCfg(), yr = (c.from || '').slice(0, 4) || new Date().getFullYear();
-  const lines = Object.keys(FUEL_RECEIPTS).map(m => `${m}월 ${comma(FUEL_RECEIPTS[m])}원`).join('\n');
-  if (!confirm(`카드 영수증 금액을 넣을까요? (단가 ${comma(FUEL_RECEIPT_PRICE)}원/L)\n\n${lines}`)) return;
-  Object.keys(FUEL_RECEIPTS).forEach(m => { const ym = yr + '-' + m; c.paid[ym] = FUEL_RECEIPTS[m]; c.sprice[ym] = FUEL_RECEIPT_PRICE; });
   saveFuelCfg(c); renderRunOnly();
 }
 
@@ -614,7 +603,7 @@ function stmtOf(ym, cfg) {
   const rs = __fuelRuns.filter(r => r.ym === ym);
   const sysTot = rs.reduce((s, r) => s + r.amtD + r.amtG, 0);
   const paid = cfg.paid[ym] || sysTot;
-  const price = cfg.sprice[ym] || (cfg.prices[ym] && cfg.prices[ym].d) || FUEL_RECEIPT_PRICE;
+  const price = cfg.sprice[ym] || (cfg.prices[ym] && cfg.prices[ym].d) || 0;
   const day = cfg.pday[ym] || monthEnd(ym);
   const line = (date, item, amt, pr) => { const sup = Math.ceil(amt / 1.1); return { date, item, qty: pr ? qCut(amt / pr, cfg) : 0, price: pr, sup, vat: amt - sup, amt }; };
   let rows = [];
