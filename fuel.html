@@ -95,7 +95,7 @@
         <select id="stmtQround" onchange="setQ('qround',this.value)"><option value="floor">버림 (절삭)</option><option value="round">반올림</option></select></label>
     </div>
     <div style="overflow-x:auto;"><table class="mon-tbl" id="payTable"></table></div>
-    <p class="muted" style="font-size:11px;margin-top:6px;">※ <b>실제 결제금액</b>(카드 영수증)을 넣으면 운행 합계와 비교해요. 다르면 <b>⚖ 맞추기</b>를 누르면 그 달 운행 금액을 비율대로 고쳐서 딱 맞춰요.<br>※ 거래명세표는 영수증처럼 <b>리터 = 금액 ÷ 단가</b>, <b>공급가액 = 금액 ÷ 1.1</b>(올림), 세액 = 나머지로 계산해요.</p>
+    <p class="muted" style="font-size:11px;margin-top:6px;">※ <b>실제 결제금액</b>(카드 영수증)을 넣으면 운행 합계와 비교해요. 차이가 0이 될 때까지 <b>아래 운행별 상세에서 금액을 직접</b> 고쳐 주세요 (날짜 더하기·옮기기도 같이).<br>※ 거래명세표는 영수증처럼 <b>리터 = 금액 ÷ 단가</b>, <b>공급가액 = 금액 ÷ 1.1</b>(올림), 세액 = 나머지로 계산해요.</p>
   </div>
 
   <!-- 요약 -->
@@ -468,7 +468,7 @@ function renderPayTable(cfg, runs) {
         <td><input type="text" inputmode="numeric" style="width:70px;text-align:right;" value="${pr ? comma(pr) : ''}" placeholder="1,855" onchange="setPay('${ym}','sprice',this.value)"></td>
         <td><select onchange="setPay('${ym}','vend',this.value)" style="max-width:150px;">${vOpt(cfg.vend[ym] || (vl[0] && vl[0].id) || '')}</select></td>
         <td><select onchange="setPay('${ym}','smode',this.value)"><option value="one"${(cfg.smode[ym] || 'one') === 'one' ? ' selected' : ''}>한 줄 (영수증처럼)</option><option value="runs"${cfg.smode[ym] === 'runs' ? ' selected' : ''}>운행별</option></select></td>
-        <td style="white-space:nowrap;">${p && diff !== 0 ? `<button class="small" style="background:#b45309;color:#fff;" onclick="matchMonth('${ym}')">⚖ 맞추기</button> ` : ''}<button class="small" style="background:#1e3a8a;color:#fff;" onclick="printStmt('${ym}')">🧾 명세표</button></td>
+        <td style="white-space:nowrap;"><button class="small" style="background:#1e3a8a;color:#fff;" onclick="printStmt('${ym}')">🧾 명세표</button></td>
       </tr>`;
     }).join('') + '</tbody>';
 }
@@ -485,20 +485,6 @@ function fillReceipts() {
   Object.keys(FUEL_RECEIPTS).forEach(m => { const ym = yr + '-' + m; c.paid[ym] = FUEL_RECEIPTS[m]; c.sprice[ym] = FUEL_RECEIPT_PRICE; });
   saveFuelCfg(c); renderRunOnly();
 }
-// ⚖ 그 달 운행 금액을 비율대로 고쳐서 결제금액과 딱 맞춤 (끝자리는 마지막 운행 경유에서 맞춤)
-function matchMonth(ym) {
-  const c = loadFuelCfg(), target = c.paid[ym];
-  const rs = __fuelRuns.filter(r => r.ym === ym);
-  const tot = rs.reduce((s, r) => s + r.amtD + r.amtG, 0);
-  if (!target || !rs.length) { alert('그 달 운행이나 결제금액이 없어요'); return; }
-  if (!tot) { alert('운행 금액이 0원이라 비율로 맞출 수 없어요'); return; }
-  if (!confirm(`${ymLabel(ym)} 운행 ${rs.length}건 합계 ${comma(tot)}원 → ${comma(target)}원으로 맞출까요?\n(각 운행 금액을 같은 비율로 바꿔요. 리터는 단가에 맞게 따라 바뀌어요)`)) return;
-  const f = target / tot; let sum = 0;
-  rs.forEach(r => { const a = c.amts[r.key] = c.amts[r.key] || {}; a.d = Math.round(r.amtD * f); a.g = Math.round(r.amtG * f); sum += a.d + a.g; });
-  const last = c.amts[rs[rs.length - 1].key]; last.d += target - sum;
-  saveFuelCfg(c); renderRunOnly();
-}
-
 // ── 간단 팝업 ──
 function fPop(html) {
   let o = document.getElementById('fPop'); if (o) o.remove();
