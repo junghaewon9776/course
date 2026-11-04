@@ -650,7 +650,7 @@ function printStmt(which) {
       if (!v.nm) warns.push(ymLabel(ym) + ': 주유소(공급자)가 없어요');
       if (s.warn) warns.push(ymLabel(ym) + ': ' + s.warn);
       return cfg.copies === '1'
-        ? `<div class="page">${stmtCopyHtml(s, v, b, '', 22)}</div>`
+        ? `<div class="page">${stmtCopyHtml(s, v, b, '', 19)}</div>`
         : `<div class="page">${stmtCopyHtml(s, v, b, '공급받는자')}<div class="cut">✂ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -</div>${stmtCopyHtml(s, v, b, '공급자')}</div>`;
     });
     if (!b.nm) warns.push('🏢 공급받는자(우리 단체) 이름이 비어 있어요');
@@ -666,7 +666,7 @@ function printStmt(which) {
       .sum{margin:6px 0}.sum th{width:80px}.sum td{font-size:14px;font-weight:800}
       .it td{text-align:right;height:18px}.it td.l{text-align:left}.it td:first-child{text-align:center}.it tfoot th{text-align:right}
       .cut{text-align:center;color:#999;font-size:11px;margin:8px 0;letter-spacing:2px}
-      .copy.one{padding:12px}.copy.one .ttl{font-size:28px;margin:6px 0 14px}.copy.one td,.copy.one th{font-size:13px;padding:6px}.copy.one .it td{height:24px}
+      .copy.one{padding:12px}.copy.one .ttl{font-size:28px;margin:4px 0 12px}.copy.one td,.copy.one th{font-size:13px;padding:5px 6px}.copy.one .it td{height:22px}
       @media print{.tb{display:none}}</style></head><body><div class="tb"><button onclick="window.print()">🖨 인쇄 / PDF 저장</button></div>${pages.join('')}</body></html>`);
     w.document.close();
   });
