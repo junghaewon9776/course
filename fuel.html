@@ -600,7 +600,7 @@ function stmtOf(ym, cfg) {
     rs.forEach(r => { if (r.amtD) rows.push(line(r.dateStr, '경유', r.amtD, r.pD)); if (r.amtG) rows.push(line(r.dateStr, '휘발유', r.amtG, r.pG)); });
   } else rows = [line(day.slice(5).replace('-', '/'), '경유', paid, price)];
   const tot = rows.reduce((a, r) => ({ sup: a.sup + r.sup, vat: a.vat + r.vat, amt: a.amt + r.amt }), { sup: 0, vat: 0, amt: 0 });
-  return { ym, rows, tot, day, paid, sysTot, warn: (cfg.smode[ym] === 'runs' && cfg.paid[ym] && sysTot !== cfg.paid[ym]) ? '운행 합계가 결제금액과 달라요 — ⚖ 맞추기를 먼저 해 주세요' : '' };
+  return { ym, rows, tot, day, paid, sysTot, warn: (cfg.smode[ym] === 'runs' && cfg.paid[ym] && sysTot !== cfg.paid[ym]) ? '운행 합계가 결제금액과 달라요 — 운행별 상세에서 금액을 먼저 맞춰 주세요' : '' };
 }
 function stmtCopyHtml(s, v, b, who, rowsMin) {
   const seal = v.seal ? `<img src="${v.seal}" style="position:absolute;right:-6px;top:50%;transform:translateY(-50%);width:46px;height:46px;object-fit:contain;opacity:.92">` : '';
