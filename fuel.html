@@ -454,6 +454,17 @@ function setQ(k, v) { const c = loadFuelCfg(); c[k] = (k === 'qdec' || k === 'un
 // 리터 자르기 — 소수 dec 자리에서 버림 또는 반올림
 function qCut(x, cfg) { const k = Math.pow(10, cfg.qdec); return (cfg.qround === 'round' ? Math.round(x * k + 1e-9) : Math.floor(x * k + 1e-9)) / k; }
 function qFmt(x, cfg) { return x.toLocaleString('ko-KR', { minimumFractionDigits: cfg.qdec, maximumFractionDigits: cfg.qdec }); }
+// 💡 차이 안내만 (금액은 안 바꿈) — 결제가 더 크면 운행 몇 번 더, 운행이 더 크면 줄이기
+//   운행 1번 = 운행당 기본금액(경유+휘발유). 차 2대라 하루 2번까지
+function payTip(more, cfg) {
+  const per = (cfg.defD || 0) + (cfg.defG || 0);
+  if (more > 0 && per) {
+    const n = Math.ceil(more / per), days = Math.ceil(n / 2);
+    return `<div style="font-size:11px;color:#b45309;font-weight:700;line-height:1.4;margin-top:2px;">💡 결제가 ${comma(more)}원 더 커요<br>→ 운행 약 ${n}번 더 (1번 ${comma(per)}원 기준 · 차 2대면 ${days}일쯤)</div>`;
+  }
+  if (more < 0) return `<div style="font-size:11px;color:#2563eb;font-weight:700;line-height:1.4;margin-top:2px;">💡 운행이 ${comma(-more)}원 많아요<br>→ 몇 운행 금액을 조금씩 줄이면 돼요</div>`;
+  return '';
+}
 function renderPayTable(cfg, runs) {
   const el = document.getElementById('payTable'); if (!el) return;
   const cs = document.getElementById('stmtCopies'); if (cs) cs.value = cfg.copies;
@@ -467,7 +478,7 @@ function renderPayTable(cfg, runs) {
   el.innerHTML = `<thead><tr><th>월</th><th>운행 합계</th><th>실제 결제금액</th><th>차이</th><th>명세표 날짜</th><th>단가(원/L)</th><th>주유소</th><th>명세표 줄</th><th></th></tr></thead><tbody>` +
     months.map(ym => {
       const s = sys[ym] || 0, p = cfg.paid[ym], diff = p ? s - p : 0;
-      const dTxt = !p ? '<span style="color:#aaa;">-</span>' : (diff === 0 ? '<b style="color:#16a34a;">✅ 맞음</b>' : `<b style="color:#dc2626;">${diff > 0 ? '+' : ''}${comma(diff)}</b>`);
+      const dTxt = !p ? '<span style="color:#aaa;">-</span>' : (diff === 0 ? '<b style="color:#16a34a;">✅ 맞음</b>' : `<b style="color:#dc2626;">${diff > 0 ? '+' : ''}${comma(diff)}</b>` + payTip(-diff, cfg));
       const pr = cfg.sprice[ym] || (cfg.prices[ym] && cfg.prices[ym].d) || '';
       return `<tr>
         <td style="text-align:center;font-weight:700;">${ymLabel(ym)}</td>
