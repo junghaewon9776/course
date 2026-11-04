@@ -629,9 +629,9 @@ function stmtCopyHtml(s, v, b, who, rowsMin) {
     </table></td>
     <td style="width:54%;vertical-align:top;padding:0;border:none;"><table class="in sup"><tr><th rowspan="5" class="vt">공<br>급<br>자</th>
       <th>등록번호</th><td colspan="3" style="font-weight:800;letter-spacing:1px;">${escF(v.biz || '')}</td></tr>
-      <tr><th>상 호</th><td>${escF(v.nm || '')}</td><th>성 명</th><td style="position:relative;padding-right:30px;">${escF(v.ceo || '')} (인)${seal}</td></tr>
+      <tr><th>상 호</th><td>${escF(v.nm || '')}</td><th>성 명</th><td style="position:relative;padding-right:34px;white-space:nowrap;">${escF(v.ceo || '')} (인)${seal}</td></tr>
       <tr><th>주 소</th><td colspan="3">${escF(v.addr || '')}</td></tr>
-      <tr><th>업 태</th><td>${escF(v.up || '')}</td><th>종 목</th><td>${escF(v.jong || '')}</td></tr>
+      <tr><th>업 태</th><td style="white-space:nowrap;">${escF(v.up || '')}</td><th>종 목</th><td>${escF(v.jong || '')}</td></tr>
       <tr><th>전 화</th><td colspan="3">${escF(v.tel || '')}</td></tr></table></td>
   </tr></table>
   <table class="sum"><tr><th>합계금액</th><td>금 ${korMoney(s.tot.amt)}원정 &nbsp; (₩${comma(s.tot.amt)})</td><th style="width:90px;">부가세 포함</th></tr></table>
